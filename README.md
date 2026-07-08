@@ -10,6 +10,8 @@ Build:
 ./scripts/build.sh
 ```
 
+This produces `build/shanghai.prg` and, when exomizer is installed (`brew install exomizer`), a self-extracting crunched `build/shanghai_sfx.prg` at roughly a third of the size. Ready-to-run copies of both are committed in `dist/`.
+
 Run in VICE:
 
 ```bash

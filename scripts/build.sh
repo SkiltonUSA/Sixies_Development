@@ -15,3 +15,10 @@ cd "$ROOT_DIR"
 acme src/main.a
 
 echo "Built build/shanghai.prg"
+
+if command -v exomizer >/dev/null 2>&1; then
+  exomizer sfx sys build/shanghai.prg -o build/shanghai_sfx.prg >/dev/null
+  echo "Crunched build/shanghai_sfx.prg ($(stat -f%z build/shanghai_sfx.prg) bytes)"
+else
+  echo "exomizer not found; skipping crunched build (brew install exomizer)"
+fi
