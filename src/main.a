@@ -23,6 +23,9 @@ intro_logo_color = $12
 text3_ptr    = $13          ; border scroller: message pointer ($13/$14)
 colbuf       = $15          ; border scroller: glyph rows, stride 3 ($15-$2c)
 tmp3         = $2d          ; border scroller: font pointer ($2d/$2e)
+skull_h      = $2f          ; skull bounce height in pixels, decays to 0
+skull_prev   = $30          ; last seen player row, for new-note detection
+skull_tmp    = $31
 blk_ptr      = $f9          ; zero-page pointer into the logo block asset
 color_ptr    = $fb          ; zero-page pointer to a colour RAM row
 row_ptr      = $fd          ; zero-page pointer to a screen row
@@ -31,6 +34,10 @@ border_sprites = $3800
 plasma_sprite  = $3c00
 sid_init       = $1000      ; PSID init (A = song number)
 sid_play       = $1003      ; PSID play, once per frame
+sid_row        = $1148      ; this tune's player: current pattern row index
+sid_v1_notes   = $11f1      ; voice 1 note per row, $ff = rest (found by
+                            ; disassembling the LDX $1148 / LDA $11f1,X /
+                            ; CMP #$ff gate logic in the player)
 
 raster_line  = $f3          ; 243: reposition all 8 border sprites (~6 raster
                             ; lines) so the $d011 24-row write still lands in
@@ -112,6 +119,7 @@ main:
     cmp #INTRO_LIVE
     bcc main
     jsr animate_titles
+    jsr update_skull
     jsr border_scroll
     jmp main
 
@@ -358,6 +366,10 @@ intro_demo_fade_go:
 intro_demo_fade_done:
     jsr draw_title
     jsr init_scroller
+    lda #$00
+    sta skull_h
+    lda sid_row
+    sta skull_prev          ; don't bounce on a stale row at go-live
     lda #INTRO_LIVE
     sta intro_phase
 intro_done:
@@ -654,6 +666,34 @@ subtitle2_fade_loop:
 subtitle_done:
     rts
 
+; ---- bounce the skull on every new voice-1 note in the SID player ----
+update_skull:
+    lda skull_h             ; decay: h -= max(h/4, 1), a quick thump-and-settle
+    beq skull_beat_check
+    lsr
+    lsr
+    bne skull_decay
+    lda #$01
+skull_decay:
+    sta skull_tmp
+    lda skull_h
+    sec
+    sbc skull_tmp
+    sta skull_h
+skull_beat_check:
+    lda sid_row
+    cmp skull_prev
+    beq skull_done          ; same row: no new note this frame
+    sta skull_prev
+    tax
+    lda sid_v1_notes, x
+    cmp #$ff
+    beq skull_done          ; rest: stay down, follow the bassline's groove
+    lda #16
+    sta skull_h
+skull_done:
+    rts
+
 ; ---- reset the lower-border scroller state ----
 init_scroller:
     lda #<message3
@@ -781,13 +821,24 @@ plasma_regs:
     inx
     cpx #$07
     bne plasma_regs
-    lda #$00
-    sta $d010
-    lda #$7f
+    lda #$24                ; skull on sprite 7 (free in the main field): the
+    sta $d00e               ; border scroller claims sprite 7 at line 243, so
+    lda #200                ; the resting Y=200 ends its 42 rows at 242, just
+    sec                     ; above the scroller. X = 292, lower right.
+    sbc skull_h             ; hop up to 16 px on each voice-1 note
+    sta $d00f
+    lda #(skull_sprite / 64)
+    sta $07ff
+    lda #$01
+    sta $d02e               ; white skull
+    lda #$80
+    sta $d010               ; only the skull needs the X MSB
+    lda #$ff
     sta $d015
-    sta $d017
+    sta $d017               ; skull expanded to 48x42 like the capsules
     sta $d01d
-    sta $d01c
+    lda #$7f
+    sta $d01c               ; sprite 7 stays hires
     lda #$06
     sta $d025               ; blue capsule outline
     lda #$01
@@ -1231,3 +1282,8 @@ border_font:
 !byte $05, $aa, $50
 !byte $01, $55, $40
 !byte $00, $55, $00
+
+; hires white skull shown on sprite 7 below the 2026 subtitle
+* = $3c40
+skull_sprite:
+!bin "src/assets/skull.spr"
