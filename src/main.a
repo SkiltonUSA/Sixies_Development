@@ -364,10 +364,6 @@ intro_done:
     rts
 
 ; ---- stamp the vertical logo block into screen and colour RAM ----
-draw_logo:
-    jsr draw_logo_screen
-    jmp draw_logo_colors
-
 draw_logo_slide:
     lda #<logo_slide_table
     sta tmp3
@@ -612,27 +608,23 @@ subtitle2_loop:
     rts
 
 animate_titles:
-    lda title_step
-    cmp #title_fade_len
-    bcc title_fade_continue
-    lda #$01                ; immediately restart the two-second fade loop
-    sta title_timer
-    lda #$00
-    sta title_step
-title_fade_continue:
     dec title_timer
     bne title_done
-    lda #$0c
+    lda #$05
     sta title_timer
-    ldx title_step
-    lda title_fade, x
-    ldy #(title_len - 1)
+    inc title_step          ; free-running; the AND #$1f below wraps the cycle
+    ldx #(title_len - 1)
 title_fade_loop:
-    sta title_color, y
-    sta title_color + 40, y
-    dey
+    lda title_step
+    clc
+    adc title_col_phase, x  ; each letter lags its neighbour by one step, so
+    and #$1f                ; the glint sweeps the word left to right
+    tay
+    lda title_fade, y
+    sta title_color, x
+    sta title_color + 40, x
+    dex
     bpl title_fade_loop
-    inc title_step
 title_done:
     lda subtitle_wait
     beq subtitle_ready
@@ -823,7 +815,8 @@ plasma_intro_regs:
     bne plasma_intro_regs
     lda #$00
     sta $d010
-    lda #$7e
+    lda #$7e                ; keep sprite 0 hidden until the title fades in:
+                            ; its border-clipped top looks cut off on black
     sta $d015
     sta $d017
     sta $d01d
@@ -872,7 +865,7 @@ plasma_fade_store_color:
     bne plasma_fade_regs
     lda #$00
     sta $d010
-    lda #$7e
+    lda #$7e                ; sprite 0 joins at INTRO_LIVE with the title
     sta $d015
     sta $d017
     sta $d01d
@@ -1051,7 +1044,8 @@ plasma_y_base:
 !byte 26, 50, 74, 98, 122, 146, 170
 
 plasma_palette:
-!byte $0a, $07, $0d, $0d, $03, $0e, $04, $04
+!byte $0a, $07, $0d, $0d, $03, $0e, $0e, $03   ; no $04: it would vanish
+                                               ; against the magenta field
 
 sprite_fade:
 !byte $00, $0b, $0c, $0f, $0e, $06
@@ -1123,9 +1117,16 @@ subtitle2_text:
 !byte $20
 subtitle2_len = * - subtitle2_text
 
+; 32-step cycle at 5 frames/step = 160 frames, one sweep every ~3 seconds.
+; Letters rest solid blue; a short glint rolls through each in turn.
 title_fade:
-!byte BG_COLOR, $0d, $0e, $06, $06, $0e, $0d, BG_COLOR
-title_fade_len = * - title_fade
+!byte $0e, $01, $01, $0e   ; glint: light blue -> white -> light blue
+!fill 28, $06              ; solid blue between sweeps
+
+; per-column fade phase: both halves of a 16x16 letter share one phase, and
+; each letter trails the previous one so the glint travels P -> X
+title_col_phase:
+!byte 7, 7, 6, 6, 5, 5, 4, 4, 3, 3, 2, 2, 1, 1
 
 subtitle_fade:
 !byte BG_COLOR, BG_COLOR, $0d, $0e, $06, $06
@@ -1181,13 +1182,17 @@ title_big_chars:
 message3:
 !text "              PARALAX, 2026, WITH A VIBE CODED INTRO THANKS TO ANTHROPIC. "
 !text "VIBED BY TARQUIN, ORIGINAL FOUNDING MEMBER OF THE AMIGA PARALAX DIVISION. "
-!text "OUT OF CURISOITY I WANTED TO KNOW IF IT WAS POSSBILE TO VIBE CODE AN INTRO "
+!text "OUT OF CURIOSITY I WANTED TO KNOW IF IT WAS POSSIBLE TO VIBE CODE AN INTRO "
 !text "FOR THE COMMODORE 64 ULTIMATE AND THIS IS THE RESULT.       FIRST GREETINGS "
 !text "TO PINK PANTHER,  DEVASTATOR (LATER KNOWN AS QUETZAL) AND ERRATIC AND ANTHRAX "
 !text "WHO WERE THE ORIGINAL C64 PARALAX DIVISION. TOOLS USED IN THE CREATION: GPT-5.5 "
 !text "AND FABLE 5. MUSIC BY GPT-5.4, AND GRAPHICS BY TARQUIN AND CONVERTED VIA PYTHON.  "
-!text "CONDUCTOR AS THE VIBING FRAMEWORK AND GITHUB FOR ASM CODE EXAMPLES - TO MANY TO NAME......       "
+!text "CONDUCTOR AS THE VIBING FRAMEWORK AND GITHUB FOR ASM CODE EXAMPLES - TOO MANY TO NAME......       "
 !byte 0
+
+!if * > font_base {
+    !error "SID + logo + title + scrolltext overrun font_base: build_charset would overwrite the tail at runtime"
+}
 
 title_screen = $0400 + 2 * 40 + 24
 title_color = $d800 + 2 * 40 + 24
