@@ -1,0 +1,748 @@
+; Shanghai C64 demo - vertical hi-res PARALLAX logo on the left, a pastel
+; backdrop, a sprite-based plasma ribbon in the main field, SID music, and
+; the preserved white lower-border scroller from the previous project.
+
+!to "build/shanghai.prg", cbm
+
+frame_flag   = $03
+colcnt       = $04          ; border scroller: pixel columns left of glyph
+bs_rate      = $05          ; border scroller: frame gate (shift 4 of every 5)
+plasma_phase = $06
+plasma_color = $07
+title_timer  = $08
+title_step   = $09
+subtitle_wait = $0a
+subtitle_timer = $0b
+subtitle_step = $0c
+text3_ptr    = $13          ; border scroller: message pointer ($13/$14)
+colbuf       = $15          ; border scroller: glyph rows, stride 3 ($15-$2c)
+tmp3         = $2d          ; border scroller: font pointer ($2d/$2e)
+blk_ptr      = $f9          ; zero-page pointer into the logo block asset
+color_ptr    = $fb          ; zero-page pointer to a colour RAM row
+row_ptr      = $fd          ; zero-page pointer to a screen row
+
+border_sprites = $3800
+plasma_sprite  = $3c00
+sid_init       = $1000      ; PSID init (A = song number)
+sid_play       = $1003      ; PSID play, once per frame
+
+raster_line  = $f3          ; 243: reposition all 8 border sprites (~6 raster
+                            ; lines) so the $d011 24-row write still lands in
+                            ; the (247,251) border-trick window and every
+                            ; sprite Y is set before its line-254 match
+top_line     = $00
+font_base    = $2000
+logo_char_base = $40
+
+BG_COLOR     = $04          ; magenta / purple
+RIBBON_COLOR = BG_COLOR     ; match the field so the border scroller has no box
+
+LOGO_W       = 8
+LOGO_H       = 20
+LOGO_ROW     = 2
+LOGO_COL     = 1
+
+; ---- BASIC stub: SYS 2061 ($080d) ----
+* = $0801
+!byte $0c, $08, $0a, $00, $9e
+!text "2061"
+!byte $00, $00, $00
+
+* = $080d
+entry:
+    sei
+    lda #$7f
+    sta $dc0d
+    sta $dd0d
+    lda $dc0d
+    lda $dd0d
+
+    lda #BG_COLOR
+    sta $d020
+    sta $d021
+
+    lda #$1b
+    sta $d011               ; text mode, 25 rows, display on
+    lda #$08
+    sta $d016               ; hi-res char mode, 40 columns
+    lda #$18
+    sta $d018               ; screen at $0400, custom charset at $2000
+    lda $dd00
+    ora #$03
+    sta $dd00               ; VIC bank 0 ($0000-$3fff)
+
+    jsr build_charset
+    jsr clear_screen
+    jsr draw_logo
+    jsr draw_title
+    jsr init_plasma
+    jsr init_scroller
+    lda #$00
+    tax
+    tay
+    jsr sid_init
+    jsr init_irq
+
+main:
+    lda frame_flag
+    beq main
+    lda #$00
+    sta frame_flag
+    jsr animate_plasma
+    jsr animate_titles
+    jsr border_scroll
+    jmp main
+
+; ---- copy the ROM charset, then overlay the generated logo tiles ----
+build_charset:
+    lda $01
+    pha
+    lda #$33                ; map character ROM at $d000-$dfff, I/O off
+    sta $01
+    ldx #$00
+copy_rom_charset:
+    lda $d000, x
+    sta font_base + $000, x
+    lda $d100, x
+    sta font_base + $100, x
+    lda $d200, x
+    sta font_base + $200, x
+    lda $d300, x
+    sta font_base + $300, x
+    lda $d400, x
+    sta font_base + $400, x
+    lda $d500, x
+    sta font_base + $500, x
+    lda $d600, x
+    sta font_base + $600, x
+    lda $d700, x
+    sta font_base + $700, x
+    inx
+    bne copy_rom_charset
+    pla
+    sta $01
+
+    ldx #$00
+copy_title_charset:
+    lda border_font + $000, x
+    sta font_base + $000, x
+    lda border_font + $100, x
+    sta font_base + $100, x
+    inx
+    bne copy_title_charset
+
+    ldx #$00
+copy_logo_charset:
+    lda logo_chars + $000, x
+    sta font_base + logo_char_base * 8 + $000, x
+    lda logo_chars + $100, x
+    sta font_base + logo_char_base * 8 + $100, x
+    lda logo_chars + $200, x
+    sta font_base + logo_char_base * 8 + $200, x
+    lda logo_chars + $300, x
+    sta font_base + logo_char_base * 8 + $300, x
+    lda logo_chars + $400, x
+    sta font_base + logo_char_base * 8 + $400, x
+    lda logo_chars + $500, x
+    sta font_base + logo_char_base * 8 + $500, x
+    inx
+    bne copy_logo_charset
+    rts
+
+; ---- blank the whole screen ----
+clear_screen:
+    ldx #$00
+clear_loop:
+    lda #$20
+    sta $0400, x
+    sta $0500, x
+    sta $0600, x
+    sta $06e8, x
+    lda #$01
+    sta $d800, x
+    sta $d900, x
+    sta $da00, x
+    sta $dae8, x
+    inx
+    bne clear_loop
+    rts
+
+; ---- stamp the vertical logo block into screen and colour RAM ----
+draw_logo:
+    lda #<background_screen
+    sta blk_ptr
+    lda #>background_screen
+    sta blk_ptr + 1
+    ldx #LOGO_ROW
+draw_logo_srow:
+    lda screen_lo, x
+    clc
+    adc #LOGO_COL
+    sta row_ptr
+    lda screen_hi, x
+    adc #$00
+    sta row_ptr + 1
+    ldy #$00
+draw_logo_scol:
+    lda (blk_ptr), y
+    sta (row_ptr), y
+    iny
+    cpy #LOGO_W
+    bne draw_logo_scol
+    lda blk_ptr
+    clc
+    adc #LOGO_W
+    sta blk_ptr
+    bcc draw_logo_s1
+    inc blk_ptr + 1
+draw_logo_s1:
+    inx
+    cpx #(LOGO_ROW + LOGO_H)
+    bne draw_logo_srow
+
+    lda #<background_color
+    sta blk_ptr
+    lda #>background_color
+    sta blk_ptr + 1
+    ldx #LOGO_ROW
+draw_logo_crow:
+    lda color_lo, x
+    clc
+    adc #LOGO_COL
+    sta color_ptr
+    lda color_hi, x
+    adc #$00
+    sta color_ptr + 1
+    ldy #$00
+draw_logo_ccol:
+    lda (blk_ptr), y
+    sta (color_ptr), y
+    iny
+    cpy #LOGO_W
+    bne draw_logo_ccol
+    lda blk_ptr
+    clc
+    adc #LOGO_W
+    sta blk_ptr
+    bcc draw_logo_c1
+    inc blk_ptr + 1
+draw_logo_c1:
+    inx
+    cpx #(LOGO_ROW + LOGO_H)
+    bne draw_logo_crow
+    rts
+
+; ---- precompute the sprite ribbon state used by the top IRQ ----
+init_plasma:
+    lda #$00
+    sta plasma_phase
+    sta plasma_color
+    jsr animate_plasma
+    rts
+
+animate_plasma:
+    inc plasma_phase
+    lda plasma_phase
+    lsr
+    lsr
+    lsr
+    sta plasma_color        ; palette steps every 8 frames, not every frame
+    ldx #$00
+plasma_loop:
+    lda plasma_phase
+    clc
+    adc plasma_phase_offsets, x
+    and #$3f
+    tay
+    lda plasma_x_sine, y
+    clc
+    adc plasma_x_base, x
+    sta plasma_x_shadow, x
+
+    lda plasma_phase
+    asl
+    clc
+    adc plasma_phase_offsets, x
+    and #$3f
+    tay
+    lda plasma_x_sine, y
+    lsr
+    lsr                     ; 0..7 px vertical bob at double speed
+    clc
+    adc plasma_y_base, x
+    sta plasma_y_shadow, x
+
+    lda plasma_color
+    clc
+    adc plasma_color_offsets, x
+    and #$07
+    tay
+    lda plasma_palette, y
+    sta plasma_color_shadow, x
+    inx
+    cpx #$07
+    bne plasma_loop
+    rts
+
+; ---- small static title on the right of the field ----
+draw_title:
+    ldx #(title_len - 1)
+title_loop:
+    lda title_text, x
+    sta title_screen, x
+    lda #BG_COLOR
+    sta title_color, x
+    dex
+    bpl title_loop
+
+    ldx #(subtitle1_len - 1)
+subtitle1_loop:
+    lda subtitle1_text, x
+    sta subtitle1_screen, x
+    lda #BG_COLOR
+    sta subtitle1_color, x
+    dex
+    bpl subtitle1_loop
+
+    ldx #(subtitle2_len - 1)
+subtitle2_loop:
+    lda subtitle2_text, x
+    sta subtitle2_screen, x
+    lda #BG_COLOR
+    sta subtitle2_color, x
+    dex
+    bpl subtitle2_loop
+
+    lda #$08
+    sta title_timer
+    sta subtitle_timer
+    lda #$00
+    sta title_step
+    sta subtitle_step
+    lda #50                 ; roughly one second at 50 Hz
+    sta subtitle_wait
+    rts
+
+animate_titles:
+    lda title_step
+    cmp #title_fade_len
+    bcs title_done
+    dec title_timer
+    bne title_done
+    lda #$08
+    sta title_timer
+    ldx title_step
+    lda title_fade, x
+    ldy #(title_len - 1)
+title_fade_loop:
+    sta title_color, y
+    dey
+    bpl title_fade_loop
+    inc title_step
+title_done:
+    lda subtitle_wait
+    beq subtitle_ready
+    dec subtitle_wait
+    rts
+subtitle_ready:
+    lda subtitle_step
+    cmp #subtitle_fade_len
+    bcs subtitle_done
+    dec subtitle_timer
+    bne subtitle_done
+    lda #$08
+    sta subtitle_timer
+    ldx subtitle_step
+    lda subtitle_fade, x
+    ldy #(subtitle1_len - 1)
+subtitle1_fade_loop:
+    sta subtitle1_color, y
+    dey
+    bpl subtitle1_fade_loop
+    ldy #(subtitle2_len - 1)
+subtitle2_fade_loop:
+    sta subtitle2_color, y
+    dey
+    bpl subtitle2_fade_loop
+    inc subtitle_step
+subtitle_done:
+    rts
+
+; ---- reset the lower-border scroller state ----
+init_scroller:
+    lda #<message3
+    sta text3_ptr
+    lda #>message3
+    sta text3_ptr + 1
+    lda #$01
+    sta colcnt
+    lda #$05
+    sta bs_rate
+    rts
+
+; ---- custom IRQ chain: top restores plasma sprites, lower border reuses them
+init_irq:
+    lda #$35
+    sta $01                 ; KERNAL ROM off ($e000-$ffff = RAM), I/O still on
+    lda #<nmi_handler
+    sta $fffa
+    lda #>nmi_handler
+    sta $fffb
+    lda #<irq_main
+    sta $fffe
+    lda #>irq_main
+    sta $ffff
+    lda #raster_line
+    sta $d012
+    lda $d011
+    and #$7f
+    sta $d011
+    lda #$01
+    sta $d01a
+    lda #$ff
+    sta $d019
+    cli
+    rts
+
+nmi_handler:
+    rti
+
+irq_main:
+    pha
+    txa
+    pha
+    tya
+    pha
+    lda #RIBBON_COLOR
+    sta $d020
+    lda #$ff
+    sta $d019
+    jsr apply_border_sprite_state
+    lda #$13
+    sta $d011               ; 24-row mode at ~line 249: dodges the line-251
+                            ; border-on checkpoint (must stay inside 247-250)
+wait_border_open:
+    lda $d012
+    cmp #252
+    bcc wait_border_open
+    lda #$1b
+    sta $d011
+    lda #top_line
+    sta $d012
+    lda #<irq_top
+    sta $fffe
+    lda #>irq_top
+    sta $ffff
+    pla
+    tay
+    pla
+    tax
+    pla
+    rti
+
+irq_top:
+    pha
+    txa
+    pha
+    tya
+    pha
+    lda #$ff
+    sta $d019
+    lda #BG_COLOR
+    sta $d020
+    jsr apply_plasma_sprite_state
+    jsr sid_play
+    lda #$01
+    sta frame_flag          ; main-loop work (incl. the scroller data shift)
+                            ; runs here, far from the border sprite display
+    lda #raster_line
+    sta $d012
+    lda #<irq_main
+    sta $fffe
+    lda #>irq_main
+    sta $ffff
+    pla
+    tay
+    pla
+    tax
+    pla
+    rti
+
+apply_plasma_sprite_state:
+    ldx #$00
+    ldy #$00
+plasma_regs:
+    lda plasma_x_shadow, x
+    sta $d000, y
+    lda plasma_y_shadow, x
+    sta $d001, y
+    lda #<(plasma_sprite / 64)
+    sta $07f8, x
+    lda plasma_color_shadow, x
+    sta $d027, x
+    iny
+    iny
+    inx
+    cpx #$07
+    bne plasma_regs
+    lda #$00
+    sta $d010
+    lda #$7f
+    sta $d015
+    sta $d017
+    sta $d01d
+    sta $d01c
+    lda #$06
+    sta $d025               ; blue capsule outline
+    lda #$01
+    sta $d026               ; white capsule highlight
+    rts
+
+apply_border_sprite_state:
+    ldx #$00
+    ldy #$00
+border_regs:
+    lda border_x, x
+    sta $d000, y
+    lda #254
+    sta $d001, y
+    txa
+    clc
+    adc #(border_sprites / 64)
+    sta $07f8, x
+    lda #$01
+    sta $d027, x
+    iny
+    iny
+    inx
+    cpx #$08
+    bne border_regs
+    lda #$c1
+    sta $d010
+    lda #$ff
+    sta $d015
+    sta $d017
+    sta $d01d
+    lda #$00
+    sta $d01c
+    rts
+
+; 8 expanded sprites, 48 px apart: X = -18, 30, 78, ... 318 covers the full
+; visible width including both side borders. Sprites 0, 6, 7 need the X MSB
+; ($d010 = $c1); sprite 0 sits at 494 = -18, wrapping in from the left edge.
+border_x:
+!byte 238, 30, 78, 126, 174, 222, 14, 62
+
+; ---- border scroller: shift the 7 sprites left 1 px, feed glyph columns ----
+border_scroll:
+    dec bs_rate             ; 4 px per 5 frames for a calmer crawl
+    bne border_go
+    lda #$05
+    sta bs_rate
+    rts
+border_go:
+    dec colcnt
+    bne border_shift
+    lda #$08
+    sta colcnt
+    jsr next_char3
+    ldy #$00
+    sty tmp3 + 1
+    asl
+    rol tmp3 + 1
+    asl
+    rol tmp3 + 1
+    asl
+    rol tmp3 + 1
+    clc
+    adc #<border_font
+    sta tmp3
+    lda tmp3 + 1
+    adc #>border_font
+    sta tmp3 + 1
+    ldx #$00
+border_load:
+    lda (tmp3), y
+    sta colbuf, x
+    inx
+    inx
+    inx
+    iny
+    cpy #$08
+    bne border_load
+border_shift:
+    ldx #24
+border_row:
+    dex
+    dex
+    dex
+    asl colbuf, x
+    rol border_sprites + 7*64 + 2, x
+    rol border_sprites + 7*64 + 1, x
+    rol border_sprites + 7*64 + 0, x
+    rol border_sprites + 6*64 + 2, x
+    rol border_sprites + 6*64 + 1, x
+    rol border_sprites + 6*64 + 0, x
+    rol border_sprites + 5*64 + 2, x
+    rol border_sprites + 5*64 + 1, x
+    rol border_sprites + 5*64 + 0, x
+    rol border_sprites + 4*64 + 2, x
+    rol border_sprites + 4*64 + 1, x
+    rol border_sprites + 4*64 + 0, x
+    rol border_sprites + 3*64 + 2, x
+    rol border_sprites + 3*64 + 1, x
+    rol border_sprites + 3*64 + 0, x
+    rol border_sprites + 2*64 + 2, x
+    rol border_sprites + 2*64 + 1, x
+    rol border_sprites + 2*64 + 0, x
+    rol border_sprites + 1*64 + 2, x
+    rol border_sprites + 1*64 + 1, x
+    rol border_sprites + 1*64 + 0, x
+    rol border_sprites + 0*64 + 2, x
+    rol border_sprites + 0*64 + 1, x
+    rol border_sprites + 0*64 + 0, x
+    cpx #$00
+    bne border_row
+    rts
+
+next_char3:
+    ldy #$00
+    lda (text3_ptr), y
+    bne have_char3
+    lda #<message3
+    sta text3_ptr
+    lda #>message3
+    sta text3_ptr + 1
+    lda (text3_ptr), y
+have_char3:
+    inc text3_ptr
+    bne to_screen_code3
+    inc text3_ptr + 1
+to_screen_code3:
+    cmp #$41
+    bcc char3_done
+    cmp #$5b
+    bcs char3_done
+    sec
+    sbc #$40
+char3_done:
+    rts
+
+; ---- per-row screen and colour RAM address tables ----
+!align 255, 0
+screen_lo:
+!for r, 0, 24 { !byte <($0400 + r * 40) }
+screen_hi:
+!for r, 0, 24 { !byte >($0400 + r * 40) }
+color_lo:
+!for r, 0, 24 { !byte <($d800 + r * 40) }
+color_hi:
+!for r, 0, 24 { !byte >($d800 + r * 40) }
+
+plasma_phase_offsets:
+!byte $00, $07, $0e, $15, $1c, $23, $2a
+
+plasma_color_offsets:
+!byte $00, $01, $02, $03, $04, $05, $06
+
+plasma_x_base:
+!byte 150, 156, 162, 168, 162, 156, 150
+
+plasma_y_base:
+!byte 26, 50, 74, 98, 122, 146, 170
+
+plasma_palette:
+!byte $0a, $07, $0d, $0d, $03, $0e, $04, $04
+
+plasma_x_sine:
+!byte $10, $11, $13, $14, $16, $17, $18, $1a, $1b, $1c, $1c, $1d, $1e, $1e, $1f, $1f
+!byte $1f, $1f, $1f, $1e, $1e, $1d, $1c, $1c, $1b, $1a, $18, $17, $16, $14, $13, $11
+!byte $10, $0f, $0d, $0c, $0a, $09, $08, $06, $05, $04, $04, $03, $02, $02, $01, $01
+!byte $01, $01, $01, $02, $02, $03, $04, $04, $05, $06, $08, $09, $0a, $0c, $0d, $0f
+
+plasma_x_shadow:
+!fill 7, 0
+
+plasma_y_shadow:
+!fill 7, 0
+
+plasma_color_shadow:
+!fill 7, 0
+
+title_text:
+!byte $10, $01, $12, $01, $0c, $01, $18
+title_len = * - title_text
+
+subtitle1_text:
+!byte $02, $01, $03, $0b, $20, $17, $09, $14, $08, $20, $01, $20, $13, $08, $0f, $12, $14, $20, $09, $0e, $14, $12, $0f
+subtitle1_len = * - subtitle1_text
+
+subtitle2_text:
+!byte $09, $0e, $13, $10, $09, $12, $05, $04, $20, $02, $19, $20, $06, $01, $04, $05, $35
+subtitle2_len = * - subtitle2_text
+
+title_fade:
+!byte BG_COLOR, BG_COLOR, $0d, $0e, $06, $06
+title_fade_len = * - title_fade
+
+subtitle_fade:
+!byte BG_COLOR, BG_COLOR, $0d, $0e, $06, $06
+subtitle_fade_len = * - subtitle_fade
+
+message3:
+!text "PARALAX CALLS FROM THE LOWER BORDER ... WHITE TEXT, MAGENTA SKY, A SLOW BLUE TITLE FADE, AND A SHORT INTRO NOD TO FADE5 ...      "
+!byte 0
+
+; ---- SID tune: PSID body relocated straight to its $1000 load address ----
+; The VIC sees the char ROM shadow at $1000-$1fff in bank 0, so this window
+; is useless for graphics and free for the player. Skip = $7c header + 2-byte
+; embedded load address.
+* = $1000
+!bin "src/assets/sid.psid", , $7e
+
+logo_chars:
+!bin "src/assets/parallax_chars.bin"
+
+background_screen:
+!bin "src/assets/parallax_screen.bin"
+
+background_color:
+!bin "src/assets/parallax_color.bin"
+
+title_screen = $0400 + 2 * 40 + 29
+title_color = $d800 + 2 * 40 + 29
+subtitle1_screen = $0400 + 5 * 40 + 13
+subtitle1_color = $d800 + 5 * 40 + 13
+subtitle2_screen = $0400 + 7 * 40 + 18
+subtitle2_color = $d800 + 7 * 40 + 18
+
+; border scroller sprite blocks (cleared) and its raw 8x8 font
+* = $3800
+!fill 512, 0
+border_font:
+!bin "src/assets/parallax_font8.bin"
+
+* = $3c00
+; multicolour capsule used as the plasma ribbon segment: %01 = $d025 outline,
+; %10 = per-sprite fill (cycling pastel), %11 = $d026 white highlight
+!byte $00, $55, $00
+!byte $01, $55, $40
+!byte $05, $aa, $50
+!byte $17, $fa, $94
+!byte $1b, $fa, $a4
+!byte $1f, $fe, $a4
+!byte $5f, $fe, $a5
+!byte $6f, $fe, $a9
+!byte $6f, $fe, $a9
+!byte $6f, $fe, $a9
+!byte $6b, $fa, $a9
+!byte $6b, $fa, $a9
+!byte $6a, $aa, $a9
+!byte $6a, $aa, $a9
+!byte $5a, $aa, $a5
+!byte $1a, $aa, $a4
+!byte $1a, $aa, $a4
+!byte $16, $aa, $94
+!byte $05, $aa, $50
+!byte $01, $55, $40
+!byte $00, $55, $00

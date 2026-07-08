@@ -1,0 +1,25 @@
+# Shanghai C64 Demo
+
+Standalone C64 demo for VICE built from the previous project base, now reworked into a pastel layout with a vertical hi-res PARALLAX logo on the left, a sprite-plasma capsule ribbon in the main field, SID music, and the preserved white lower-border scroller crawling across the bottom.
+
+Music: "Han Valen" by Rotteroy (2022), bundled as `src/assets/sid.psid` and relocated to `$1000` at assembly time.
+
+Build:
+
+```bash
+./scripts/build.sh
+```
+
+Run in VICE:
+
+```bash
+./scripts/run.sh
+```
+
+Regenerate the bundled vertical hi-res logo assets with:
+
+```bash
+python3 scripts/make_parallax_charmode.py
+```
+
+The border-scroller font (`src/assets/parallax_font8.bin`) can be rebuilt from a KickAssembler `.byte` charset dump with `python3 scripts/make_font8.py charset.txt`; the committed binary is a custom font whose source text is not bundled.
