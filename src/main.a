@@ -14,6 +14,12 @@ title_step   = $09
 subtitle_wait = $0a
 subtitle_timer = $0b
 subtitle_step = $0c
+intro_phase  = $0d
+intro_timer  = $0e
+intro_step   = $0f
+intro_sprite_color = $10
+current_bg_color = $11
+intro_logo_color = $12
 text3_ptr    = $13          ; border scroller: message pointer ($13/$14)
 colbuf       = $15          ; border scroller: glyph rows, stride 3 ($15-$2c)
 tmp3         = $2d          ; border scroller: font pointer ($2d/$2e)
@@ -38,10 +44,22 @@ title_big_base = $d4
 BG_COLOR     = $04          ; magenta / purple
 RIBBON_COLOR = BG_COLOR     ; match the field so the border scroller has no box
 
+INTRO_BLACK  = $00
+INTRO_SPRITES = $01
+INTRO_LOGO_WAIT = $02
+INTRO_LOGO_SLIDE = $03
+INTRO_LOGO_FADE = $04
+INTRO_COLOR_WAIT = $05
+INTRO_DEMO_FADE = $06
+INTRO_LIVE   = $07
+INTRO_PLASMA_Y_OFFSET = 0
+
 LOGO_W       = 8
 LOGO_H       = 20
 LOGO_ROW     = 2
 LOGO_COL     = 1
+LOGO_SLIDE_W = 9
+LOGO_SLIDE_STEPS = 10
 
 ; ---- BASIC stub: SYS 2061 ($080d) ----
 * = $0801
@@ -58,7 +76,8 @@ entry:
     lda $dc0d
     lda $dd0d
 
-    lda #BG_COLOR
+    lda #$00
+    sta current_bg_color
     sta $d020
     sta $d021
 
@@ -74,10 +93,8 @@ entry:
 
     jsr build_charset
     jsr clear_screen
-    jsr draw_logo
-    jsr draw_title
     jsr init_plasma
-    jsr init_scroller
+    jsr init_intro
     lda #$00
     tax
     tay
@@ -90,6 +107,10 @@ main:
     lda #$00
     sta frame_flag
     jsr animate_plasma
+    jsr update_intro
+    lda intro_phase
+    cmp #INTRO_LIVE
+    bcc main
     jsr animate_titles
     jsr border_scroll
     jmp main
@@ -176,8 +197,238 @@ clear_loop:
     bne clear_loop
     rts
 
+; ---- timed intro: black, sprite fade, logo fade, then full demo ----
+init_intro:
+    lda #INTRO_BLACK
+    sta intro_phase
+    lda #25                 ; half-second black hold before the sprites appear
+    sta intro_timer
+    lda #$00
+    sta intro_step
+    sta intro_sprite_color
+    sta intro_logo_color
+    sta current_bg_color
+    sta $d020
+    sta $d021
+    rts
+
+update_intro:
+    lda intro_phase
+    cmp #INTRO_BLACK
+    beq intro_black
+    cmp #INTRO_SPRITES
+    beq intro_sprites
+    cmp #INTRO_LOGO_WAIT
+    beq intro_logo_wait
+    cmp #INTRO_LOGO_SLIDE
+    beq intro_logo_slide
+    cmp #INTRO_LOGO_FADE
+    beq intro_logo_fade
+    cmp #INTRO_COLOR_WAIT
+    bne intro_check_demo_fade
+    jmp intro_color_wait
+intro_check_demo_fade:
+    cmp #INTRO_DEMO_FADE
+    bne intro_update_done
+    jmp intro_demo_fade
+intro_update_done:
+    rts
+
+intro_black:
+    dec intro_timer
+    beq intro_black_go
+    rts
+intro_black_go:
+    lda #INTRO_SPRITES
+    sta intro_phase
+    lda #$00
+    sta intro_step
+    lda #$01
+    sta intro_timer
+    rts
+
+intro_sprites:
+    dec intro_timer
+    beq intro_sprites_go
+    rts
+intro_sprites_go:
+    ldx intro_step
+    cpx #sprite_intro_len
+    bcs intro_sprites_done
+    inc intro_step
+    lda #$08
+    sta intro_timer
+    rts
+intro_sprites_done:
+    lda #INTRO_LOGO_WAIT
+    sta intro_phase
+    lda #80                 ; keep the logo fade near the five-second mark
+    sta intro_timer
+    rts
+
+intro_logo_wait:
+    dec intro_timer
+    beq intro_logo_wait_go
+    rts
+intro_logo_wait_go:
+    lda #$0f
+    jsr fill_logo_color
+    lda #INTRO_LOGO_SLIDE
+    sta intro_phase
+    lda #$00
+    sta intro_step
+    lda #$01
+    sta intro_timer
+    rts
+
+intro_logo_slide:
+    dec intro_timer
+    beq intro_logo_slide_go
+    rts
+intro_logo_slide_go:
+    ldx intro_step
+    cpx #LOGO_SLIDE_STEPS
+    bcs intro_logo_slide_done
+    jsr draw_logo_slide
+    inc intro_step
+    lda #$08
+    sta intro_timer
+    rts
+intro_logo_slide_done:
+    jsr draw_logo_screen
+    lda #INTRO_LOGO_FADE
+    sta intro_phase
+    lda #$00
+    sta intro_step
+    lda #$01
+    sta intro_timer
+    rts
+
+intro_logo_fade:
+    dec intro_timer
+    beq intro_logo_fade_go
+    rts
+intro_logo_fade_go:
+    ldx intro_step
+    cpx #logo_fade_len
+    bcs intro_logo_done
+    lda logo_fade, x
+    jsr fill_logo_color
+    inc intro_step
+    lda #25
+    sta intro_timer
+    rts
+intro_logo_done:
+    jsr draw_logo_colors
+    lda #INTRO_COLOR_WAIT
+    sta intro_phase
+    lda #250                ; hold the full-colour logo for five seconds
+    sta intro_timer
+    rts
+
+intro_color_wait:
+    dec intro_timer
+    beq intro_color_wait_go
+    rts
+intro_color_wait_go:
+    lda #INTRO_DEMO_FADE
+    sta intro_phase
+    lda #$00
+    sta intro_step
+    lda #$01
+    sta intro_timer
+    rts
+
+intro_demo_fade:
+    dec intro_timer
+    beq intro_demo_fade_go
+    rts
+intro_demo_fade_go:
+    ldx intro_step
+    cpx #demo_fade_len
+    bcs intro_demo_fade_done
+    lda demo_fade, x
+    sta current_bg_color
+    sta $d020
+    sta $d021
+    inc intro_step
+    lda #18
+    sta intro_timer
+    rts
+intro_demo_fade_done:
+    jsr draw_title
+    jsr init_scroller
+    lda #INTRO_LIVE
+    sta intro_phase
+intro_done:
+    rts
+
 ; ---- stamp the vertical logo block into screen and colour RAM ----
 draw_logo:
+    jsr draw_logo_screen
+    jmp draw_logo_colors
+
+draw_logo_slide:
+    lda #<logo_slide_table
+    sta tmp3
+    lda #>logo_slide_table
+    sta tmp3 + 1
+    ldx intro_step
+draw_logo_slide_ptr:
+    cpx #$00
+    beq draw_logo_slide_ptr_done
+    lda tmp3
+    clc
+    adc #LOGO_SLIDE_W
+    sta tmp3
+    bcc draw_logo_slide_ptr_next
+    inc tmp3 + 1
+draw_logo_slide_ptr_next:
+    dex
+    bne draw_logo_slide_ptr
+draw_logo_slide_ptr_done:
+    lda #<background_screen
+    sta blk_ptr
+    lda #>background_screen
+    sta blk_ptr + 1
+    ldx #LOGO_ROW
+draw_logo_slide_row:
+    stx intro_sprite_color
+    lda screen_lo, x
+    sta row_ptr
+    lda screen_hi, x
+    sta row_ptr + 1
+    ldy #$00
+draw_logo_slide_col:
+    lda (tmp3), y
+    cmp #$ff
+    beq draw_logo_slide_blank
+    sty intro_logo_color
+    tay
+    lda (blk_ptr), y
+    ldy intro_logo_color
+    jmp draw_logo_slide_store
+draw_logo_slide_blank:
+    lda #$20
+draw_logo_slide_store:
+    sta (row_ptr), y
+    iny
+    cpy #LOGO_SLIDE_W
+    bne draw_logo_slide_col
+    lda blk_ptr
+    clc
+    adc #LOGO_W
+    sta blk_ptr
+    bcc draw_logo_slide_next_row
+    inc blk_ptr + 1
+draw_logo_slide_next_row:
+    ldx intro_sprite_color
+    inx
+    cpx #(LOGO_ROW + LOGO_H)
+    bne draw_logo_slide_row
+    rts
+
+draw_logo_screen:
     lda #<background_screen
     sta blk_ptr
     lda #>background_screen
@@ -208,7 +459,9 @@ draw_logo_s1:
     inx
     cpx #(LOGO_ROW + LOGO_H)
     bne draw_logo_srow
+    rts
 
+draw_logo_colors:
     lda #<background_color
     sta blk_ptr
     lda #>background_color
@@ -239,6 +492,29 @@ draw_logo_c1:
     inx
     cpx #(LOGO_ROW + LOGO_H)
     bne draw_logo_crow
+    rts
+
+fill_logo_color:
+    sta intro_logo_color
+    ldx #LOGO_ROW
+fill_logo_crow:
+    lda color_lo, x
+    clc
+    adc #LOGO_COL
+    sta color_ptr
+    lda color_hi, x
+    adc #$00
+    sta color_ptr + 1
+    lda intro_logo_color
+    ldy #$00
+fill_logo_ccol:
+    sta (color_ptr), y
+    iny
+    cpy #LOGO_W
+    bne fill_logo_ccol
+    inx
+    cpx #(LOGO_ROW + LOGO_H)
+    bne fill_logo_crow
     rts
 
 ; ---- precompute the sprite ribbon state used by the top IRQ ----
@@ -431,7 +707,7 @@ irq_main:
     pha
     tya
     pha
-    lda #RIBBON_COLOR
+    lda current_bg_color
     sta $d020
     lda #$ff
     sta $d019
@@ -466,7 +742,7 @@ irq_top:
     pha
     lda #$ff
     sta $d019
-    lda #BG_COLOR
+    lda current_bg_color
     sta $d020
     jsr apply_plasma_sprite_state
     jsr sid_play
@@ -487,6 +763,16 @@ irq_top:
     rti
 
 apply_plasma_sprite_state:
+    lda intro_phase
+    bne plasma_check_fade
+    jmp plasma_sprites_off
+plasma_check_fade:
+    cmp #INTRO_SPRITES
+    bne plasma_check_intro
+    jmp apply_plasma_sprite_fade
+plasma_check_intro:
+    cmp #INTRO_LIVE
+    bcc apply_plasma_sprite_intro
     ldx #$00
     ldy #$00
 plasma_regs:
@@ -516,7 +802,99 @@ plasma_regs:
     sta $d026               ; white capsule highlight
     rts
 
+apply_plasma_sprite_intro:
+    ldx #$00
+    ldy #$00
+plasma_intro_regs:
+    lda plasma_x_shadow, x
+    sta $d000, y
+    lda plasma_y_shadow, x
+    clc
+    adc #INTRO_PLASMA_Y_OFFSET
+    sta $d001, y
+    lda #<(plasma_sprite / 64)
+    sta $07f8, x
+    lda plasma_color_shadow, x
+    sta $d027, x
+    iny
+    iny
+    inx
+    cpx #$07
+    bne plasma_intro_regs
+    lda #$00
+    sta $d010
+    lda #$7e
+    sta $d015
+    sta $d017
+    sta $d01d
+    sta $d01c
+    lda #$06
+    sta $d025
+    lda #$01
+    sta $d026
+    rts
+
+apply_plasma_sprite_fade:
+    ldx #$00
+    ldy #$00
+plasma_fade_regs:
+    lda plasma_x_shadow, x
+    sta $d000, y
+    lda plasma_y_shadow, x
+    clc
+    adc #INTRO_PLASMA_Y_OFFSET
+    sta $d001, y
+    lda #<(plasma_sprite / 64)
+    sta $07f8, x
+    txa
+    sta intro_sprite_color
+    lda intro_step
+    sec
+    sbc sprite_stagger, x
+    bcc plasma_fade_hidden
+    cmp #sprite_fade_len
+    bcc plasma_fade_color
+    lda #sprite_fade_len - 1
+plasma_fade_color:
+    tax
+    lda sprite_fade, x
+    ldx intro_sprite_color
+    jmp plasma_fade_store_color
+plasma_fade_hidden:
+    ldx intro_sprite_color
+    lda #$00
+plasma_fade_store_color:
+    sta $d027, x
+    iny
+    iny
+    inx
+    cpx #$07
+    bne plasma_fade_regs
+    lda #$00
+    sta $d010
+    lda #$7e
+    sta $d015
+    sta $d017
+    sta $d01d
+    sta $d01c
+    lda #$00
+    sta $d025
+    sta $d026
+    rts
+
+plasma_sprites_off:
+    lda #$00
+    sta $d015
+    rts
+
 apply_border_sprite_state:
+    lda intro_phase
+    cmp #INTRO_LIVE
+    bcs border_sprites_on
+    lda #$00
+    sta $d015
+    rts
+border_sprites_on:
     ldx #$00
     ldy #$00
 border_regs:
@@ -646,6 +1024,9 @@ to_screen_code3:
 char3_done:
     rts
 
+; ---- lookup/runtime tables; $3000-$37ff is free before the sprite blocks ----
+* = $3000
+
 ; ---- per-row screen and colour RAM address tables ----
 !align 255, 0
 screen_lo:
@@ -671,6 +1052,34 @@ plasma_y_base:
 
 plasma_palette:
 !byte $0a, $07, $0d, $0d, $03, $0e, $04, $04
+
+sprite_fade:
+!byte $00, $0b, $0c, $0f, $0e, $06
+sprite_fade_len = * - sprite_fade
+
+sprite_stagger:
+!byte $00, $02, $04, $06, $08, $0a, $0c
+sprite_intro_len = $12
+
+logo_fade:
+!byte $0f, $01
+logo_fade_len = * - logo_fade
+
+logo_slide_table:
+!byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+!byte $07, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+!byte $06, $07, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+!byte $05, $06, $07, $ff, $ff, $ff, $ff, $ff, $ff
+!byte $04, $05, $06, $07, $ff, $ff, $ff, $ff, $ff
+!byte $03, $04, $05, $06, $07, $ff, $ff, $ff, $ff
+!byte $02, $03, $04, $05, $06, $07, $ff, $ff, $ff
+!byte $01, $02, $03, $04, $05, $06, $07, $ff, $ff
+!byte $00, $01, $02, $03, $04, $05, $06, $07, $ff
+!byte $ff, $00, $01, $02, $03, $04, $05, $06, $07
+
+demo_fade:
+!byte $00, $0b, $0c, $0f, $01, $0f, $0c, $0a, BG_COLOR
+demo_fade_len = * - demo_fade
 
 plasma_x_sine:
 !byte $10, $11, $13, $14, $16, $17, $18, $1a, $1b, $1c, $1c, $1d, $1e, $1e, $1f, $1f
@@ -722,10 +1131,6 @@ subtitle_fade:
 !byte BG_COLOR, BG_COLOR, $0d, $0e, $06, $06
 subtitle_fade_len = * - subtitle_fade
 
-message3:
-!text "PARALAX CALLS FROM THE LOWER BORDER ... WHITE TEXT, MAGENTA SKY, A SLOW BLUE TITLE FADE, AND A SHORT INTRO NOD TO FADE5 ...      "
-!byte 0
-
 ; ---- SID tune: PSID body relocated straight to its $1000 load address ----
 ; The VIC sees the char ROM shadow at $1000-$1fff in bank 0, so this window
 ; is useless for graphics and free for the player. Skip = $7c header + 2-byte
@@ -772,6 +1177,17 @@ title_big_chars:
 !byte $3c, $3c, $3c, $3c, $f0, $f0, $c0, $c0
 !byte $3f, $3f, $fc, $fc, $fc, $fc, $00, $00
 !byte $f0, $f0, $3c, $3c, $3c, $3c, $00, $00
+
+message3:
+!text "              PARALAX, 2026, WITH A VIBE CODED INTRO THANKS TO ANTHROPIC. "
+!text "VIBED BY TARQUIN, ORIGINAL FOUNDING MEMBER OF THE AMIGA PARALAX DIVISION. "
+!text "OUT OF CURISOITY I WANTED TO KNOW IF IT WAS POSSBILE TO VIBE CODE AN INTRO "
+!text "FOR THE COMMODORE 64 ULTIMATE AND THIS IS THE RESULT.       FIRST GREETINGS "
+!text "TO PINK PANTHER,  DEVASTATOR (LATER KNOWN AS QUETZAL) AND ERRATIC AND ANTHRAX "
+!text "WHO WERE THE ORIGINAL C64 PARALAX DIVISION. TOOLS USED IN THE CREATION: GPT-5.5 "
+!text "AND FABLE 5. MUSIC BY GPT-5.4, AND GRAPHICS BY TARQUIN AND CONVERTED VIA PYTHON.  "
+!text "CONDUCTOR AS THE VIBING FRAMEWORK AND GITHUB FOR ASM CODE EXAMPLES - TO MANY TO NAME......       "
+!byte 0
 
 title_screen = $0400 + 2 * 40 + 24
 title_color = $d800 + 2 * 40 + 24

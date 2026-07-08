@@ -1,0 +1,241 @@
+; Original C64 SID-style arcade dirge for the Shanghai demo.
+; Init entry: $1000, play entry: $1003. Built as a PRG then wrapped as PSID.
+
+!to "build/original_dirge_sid.prg", cbm
+
+SID = $d400
+
+* = $1000
+init_entry:
+    jmp music_init
+play_entry:
+    jmp music_play
+
+music_init:
+    ldx #$18
+clear_sid:
+    lda #$00
+    sta SID, x
+    dex
+    bpl clear_sid
+
+    lda #$00
+    sta frame_counter
+    sta step_counter
+    sta arp_counter
+    sta work_byte
+
+    lda #$00
+    sta SID + $02
+    lda #$08
+    sta SID + $03             ; lead pulse width
+    lda #$00
+    sta SID + $09
+    lda #$05
+    sta SID + $0a             ; bass pulse width
+    lda #$00
+    sta SID + $10
+    lda #$03
+    sta SID + $11             ; arpeggio pulse width
+
+    lda #$46
+    sta SID + $05             ; lead AD
+    lda #$b8
+    sta SID + $06             ; lead SR
+    lda #$18
+    sta SID + $0c             ; bass AD
+    lda #$d6
+    sta SID + $0d             ; bass SR
+    lda #$24
+    sta SID + $13             ; arpeggio AD
+    lda #$74
+    sta SID + $14             ; arpeggio SR
+
+    lda #$f2
+    sta SID + $17             ; resonant low-pass on voice 2
+    lda #$90
+    sta SID + $16
+    lda #$00
+    sta SID + $15
+    lda #$1f                  ; low-pass + full volume
+    sta SID + $18
+
+    jsr update_lead
+    jsr update_bass
+    jsr update_arp
+    rts
+
+music_play:
+    inc arp_counter
+    jsr animate_timbre
+    lda arp_counter
+    and #$01
+    bne skip_arp
+    jsr update_arp
+skip_arp:
+    inc frame_counter
+    lda frame_counter
+    cmp #12                   ; 128 steps ~= 30 seconds PAL
+    bcc music_done
+    lda #$00
+    sta frame_counter
+    inc step_counter
+    lda step_counter
+    and #$7f
+    sta step_counter
+    jsr update_lead
+    jsr update_bass
+music_done:
+    rts
+
+animate_timbre:
+    lda arp_counter
+    and #$0f
+    tax
+    lda pulse_table, x
+    sta SID + $03
+    eor #$0f
+    and #$0f
+    ora #$02
+    sta SID + $11
+    lda filter_table, x
+    sta SID + $16
+    rts
+
+update_lead:
+    ldx step_counter
+    lda lead_pattern, x
+    cmp #$ff
+    bne lead_note
+    lda #$40
+    sta SID + $04
+    rts
+lead_note:
+    tax
+    lda #$40
+    sta SID + $04
+    lda freq_lo, x
+    sta SID + $00
+    lda freq_hi, x
+    sta SID + $01
+    lda #$41                  ; pulse + gate
+    sta SID + $04
+    rts
+
+update_bass:
+    lda step_counter
+    and #$07
+    beq bass_gate
+    rts
+bass_gate:
+    lda step_counter
+    lsr
+    lsr
+    lsr
+    and #$0f
+    tax
+    lda bass_pattern, x
+    tax
+    lda #$20
+    sta SID + $0b
+    lda freq_lo, x
+    sta SID + $07
+    lda freq_hi, x
+    sta SID + $08
+    lda #$21                  ; saw + gate
+    sta SID + $0b
+    rts
+
+update_arp:
+    lda step_counter
+    lsr
+    lsr
+    lsr
+    and #$0f
+    asl
+    asl
+    sta work_byte
+    lda arp_counter
+    lsr
+    and #$03
+    clc
+    adc work_byte
+    tax
+    lda arp_chords, x
+    tax
+    lda freq_lo, x
+    sta SID + $0e
+    lda freq_hi, x
+    sta SID + $0f
+    lda #$41                  ; pulse + gate
+    sta SID + $12
+    rts
+
+frame_counter:
+!byte $00
+step_counter:
+!byte $00
+arp_counter:
+!byte $00
+work_byte:
+!byte $00
+
+freq_lo:
+!byte $5a, $e2, $2d, $cf, $85, $e8, $c1, $b4
+!byte $c4, $59, $9d, $0a, $d0, $81, $67, $89
+!byte $b2, $3b, $13, $a0, $02, $ce, $11, $64
+!byte $76, $26, $04
+
+freq_hi:
+!byte $04, $04, $05, $05, $06, $06, $07, $08
+!byte $09, $0a, $0b, $0d, $0d, $0f, $11, $13
+!byte $14, $17, $1a, $1b, $1f, $22, $27, $29
+!byte $2e, $34, $3e
+
+pulse_table:
+!byte $06, $06, $07, $08, $09, $0a, $0a, $09
+!byte $08, $07, $06, $05, $05, $06, $07, $08
+
+filter_table:
+!byte $70, $78, $82, $8c, $98, $a4, $b0, $ba
+!byte $c0, $ba, $b0, $a4, $98, $8c, $82, $78
+
+bass_pattern:
+!byte 0, 0, 5, 5, 6, 6, 4, 4
+!byte 0, 2, 3, 5, 6, 4, 2, 0
+
+arp_chords:
+!byte 7, 9, 11, 14
+!byte 7, 9, 11, 16
+!byte 5, 7, 9, 12
+!byte 5, 9, 12, 16
+!byte 6, 8, 10, 13
+!byte 6, 10, 13, 17
+!byte 4, 8, 11, 15
+!byte 4, 6, 11, 18
+!byte 7, 9, 11, 21
+!byte 2, 5, 9, 16
+!byte 3, 7, 10, 17
+!byte 5, 9, 12, 19
+!byte 6, 10, 13, 20
+!byte 4, 8, 11, 18
+!byte 2, 6, 9, 16
+!byte 0, 7, 11, 14
+
+lead_pattern:
+!byte 21, $ff, 20, $ff, 18, $ff, 16, 18
+!byte $ff, 16, $ff, 14, $ff, 11, $ff, 14
+!byte 16, $ff, 18, $ff, 20, $ff, 18, 16
+!byte $ff, 14, $ff, 13, $ff, 11, $ff, $ff
+!byte 19, $ff, 20, $ff, 23, $ff, 21, 20
+!byte $ff, 16, $ff, 14, $ff, 12, $ff, $ff
+!byte 20, $ff, 18, $ff, 17, $ff, 15, 17
+!byte $ff, 18, $ff, 15, $ff, 11, $ff, $ff
+!byte 21, 23, $ff, 21, 20, $ff, 18, $ff
+!byte 16, $ff, 18, $ff, 21, $ff, 18, 16
+!byte 19, $ff, 16, $ff, 14, $ff, 12, $ff
+!byte 14, 16, $ff, 19, $ff, 16, $ff, $ff
+!byte 20, $ff, 23, $ff, 24, $ff, 23, 20
+!byte $ff, 18, $ff, 17, $ff, 15, $ff, $ff
+!byte 18, 20, $ff, 21, $ff, 20, 18, $ff
+!byte 16, $ff, 14, $ff, 11, $ff, 14, $ff
