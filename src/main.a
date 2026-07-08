@@ -33,6 +33,7 @@ raster_line  = $f3          ; 243: reposition all 8 border sprites (~6 raster
 top_line     = $00
 font_base    = $2000
 logo_char_base = $40
+title_big_base = $d4
 
 BG_COLOR     = $04          ; magenta / purple
 RIBBON_COLOR = BG_COLOR     ; match the field so the border scroller has no box
@@ -147,6 +148,14 @@ copy_logo_charset:
     sta font_base + logo_char_base * 8 + $500, x
     inx
     bne copy_logo_charset
+
+    ldx #$00
+copy_big_title_charset:
+    lda title_big_chars, x
+    sta font_base + title_big_base * 8, x
+    inx
+    cpx #$e0
+    bne copy_big_title_charset
     rts
 
 ; ---- blank the whole screen ----
@@ -288,10 +297,13 @@ plasma_loop:
 draw_title:
     ldx #(title_len - 1)
 title_loop:
-    lda title_text, x
+    lda title_top_codes, x
     sta title_screen, x
+    lda title_bottom_codes, x
+    sta title_screen + 40, x
     lda #BG_COLOR
     sta title_color, x
+    sta title_color + 40, x
     dex
     bpl title_loop
 
@@ -326,16 +338,22 @@ subtitle2_loop:
 animate_titles:
     lda title_step
     cmp #title_fade_len
-    bcs title_done
+    bcc title_fade_continue
+    lda #$01                ; immediately restart the two-second fade loop
+    sta title_timer
+    lda #$00
+    sta title_step
+title_fade_continue:
     dec title_timer
     bne title_done
-    lda #$08
+    lda #$0c
     sta title_timer
     ldx title_step
     lda title_fade, x
     ldy #(title_len - 1)
 title_fade_loop:
     sta title_color, y
+    sta title_color + 40, y
     dey
     bpl title_fade_loop
     inc title_step
@@ -669,20 +687,35 @@ plasma_y_shadow:
 plasma_color_shadow:
 !fill 7, 0
 
-title_text:
-!byte $10, $01, $12, $01, $0c, $01, $18
-title_len = * - title_text
+title_top_codes:
+!byte title_big_base + $00, title_big_base + $01
+!byte title_big_base + $04, title_big_base + $05
+!byte title_big_base + $08, title_big_base + $09
+!byte title_big_base + $0c, title_big_base + $0d
+!byte title_big_base + $10, title_big_base + $11
+!byte title_big_base + $14, title_big_base + $15
+!byte title_big_base + $18, title_big_base + $19
+title_len = * - title_top_codes
+
+title_bottom_codes:
+!byte title_big_base + $02, title_big_base + $03
+!byte title_big_base + $06, title_big_base + $07
+!byte title_big_base + $0a, title_big_base + $0b
+!byte title_big_base + $0e, title_big_base + $0f
+!byte title_big_base + $12, title_big_base + $13
+!byte title_big_base + $16, title_big_base + $17
+!byte title_big_base + $1a, title_big_base + $1b
 
 subtitle1_text:
-!byte $02, $01, $03, $0b, $20, $17, $09, $14, $08, $20, $01, $20, $13, $08, $0f, $12, $14, $20, $09, $0e, $14, $12, $0f
+!byte $32, $30, $32, $36
 subtitle1_len = * - subtitle1_text
 
 subtitle2_text:
-!byte $09, $0e, $13, $10, $09, $12, $05, $04, $20, $02, $19, $20, $06, $01, $04, $05, $35
+!byte $20
 subtitle2_len = * - subtitle2_text
 
 title_fade:
-!byte BG_COLOR, BG_COLOR, $0d, $0e, $06, $06
+!byte BG_COLOR, $0d, $0e, $06, $06, $0e, $0d, BG_COLOR
 title_fade_len = * - title_fade
 
 subtitle_fade:
@@ -709,10 +742,41 @@ background_screen:
 background_color:
 !bin "src/assets/parallax_color.bin"
 
-title_screen = $0400 + 2 * 40 + 29
-title_color = $d800 + 2 * 40 + 29
-subtitle1_screen = $0400 + 5 * 40 + 13
-subtitle1_color = $d800 + 5 * 40 + 13
+title_big_chars:
+; PARALAX as true 16x16 glyphs derived from the lower-border 8x8 font.
+!byte $ff, $ff, $f0, $f0, $f0, $f0, $ff, $ff
+!byte $fc, $fc, $3c, $3c, $3c, $3c, $fc, $fc
+!byte $fc, $fc, $fc, $fc, $fc, $fc, $00, $00
+!byte $00, $00, $00, $00, $00, $00, $00, $00
+!byte $ff, $ff, $f0, $f0, $f0, $f0, $ff, $ff
+!byte $fc, $fc, $3c, $3c, $3c, $3c, $fc, $fc
+!byte $f0, $f0, $fc, $fc, $fc, $fc, $00, $00
+!byte $3c, $3c, $3c, $3c, $3c, $3c, $00, $00
+!byte $ff, $ff, $f0, $f0, $f0, $f0, $ff, $ff
+!byte $fc, $fc, $3c, $3c, $3c, $3c, $fc, $fc
+!byte $ff, $ff, $fc, $fc, $fc, $fc, $00, $00
+!byte $c0, $c0, $f0, $f0, $3c, $3c, $00, $00
+!byte $ff, $ff, $f0, $f0, $f0, $f0, $ff, $ff
+!byte $fc, $fc, $3c, $3c, $3c, $3c, $fc, $fc
+!byte $f0, $f0, $fc, $fc, $fc, $fc, $00, $00
+!byte $3c, $3c, $3c, $3c, $3c, $3c, $00, $00
+!byte $f0, $f0, $f0, $f0, $f0, $f0, $f0, $f0
+!byte $00, $00, $00, $00, $00, $00, $00, $00
+!byte $fc, $fc, $fc, $fc, $ff, $ff, $00, $00
+!byte $00, $00, $00, $00, $fc, $fc, $00, $00
+!byte $ff, $ff, $f0, $f0, $f0, $f0, $ff, $ff
+!byte $fc, $fc, $3c, $3c, $3c, $3c, $fc, $fc
+!byte $f0, $f0, $fc, $fc, $fc, $fc, $00, $00
+!byte $3c, $3c, $3c, $3c, $3c, $3c, $00, $00
+!byte $f0, $f0, $f0, $f0, $3f, $3f, $0f, $0f
+!byte $3c, $3c, $3c, $3c, $f0, $f0, $c0, $c0
+!byte $3f, $3f, $fc, $fc, $fc, $fc, $00, $00
+!byte $f0, $f0, $3c, $3c, $3c, $3c, $00, $00
+
+title_screen = $0400 + 2 * 40 + 24
+title_color = $d800 + 2 * 40 + 24
+subtitle1_screen = $0400 + 5 * 40 + 29
+subtitle1_color = $d800 + 5 * 40 + 29
 subtitle2_screen = $0400 + 7 * 40 + 18
 subtitle2_color = $d800 + 7 * 40 + 18
 
