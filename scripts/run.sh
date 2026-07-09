@@ -7,7 +7,7 @@ PORT="${CONDUCTOR_PORT:-12764}"
 HOST="127.0.0.1"
 BUILD_DIR="$ROOT_DIR/build"
 VICE_STATE_DIR="${HOME}/.local/state/vice"
-PRG_PATH="$BUILD_DIR/sine_wave_linus_effect.prg"
+PRG_PATH="$BUILD_DIR/wide_borders_framework.prg"
 
 find_listener_pid() {
   lsof -tiTCP:"$PORT" -sTCP:LISTEN -nP 2>/dev/null | head -n 1
@@ -84,7 +84,7 @@ cat >"$ROOT_DIR/build/index.html" <<EOF
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Sine Wave / Linus Effect</title>
+    <title>Wide Borders Framework</title>
     <style>
       body {
         margin: 0;
@@ -115,9 +115,9 @@ cat >"$ROOT_DIR/build/index.html" <<EOF
   <body>
     <main>
       <section class="card">
-        <h1>Sine Wave / Linus Effect</h1>
+        <h1>Wide Borders Framework</h1>
         <p>The local build is ready and VICE should be opening on this Mac.</p>
-        <p>Artifact: <a href="/sine_wave_linus_effect.prg">sine_wave_linus_effect.prg</a></p>
+        <p>Artifact: <a href="/wide_borders_framework.prg">wide_borders_framework.prg</a></p>
         <p>Address: <code>http://$HOST:$PORT/</code></p>
       </section>
     </main>
