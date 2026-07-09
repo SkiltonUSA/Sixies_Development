@@ -1,0 +1,546 @@
+; Cancun C64 Demo
+; Filled sinewave field based on a precomputed charset/lookup table, plus a
+; title pulse.
+
+!to "build/cancun.prg", cbm
+
+frame_flag         = $02
+frame_counter      = $03
+field_anim         = $04
+title_phase        = $06
+text_ptr           = $08          ; generic source pointer ($08/$09)
+str_color          = $0a
+str_col            = $0b
+tmp0               = $0c
+tmp1               = $0d
+tmp2               = $0e
+tmp3               = $0f
+wave_row           = $12
+wave_char_top      = $13
+wave_char_mid      = $14
+wave_char_bot      = $15
+src_ptr            = $f7          ; generic bulk-copy pointer ($f7/$f8)
+tile_ptr           = $f9          ; tile charset pointer ($f9/$fa)
+row_ptr            = $fb          ; screen pointer ($fb/$fc)
+color_ptr          = $fd          ; color RAM pointer ($fd/$fe)
+
+screen_base        = $0400
+color_base         = $d800
+font_base          = $2000
+wave_char_base     = 64
+wave_char_full     = wave_char_base + 1
+tile_data          = font_base + wave_char_base * 8
+
+field_top_row      = 6
+field_rows         = 14
+field_cols         = 40
+field_left_col     = 0
+
+title_row          = 1
+title_col          = 14
+subtitle1_row      = 3
+subtitle1_col      = 12
+subtitle2_row      = 4
+subtitle2_col      = 9
+
+title_screen       = screen_base + title_row * 40 + title_col
+title_color        = color_base + title_row * 40 + title_col
+
+; advance row_ptr one screen row down (clobbers A)
+!macro next_row {
+    lda row_ptr
+    clc
+    adc #40
+    sta row_ptr
+    bcc +
+    inc row_ptr + 1
++
+}
+
+; ---- BASIC stub: SYS 2061 ($080d) ----
+* = $0801
+!byte $0c, $08, $0a, $00, $9e
+!text "2061"
+!byte $00, $00, $00
+
+* = $080d
+entry:
+    sei
+    lda #$7f
+    sta $dc0d
+    sta $dd0d
+    lda $dc0d
+    lda $dd0d
+
+    lda #$00
+    sta frame_flag
+    sta frame_counter
+    sta title_phase
+
+    lda #$1b
+    sta $d011
+    lda #$08
+    sta $d016
+    lda #$18
+    sta $d018
+    lda $dd00
+    ora #$03
+    sta $dd00
+
+    lda #$06
+    sta $d020
+    sta $d021
+
+    jsr build_charset
+    jsr clear_screen
+    jsr init_field
+    jsr draw_titles
+    jsr animate_demo
+    jsr init_irq
+
+main:
+    lda frame_flag
+    beq main
+    lda #$00
+    sta frame_flag
+    jsr animate_demo
+    jmp main
+
+; ---- copy the ROM charset into RAM, then overlay the generated wave glyphs ----
+build_charset:
+    lda $01
+    pha
+    lda #$33
+    sta $01
+    ldx #$00
+copy_rom_charset:
+    lda $d000, x
+    sta font_base + $000, x
+    lda $d100, x
+    sta font_base + $100, x
+    lda $d200, x
+    sta font_base + $200, x
+    lda $d300, x
+    sta font_base + $300, x
+    lda $d400, x
+    sta font_base + $400, x
+    lda $d500, x
+    sta font_base + $500, x
+    lda $d600, x
+    sta font_base + $600, x
+    lda $d700, x
+    sta font_base + $700, x
+    inx
+    bne copy_rom_charset
+    pla
+    sta $01
+
+    jsr copy_wave_charset
+    rts
+
+copy_wave_charset:
+    lda #<wave_charset
+    sta src_ptr
+    lda #>wave_charset
+    sta src_ptr + 1
+    lda #<tile_data
+    sta tile_ptr
+    lda #>tile_data
+    sta tile_ptr + 1
+    ldx #wave_char_pages
+copy_wave_page:
+    ldy #$00
+copy_wave_page_loop:
+    lda (src_ptr), y
+    sta (tile_ptr), y
+    iny
+    bne copy_wave_page_loop
+    inc src_ptr + 1
+    inc tile_ptr + 1
+    dex
+    bne copy_wave_page
+    ldy #$00
+copy_wave_tail:
+    cpy #wave_char_tail
+    beq copy_wave_done
+    lda (src_ptr), y
+    sta (tile_ptr), y
+    iny
+    bne copy_wave_tail
+copy_wave_done:
+    rts
+
+; ---- fill the full 40x25 screen and colour RAM without touching pointers ----
+clear_screen:
+    ldx #$00
+clear_page_loop:
+    lda #$20
+    sta screen_base + $000, x
+    sta screen_base + $100, x
+    sta screen_base + $200, x
+    lda #$00
+    sta color_base + $000, x
+    sta color_base + $100, x
+    sta color_base + $200, x
+    inx
+    bne clear_page_loop
+
+    ldx #$00
+clear_tail_loop:
+    cpx #232
+    beq clear_done
+    lda #$20
+    sta screen_base + $300, x
+    lda #$00
+    sta color_base + $300, x
+    inx
+    bne clear_tail_loop
+clear_done:
+    rts
+
+; ---- blank just the demo field area ----
+clear_field:
+    ldx #$00
+clear_field_row:
+    lda field_screen_lo, x
+    sta row_ptr
+    lda field_screen_hi, x
+    sta row_ptr + 1
+    lda #$20
+    ldy #$00
+clear_field_col:
+    sta (row_ptr), y
+    iny
+    cpy #field_cols
+    bne clear_field_col
+    inx
+    cpx #field_rows
+    bne clear_field_row
+    rts
+
+init_field:
+    jsr clear_field
+    jsr paint_field_colors
+    rts
+
+draw_titles:
+    lda #<title_text
+    sta text_ptr
+    lda #>title_text
+    sta text_ptr + 1
+    ldx #title_row
+    ldy #title_col
+    lda #$01
+    jsr draw_string
+
+    lda #<subtitle1_text
+    sta text_ptr
+    lda #>subtitle1_text
+    sta text_ptr + 1
+    ldx #subtitle1_row
+    ldy #subtitle1_col
+    lda #$0e
+    jsr draw_string
+
+    lda #<subtitle2_text
+    sta text_ptr
+    lda #>subtitle2_text
+    sta text_ptr + 1
+    ldx #subtitle2_row
+    ldy #subtitle2_col
+    lda #$03
+    jsr draw_string
+    rts
+
+animate_demo:
+    lda frame_counter
+    and #$3f
+    sta field_anim
+
+    jsr render_filled_sine
+    jsr animate_title
+    rts
+
+; ---- render the filled sinewave using the generated y0/y1 lookup tables ----
+; Each column is walked top to bottom with a single pointer and every row is
+; written exactly once (blanks above the wave edge, fill chars below), so the
+; visible field is never blanked while the raster beam is inside it.
+render_filled_sine:
+    ldx #$00
+render_wave_col:
+    stx str_col
+    ldy str_col
+    lda field_phase, y
+    clc
+    adc field_anim
+    and #$3f
+    tay
+    lda sine_curve, y
+    sta tmp1
+
+    ldy str_col
+    lda field_phase_next, y
+    clc
+    adc field_anim
+    and #$3f
+    tay
+    lda sine_curve, y
+    sta tmp2
+
+    sec
+    lda tmp2
+    sbc tmp1
+    clc
+    adc #$08
+    sta tmp3
+
+    lda tmp1
+    and #$f0
+    lsr
+    lsr
+    lsr
+    lsr
+    clc
+    adc #$01
+    sta wave_row
+
+    lda tmp1
+    and #$0f
+    asl
+    asl
+    asl
+    asl
+    ora tmp3
+    tay
+
+    lda wave_lookup_top, y
+    sta wave_char_top
+    lda wave_lookup_mid, y
+    sta wave_char_mid
+    lda wave_lookup_bot, y
+    sta wave_char_bot
+
+    lda field_col_lo, x
+    sta row_ptr
+    lda field_col_hi, x
+    sta row_ptr + 1
+
+    ldy #$00
+    ldx wave_row
+    dex
+    beq wave_top_edge
+wave_blank_loop:
+    lda #$20
+    sta (row_ptr), y
+    +next_row
+    dex
+    bne wave_blank_loop
+
+wave_top_edge:
+    lda wave_char_top
+    sta (row_ptr), y
+    +next_row
+    lda wave_char_mid
+    sta (row_ptr), y
+    +next_row
+    lda wave_char_bot
+    sta (row_ptr), y
+    +next_row
+
+    ldx wave_row
+    inx
+    inx
+fill_wave_col:
+    cpx #field_rows
+    bcs render_wave_next
+    lda #wave_char_full
+    sta (row_ptr), y
+    +next_row
+    inx
+    bne fill_wave_col
+
+render_wave_next:
+    ldx str_col
+    inx
+    cpx #field_cols
+    beq render_wave_done
+    jmp render_wave_col
+render_wave_done:
+    rts
+
+; ---- paint the static centre field colour once at init ----
+paint_field_colors:
+    ldx #$00
+field_color_row:
+    stx tmp0
+    lda field_color_lo, x
+    sta color_ptr
+    lda field_color_hi, x
+    sta color_ptr + 1
+    lda #$04
+    ldy #$00
+field_color_col:
+    sta (color_ptr), y
+    iny
+    cpy #field_cols
+    bne field_color_col
+    ldx tmp0
+    inx
+    cpx #field_rows
+    bne field_color_row
+    rts
+
+animate_title:
+    lda frame_counter
+    lsr
+    sta title_phase
+    ldx #$00
+title_color_loop:
+    lda title_phase
+    clc
+    adc title_offsets, x
+    and #$07
+    tay
+    lda title_palette, y
+    sta title_color, x
+    inx
+    cpx #title_len
+    bne title_color_loop
+    rts
+
+; ---- draw a null-terminated ASCII string using C64 screen codes ----
+draw_string:
+    sta str_color
+    sty str_col
+    lda screen_lo, x
+    clc
+    adc str_col
+    sta row_ptr
+    lda screen_hi, x
+    adc #$00
+    sta row_ptr + 1
+    lda color_lo, x
+    clc
+    adc str_col
+    sta color_ptr
+    lda color_hi, x
+    adc #$00
+    sta color_ptr + 1
+    ldy #$00
+draw_string_loop:
+    lda (text_ptr), y
+    beq draw_string_done
+    jsr ascii_to_screen
+    sta (row_ptr), y
+    lda str_color
+    sta (color_ptr), y
+    iny
+    bne draw_string_loop
+draw_string_done:
+    rts
+
+ascii_to_screen:
+    cmp #$41
+    bcc ascii_done
+    cmp #$5b
+    bcs ascii_done
+    sec
+    sbc #$40
+ascii_done:
+    rts
+
+; ---- simple frame IRQ: mark one update opportunity per video frame ----
+init_irq:
+    lda #$35
+    sta $01
+    lda #<nmi_handler
+    sta $fffa
+    lda #>nmi_handler
+    sta $fffb
+    lda #<irq_main
+    sta $fffe
+    lda #>irq_main
+    sta $ffff
+    lda #$00
+    sta $d012
+    lda $d011
+    and #$7f
+    sta $d011
+    lda #$01
+    sta $d01a
+    lda #$01
+    sta $d019
+    cli
+    rts
+
+nmi_handler:
+    rti
+
+irq_main:
+    pha
+    txa
+    pha
+    tya
+    pha
+    lda #$01
+    sta $d019
+    inc frame_counter
+    lda #$01
+    sta frame_flag
+    pla
+    tay
+    pla
+    tax
+    pla
+    rti
+
+; ---- runtime tables ----
+* = $3000
+
+screen_lo:
+!for r, 0, 24 { !byte <(screen_base + r * 40) }
+screen_hi:
+!for r, 0, 24 { !byte >(screen_base + r * 40) }
+color_lo:
+!for r, 0, 24 { !byte <(color_base + r * 40) }
+color_hi:
+!for r, 0, 24 { !byte >(color_base + r * 40) }
+
+field_screen_lo:
+!for r, 0, field_rows - 1 { !byte <(screen_base + (field_top_row + r) * 40 + field_left_col) }
+field_screen_hi:
+!for r, 0, field_rows - 1 { !byte >(screen_base + (field_top_row + r) * 40 + field_left_col) }
+field_color_lo:
+!for r, 0, field_rows - 1 { !byte <(color_base + (field_top_row + r) * 40 + field_left_col) }
+field_color_hi:
+!for r, 0, field_rows - 1 { !byte >(color_base + (field_top_row + r) * 40 + field_left_col) }
+
+field_col_lo:
+!for c, 0, field_cols - 1 { !byte <(screen_base + field_top_row * 40 + field_left_col + c) }
+field_col_hi:
+!for c, 0, field_cols - 1 { !byte >(screen_base + field_top_row * 40 + field_left_col + c) }
+field_phase:
+!for c, 0, field_cols - 1 { !byte (c * 64) / field_cols }
+field_phase_next:
+!for c, 0, field_cols - 1 { !byte ((c + 1) * 64) / field_cols }
+
+title_palette:
+!byte $01, $0e, $03, $0d, $07, $01, $07, $03
+
+title_offsets:
+!byte $00, $01, $02, $03, $04, $05, $06, $07, $00, $01, $02
+
+title_text:
+!text "CANCUN DEMO"
+!byte 0
+title_len = * - title_text - 1
+
+subtitle1_text:
+!text "FILLED SINEWAVE"
+!byte 0
+
+subtitle2_text:
+!text "NURPAX INSPIRED"
+!byte 0
+
+!source "src/generated/filled_sine.inc"
