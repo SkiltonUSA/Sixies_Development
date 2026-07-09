@@ -1,13 +1,14 @@
-; Cancun C64 Demo
+; Sine Wave / Linus Effect
 ; Filled sinewave field based on a precomputed charset/lookup table, plus a
 ; title pulse.
 
-!to "build/cancun.prg", cbm
+!to "build/sine_wave_linus_effect.prg", cbm
 
 frame_flag         = $02
 frame_counter      = $03
 field_anim         = $04
 title_phase        = $06
+demo_phase         = $07
 text_ptr           = $08          ; generic source pointer ($08/$09)
 str_color          = $0a
 str_col            = $0b
@@ -15,10 +16,15 @@ tmp0               = $0c
 tmp1               = $0d
 tmp2               = $0e
 tmp3               = $0f
+intro_timer_lo     = $10
+intro_timer_hi     = $11
 wave_row           = $12
 wave_char_top      = $13
 wave_char_mid      = $14
 wave_char_bot      = $15
+wipe_front         = $16
+wipe_step          = $17
+state_ptr          = $1e          ; pattern state pointer ($1e/$1f)
 src_ptr            = $f7          ; generic bulk-copy pointer ($f7/$f8)
 tile_ptr           = $f9          ; tile charset pointer ($f9/$fa)
 row_ptr            = $fb          ; screen pointer ($fb/$fc)
@@ -30,6 +36,15 @@ font_base          = $2000
 wave_char_base     = 64
 wave_char_full     = wave_char_base + 1
 tile_data          = font_base + wave_char_base * 8
+pattern_char_base  = 251
+pattern_state_base = $3800
+demo_intro_pattern = $00
+demo_transition_wipe = $01
+demo_live_sine     = $02
+intro_sprite_base  = intro_sprite_data
+intro_sprite_ptr0  = intro_sprite_base / 64
+wave_skull_y_offset = 36
+transition_band_height = 2
 
 field_top_row      = 6
 field_rows         = 14
@@ -39,7 +54,7 @@ field_left_col     = 0
 title_row          = 1
 title_col          = 14
 subtitle1_row      = 3
-subtitle1_col      = 12
+subtitle1_col      = 14
 subtitle2_row      = 4
 subtitle2_col      = 9
 
@@ -54,6 +69,17 @@ title_color        = color_base + title_row * 40 + title_col
     sta row_ptr
     bcc +
     inc row_ptr + 1
++
+}
+
+; advance state_ptr one field row down (clobbers A)
+!macro next_state_row {
+    lda state_ptr
+    clc
+    adc #field_cols
+    sta state_ptr
+    bcc +
+    inc state_ptr + 1
 +
 }
 
@@ -87,14 +113,13 @@ entry:
     ora #$03
     sta $dd00
 
-    lda #$06
+    lda #$04
     sta $d020
     sta $d021
 
     jsr build_charset
     jsr clear_screen
-    jsr init_field
-    jsr draw_titles
+    jsr init_intro_pattern
     jsr animate_demo
     jsr init_irq
 
@@ -136,6 +161,7 @@ copy_rom_charset:
     sta $01
 
     jsr copy_wave_charset
+    jsr copy_pattern_charset
     rts
 
 copy_wave_charset:
@@ -168,6 +194,26 @@ copy_wave_tail:
     iny
     bne copy_wave_tail
 copy_wave_done:
+    rts
+
+copy_pattern_charset:
+    lda #<pattern_chars
+    sta src_ptr
+    lda #>pattern_chars
+    sta src_ptr + 1
+    lda #<(font_base + pattern_char_base * 8)
+    sta tile_ptr
+    lda #>(font_base + pattern_char_base * 8)
+    sta tile_ptr + 1
+    ldy #$00
+copy_pattern_loop:
+    cpy #(pattern_chars_end - pattern_chars)
+    beq copy_pattern_done
+    lda (src_ptr), y
+    sta (tile_ptr), y
+    iny
+    bne copy_pattern_loop
+copy_pattern_done:
     rts
 
 ; ---- fill the full 40x25 screen and colour RAM without touching pointers ----
@@ -223,6 +269,41 @@ init_field:
     jsr paint_field_colors
     rts
 
+init_intro_pattern:
+    lda #demo_intro_pattern
+    sta demo_phase
+    lda #<$012c
+    sta intro_timer_lo
+    lda #>$012c
+    sta intro_timer_hi
+    jsr init_pattern_state
+    jsr paint_intro_colors
+    jsr init_intro_sprites
+    rts
+
+init_pattern_state:
+    ldx #$00
+init_pattern_row:
+    stx tmp0
+    lda state_row_lo, x
+    sta state_ptr
+    lda state_row_hi, x
+    sta state_ptr + 1
+    ldy #$00
+init_pattern_col:
+    tya
+    eor tmp0
+    and #$03
+    sta (state_ptr), y
+    iny
+    cpy #field_cols
+    bne init_pattern_col
+    ldx tmp0
+    inx
+    cpx #25
+    bne init_pattern_row
+    rts
+
 draw_titles:
     lda #<title_text
     sta text_ptr
@@ -248,7 +329,7 @@ draw_titles:
     sta text_ptr + 1
     ldx #subtitle2_row
     ldy #subtitle2_col
-    lda #$03
+    lda #$06
     jsr draw_string
     rts
 
@@ -257,7 +338,29 @@ animate_demo:
     and #$3f
     sta field_anim
 
+    lda demo_phase
+    cmp #demo_intro_pattern
+    beq animate_intro_pattern
+    cmp #demo_transition_wipe
+    beq animate_transition_wipe
+    jmp animate_live_sine
+animate_intro_pattern:
+    jsr render_pattern_fullscreen
+    jsr paint_intro_ripple
+    jsr update_intro_sprites
+    jsr update_pattern_state
+    jsr tick_intro_phase
+    rts
+animate_transition_wipe:
     jsr render_filled_sine
+    jsr animate_title
+    jsr render_transition_wipe
+    jsr update_pattern_state
+    jsr tick_transition_wipe
+    rts
+animate_live_sine:
+    jsr render_filled_sine
+    jsr update_wave_skull
     jsr animate_title
     rts
 
@@ -324,11 +427,11 @@ render_wave_col:
     sta row_ptr
     lda field_col_hi, x
     sta row_ptr + 1
-
-    ldy #$00
+    ldy str_col
     ldx wave_row
     dex
     beq wave_top_edge
+    ldy #$00
 wave_blank_loop:
     lda #$20
     sta (row_ptr), y
@@ -368,6 +471,391 @@ render_wave_next:
 render_wave_done:
     rts
 
+render_pattern_fullscreen:
+    ldx #$00
+pattern_screen_row:
+    stx tmp0
+    lda screen_lo, x
+    sta row_ptr
+    lda screen_hi, x
+    sta row_ptr + 1
+    lda state_row_lo, x
+    sta state_ptr
+    lda state_row_hi, x
+    sta state_ptr + 1
+    ldy #$00
+pattern_screen_col:
+    lda (state_ptr), y
+    clc
+    adc #pattern_char_base
+    sta (row_ptr), y
+    iny
+    cpy #field_cols
+    bne pattern_screen_col
+    ldx tmp0
+    inx
+    cpx #25
+    bne pattern_screen_row
+    rts
+
+init_intro_sprites:
+    lda #intro_sprite_ptr0
+    sta $07f8
+    sta $07f9
+    sta $07fa
+    sta $07fb
+    lda #$00
+    sta $d010
+    lda #$0f
+    sta $d015
+    lda #$0f
+    sta $d01c
+    lda #$00
+    sta $d017
+    sta $d01d
+    lda #$0b
+    sta $d025
+    lda #$01
+    sta $d026
+    lda #$01
+    sta $d027
+    lda #$03
+    sta $d028
+    lda #$07
+    sta $d029
+    lda #$0d
+    sta $d02a
+    rts
+
+update_intro_sprites:
+    lda frame_counter
+    lsr
+    and #$3f
+    tay
+    lda sprite_path_x_lo, y
+    sta $d000
+    lda sprite_path_msb, y
+    sta tmp0
+    lda sine_curve, y
+    clc
+    adc #$10
+    sta $d001
+
+    tya
+    clc
+    adc #$10
+    and #$3f
+    tay
+    lda sprite_path_x_lo, y
+    sta $d002
+    lda sprite_path_msb, y
+    asl
+    ora tmp0
+    sta tmp0
+    lda sine_curve, y
+    clc
+    adc #$28
+    sta $d003
+
+    tya
+    clc
+    adc #$10
+    and #$3f
+    tay
+    lda sprite_path_x_lo, y
+    sta $d004
+    lda sprite_path_msb, y
+    asl
+    asl
+    ora tmp0
+    sta tmp0
+    lda sine_curve, y
+    clc
+    adc #$40
+    sta $d005
+
+    tya
+    clc
+    adc #$10
+    and #$3f
+    tay
+    lda sprite_path_x_lo, y
+    sta $d006
+    lda sprite_path_msb, y
+    asl
+    asl
+    asl
+    ora tmp0
+    sta $d010
+    lda sine_curve, y
+    clc
+    adc #$58
+    sta $d007
+    rts
+
+hide_intro_sprites:
+    lda #$00
+    sta $d015
+    rts
+
+update_wave_skull:
+    lda #intro_sprite_ptr0
+    sta $07f8
+    lda #$01
+    sta $d015
+    lda #$01
+    sta $d01c
+    lda #$00
+    sta $d017
+    sta $d01d
+    lda #$0b
+    sta $d025
+    lda #$01
+    sta $d026
+    lda #$01
+    sta $d027
+
+    lda frame_counter
+    lsr
+    and #$3f
+    tay
+    lda wave_skull_col, y
+    sta str_col
+    lda wave_skull_x_lo, y
+    sta $d000
+    lda wave_skull_x_msb, y
+    sta $d010
+
+    ldy str_col
+    lda field_phase, y
+    clc
+    adc field_anim
+    and #$3f
+    tay
+    lda sine_curve, y
+    clc
+    adc #wave_skull_y_offset
+    sta $d001
+    rts
+
+tick_intro_phase:
+    lda intro_timer_lo
+    bne intro_timer_dec_lo
+    lda intro_timer_hi
+    beq intro_phase_done
+    dec intro_timer_hi
+intro_timer_dec_lo:
+    dec intro_timer_lo
+    lda intro_timer_lo
+    ora intro_timer_hi
+    bne intro_phase_wait
+intro_phase_done:
+    jsr start_transition_wipe
+intro_phase_wait:
+    rts
+
+start_transition_wipe:
+    lda #demo_transition_wipe
+    sta demo_phase
+    lda #$00
+    sta wipe_front
+    sta wipe_step
+    lda #$04
+    sta $d020
+    sta $d021
+    jsr hide_intro_sprites
+    jsr clear_screen
+    jsr init_field
+    jsr draw_titles
+    rts
+
+tick_transition_wipe:
+    inc wipe_step
+    lda wipe_step
+    cmp #50
+    bcs transition_wipe_done
+    tay
+    lda wipe_front_table, y
+    sta wipe_front
+transition_wipe_wait:
+    rts
+transition_wipe_done:
+    lda #demo_live_sine
+    sta demo_phase
+    rts
+
+update_pattern_state:
+    ldx #$00
+pattern_row_loop:
+    lda state_row_lo, x
+    sta state_ptr
+    lda state_row_hi, x
+    sta state_ptr + 1
+    stx tmp0
+    ldy #$00
+pattern_col_loop:
+    tya
+    eor tmp0
+    eor frame_counter
+    lsr
+    eor tmp0
+    and #$03
+    sta (state_ptr), y
+    iny
+    cpy #field_cols
+    bne pattern_col_loop
+    ldx tmp0
+    inx
+    cpx #25
+    bne pattern_row_loop
+    rts
+
+render_transition_wipe:
+    lda wipe_front
+    cmp #25
+    bcs transition_no_intro_rows
+    lda #25
+    sec
+    sbc wipe_front
+    sta tmp2
+    bne transition_calc_white_limit
+transition_no_intro_rows:
+    lda #$00
+    sta tmp2
+transition_calc_white_limit:
+    lda #(25 + transition_band_height)
+    sec
+    sbc wipe_front
+    sta tmp3
+
+    ldx #$00
+transition_row_loop:
+    cpx tmp2
+    bcc transition_intro_row
+    cpx tmp3
+    bcc transition_white_row
+transition_row_done:
+    inx
+    cpx #25
+    bne transition_row_loop
+    rts
+
+transition_intro_row:
+    stx tmp0
+    lda screen_lo, x
+    sta row_ptr
+    lda screen_hi, x
+    sta row_ptr + 1
+    lda color_lo, x
+    sta color_ptr
+    lda color_hi, x
+    sta color_ptr + 1
+    lda state_row_lo, x
+    sta state_ptr
+    lda state_row_hi, x
+    sta state_ptr + 1
+    ldy #$00
+transition_intro_loop:
+    sty tmp1
+    lda (state_ptr), y
+    clc
+    adc #pattern_char_base
+    sta (row_ptr), y
+    tya
+    asl
+    clc
+    adc intro_row_phase, x
+    adc field_anim
+    and #$3f
+    tay
+    lda intro_ripple_palette, y
+    ldy tmp1
+    sta (color_ptr), y
+    iny
+    cpy #40
+    bne transition_intro_loop
+    ldx tmp0
+    jmp transition_row_done
+
+transition_white_row:
+    stx tmp0
+    lda screen_lo, x
+    sta row_ptr
+    lda screen_hi, x
+    sta row_ptr + 1
+    lda color_lo, x
+    sta color_ptr
+    lda color_hi, x
+    sta color_ptr + 1
+    ldy #$00
+    lda #wave_char_full
+transition_white_loop:
+    sta (row_ptr), y
+    lda #$01
+    sta (color_ptr), y
+    lda #wave_char_full
+    iny
+    cpy #40
+    bne transition_white_loop
+    ldx tmp0
+    jmp transition_row_done
+
+paint_intro_ripple:
+    ldx #$00
+intro_ripple_row:
+    stx tmp0
+    lda color_lo, x
+    sta color_ptr
+    lda color_hi, x
+    sta color_ptr + 1
+    ldy #$00
+intro_ripple_col:
+    sty tmp1
+    tya
+    asl
+    clc
+    adc intro_row_phase, x
+    adc field_anim
+    and #$3f
+    tay
+    lda intro_ripple_palette, y
+    ldy tmp1
+    sta (color_ptr), y
+    iny
+    cpy #40
+    bne intro_ripple_col
+    ldx tmp0
+    inx
+    cpx #25
+    bne intro_ripple_row
+    rts
+
+paint_intro_colors:
+    ldx #$00
+paint_intro_page:
+    lda #$0a
+    sta color_base + $000, x
+    sta color_base + $100, x
+    sta color_base + $200, x
+    lda #$06
+    sta screen_base + $000, x
+    sta screen_base + $100, x
+    sta screen_base + $200, x
+    inx
+    bne paint_intro_page
+    ldx #$00
+paint_intro_tail:
+    cpx #232
+    beq paint_intro_done
+    lda #$0a
+    sta color_base + $300, x
+    lda #$06
+    sta screen_base + $300, x
+    inx
+    bne paint_intro_tail
+paint_intro_done:
+    rts
+
 ; ---- paint the static centre field colour once at init ----
 paint_field_colors:
     ldx #$00
@@ -377,7 +865,7 @@ field_color_row:
     sta color_ptr
     lda field_color_hi, x
     sta color_ptr + 1
-    lda #$04
+    lda #$0a
     ldy #$00
 field_color_col:
     sta (color_ptr), y
@@ -519,28 +1007,93 @@ field_col_lo:
 !for c, 0, field_cols - 1 { !byte <(screen_base + field_top_row * 40 + field_left_col + c) }
 field_col_hi:
 !for c, 0, field_cols - 1 { !byte >(screen_base + field_top_row * 40 + field_left_col + c) }
+state_row_lo:
+!for r, 0, 24 { !byte <(pattern_state_base + r * field_cols) }
+state_row_hi:
+!for r, 0, 24 { !byte >(pattern_state_base + r * field_cols) }
+sprite_path_x_lo:
+!for i, 0, 63 { !byte <(24 + (63 - i) * 5) }
+sprite_path_msb:
+!for i, 0, 63 { !byte >(24 + (63 - i) * 5) }
+wave_skull_col:
+!for i, 0, 63 { !byte 39 - ((i * 40) / 64) }
+wave_skull_x_lo:
+!for i, 0, 63 { !byte <(16 + (39 - ((i * 40) / 64)) * 8) }
+wave_skull_x_msb:
+!for i, 0, 63 { !byte >(16 + (39 - ((i * 40) / 64)) * 8) }
 field_phase:
 !for c, 0, field_cols - 1 { !byte (c * 64) / field_cols }
 field_phase_next:
 !for c, 0, field_cols - 1 { !byte ((c + 1) * 64) / field_cols }
+intro_row_phase:
+!for r, 0, 24 { !byte (r * 5) & $3f }
+intro_ripple_palette:
+!byte $04, $04, $04, $04, $04, $04, $04, $04
+!byte $04, $04, $0a, $0a, $0a, $0a, $0a, $0a
+!byte $0a, $0a, $01, $01, $01, $01, $01, $01
+!byte $01, $01, $0a, $0a, $0a, $0a, $0a, $0a
+!byte $0a, $0a, $04, $04, $04, $04, $04, $04
+!byte $04, $04, $04, $04, $04, $04, $04, $04
+!byte $04, $04, $0a, $0a, $0a, $0a, $0a, $0a
+!byte $0a, $0a, $01, $01, $01, $01, $01, $01
 
 title_palette:
 !byte $01, $0e, $03, $0d, $07, $01, $07, $03
+
+wipe_front_table:
+!byte 0, 0, 1, 1, 2, 2, 3, 3, 4, 4
+!byte 5, 6, 6, 7, 7, 8, 8, 9, 9, 10
+!byte 11, 11, 12, 12, 13, 13, 14, 14, 15, 15
+!byte 16, 17, 17, 18, 18, 19, 19, 20, 20, 21
+!byte 22, 22, 23, 23, 24, 24, 25, 25, 26, 27
 
 title_offsets:
 !byte $00, $01, $02, $03, $04, $05, $06, $07, $00, $01, $02
 
 title_text:
-!text "CANCUN DEMO"
+!text "SINE WAVE /"
 !byte 0
 title_len = * - title_text - 1
 
 subtitle1_text:
-!text "FILLED SINEWAVE"
+!text "LINUS EFFECT"
 !byte 0
 
 subtitle2_text:
-!text "NURPAX INSPIRED"
+!byte 0
 !byte 0
 
 !source "src/generated/filled_sine.inc"
+
+pattern_chars:
+!byte $80, $c0, $e0, $f0, $f8, $fc, $fe, $ff
+!byte $01, $03, $07, $0f, $1f, $3f, $7f, $ff
+!byte $ff, $fe, $fc, $f8, $f0, $e0, $c0, $80
+!byte $ff, $7f, $3f, $1f, $0f, $07, $03, $01
+pattern_chars_end:
+
+!align 63, 0
+intro_sprite_data:
+; compact multicolour skull with a 16x16 visible drawing inside the sprite box
+!byte $00, $00, $00
+!byte $00, $00, $00
+!byte $00, $ff, $00
+!byte $03, $ff, $c0
+!byte $03, $eb, $c0
+!byte $0f, $aa, $f0
+!byte $0f, $82, $f0
+!byte $0e, $00, $b0
+!byte $0f, $82, $f0
+!byte $0f, $aa, $f0
+!byte $03, $aa, $c0
+!byte $00, $eb, $00
+!byte $03, $aa, $c0
+!byte $03, $c3, $c0
+!byte $03, $be, $c0
+!byte $03, $aa, $c0
+!byte $00, $ff, $00
+!byte $00, $00, $00
+!byte $00, $00, $00
+!byte $00, $00, $00
+!byte $00, $00, $00
+!byte $00, $00, $00

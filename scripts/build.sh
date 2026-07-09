@@ -20,11 +20,11 @@ cd "$ROOT_DIR"
 python3 scripts/generate_filled_sine.py
 acme src/main.a
 
-echo "Built build/cancun.prg"
+echo "Built build/sine_wave_linus_effect.prg"
 
 if command -v exomizer >/dev/null 2>&1; then
-  exomizer sfx sys build/cancun.prg -o build/cancun_sfx.prg >/dev/null
-  echo "Crunched build/cancun_sfx.prg ($(stat -f%z build/cancun_sfx.prg) bytes)"
+  exomizer sfx sys build/sine_wave_linus_effect.prg -o build/sine_wave_linus_effect_sfx.prg >/dev/null
+  echo "Crunched build/sine_wave_linus_effect_sfx.prg ($(stat -f%z build/sine_wave_linus_effect_sfx.prg) bytes)"
 else
   echo "exomizer not found; skipping crunched build (brew install exomizer)"
 fi

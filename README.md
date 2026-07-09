@@ -1,9 +1,9 @@
-# Cancun C64 Demo
+# Sine Wave / Linus Effect
 
 Small self-contained Commodore 64 demo built with ACME and intended to run in
 VICE on macOS. The effect stack is deliberately simple and dependency-light:
-a custom-charset filled sine wave in the style described by Nurpax, a pulsing
-title, and a bottom-row text scroller.
+a Linus-style full-screen intro pattern, a filled sine wave in the style
+described by Nurpax, a wipe transition, and sprite overlays.
 
 ## Build
 
@@ -11,10 +11,10 @@ title, and a bottom-row text scroller.
 ./scripts/build.sh
 ```
 
-This writes `build/cancun.prg`. If `exomizer` is installed, the build script
-also writes `build/cancun_sfx.prg`. The filled-wave lookup tables and charset
-are regenerated automatically from `scripts/generate_filled_sine.py` before the
-assembly step.
+This writes `build/sine_wave_linus_effect.prg`. If `exomizer` is installed, the
+build script also writes `build/sine_wave_linus_effect_sfx.prg`. The
+filled-wave lookup tables and charset are regenerated automatically from
+`scripts/generate_filled_sine.py` before the assembly step.
 
 ## Run in VICE
 
