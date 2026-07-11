@@ -1,0 +1,2081 @@
+; Transition browser for NoBounds-inspired transition previews.
+; This is a standalone PRG so the existing RetroDNA demo can stay unchanged.
+
+!to "build/transition_browser.prg", cbm
+
+space_char = $20
+black = $00
+white = $01
+red = $02
+cyan = $03
+purple = $04
+green = $05
+blue = $06
+yellow = $07
+orange = $08
+brown = $09
+light_red = $0a
+dark_grey = $0b
+grey = $0c
+light_green = $0d
+light_blue = $0e
+light_grey = $0f
+
+screen_base = $0400
+color_base = $d800
+menu_d018 = $14
+squares_d018 = $18
+scattered_d018 = $1a
+bobs_d018 = $1c
+backdrop_d018 = $1e
+
+squares_charset_base = $2000
+scattered_charset_base = $2800
+bobs_charset_base = $3000
+backdrop_charset_base = $3800
+backdrop_backup = $6000
+backdrop_color_backup = $6400
+
+src_ptr = $f7
+dst_ptr = $f9
+color_ptr = $fb
+backup_ptr = $fd
+
+* = $0801
+!byte $0c, $08, $0a, $00, $9e
+!text "2061"
+!byte $00, $00, $00
+
+* = $080d
+    jmp browser_entry
+
+* = $4000
+start:
+browser_entry:
+    sei
+    lda #$37
+    sta $01
+    lda #$7f
+    sta $dc0d
+    sta $dd0d
+    lda $dc0d
+    lda $dd0d
+    lda #$00
+    sta $d01a
+    sta $d015
+    sta $d017
+    sta $d01b
+    sta $d01c
+    sta $d01d
+    jsr select_vic_bank_zero
+    jsr build_bob_charset
+    lda #$00
+    sta menu_page
+    jmp main_menu
+
+select_vic_bank_zero:
+    lda $dd02
+    ora #$03
+    sta $dd02
+    lda $dd00
+    and #$fc
+    ora #$03
+    sta $dd00
+    rts
+
+main_menu:
+    jsr draw_current_menu_page
+menu_loop:
+    jsr wait_frame
+    jsr menu_title_wash
+    jsr get_key_upper
+    beq menu_loop
+    sta last_key
+    cmp #$1b
+    beq main_menu
+    cmp #$03
+    beq main_menu
+    lda menu_page
+    beq menu_page_zero
+    jmp menu_page_one
+
+menu_page_zero:
+    lda last_key
+    cmp #'N'
+    bne +
+    lda #$01
+    sta menu_page
+    jmp main_menu
++
+    lda last_key
+    sec
+    sbc #'A'
+    cmp #$06
+    bcs menu_loop
+    sta current_effect
+    jsr run_current_effect
+    jmp main_menu
+
+menu_page_one:
+    lda last_key
+    cmp #'P'
+    bne +
+    lda #$00
+    sta menu_page
+    jmp main_menu
++
+    lda last_key
+    sec
+    sbc #'A'
+    cmp #$05
+    bcs menu_loop
+    clc
+    adc #$06
+    sta current_effect
+    jsr run_current_effect
+    jmp main_menu
+
+run_current_effect:
+    ldx current_effect
+    lda effect_init_lo,x
+    sta effect_vector
+    lda effect_init_hi,x
+    sta effect_vector + 1
+    jsr call_effect_vector
+
+effect_run_loop:
+    jsr wait_frame
+    ldx current_effect
+    lda effect_update_lo,x
+    sta effect_vector
+    lda effect_update_hi,x
+    sta effect_vector + 1
+    jsr call_effect_vector
+    jsr get_key_upper
+    beq effect_run_loop
+    cmp #$1b
+    beq effect_exit
+    cmp #$03
+    bne effect_run_loop
+effect_exit:
+    rts
+
+call_effect_vector:
+    jmp (effect_vector)
+
+draw_current_menu_page:
+    lda menu_page
+    beq draw_menu_page_zero
+    jmp draw_menu_page_one
+
+draw_menu_page_zero:
+    jsr setup_rom_screen
+    lda #blue
+    sta $d020
+    lda #black
+    sta $d021
+    lda #light_blue
+    jsr fill_color_ram
+    jsr clear_screen_spaces
+    ldx #$00
+    ldy #$05
+    lda #<title_browser
+    sta src_ptr
+    lda #>title_browser
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$02
+    ldy #$0f
+    lda #<title_page_one
+    sta src_ptr
+    lda #>title_page_one
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$05
+    ldy #$04
+    lda #<menu0_a
+    sta src_ptr
+    lda #>menu0_a
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$07
+    ldy #$04
+    lda #<menu0_b
+    sta src_ptr
+    lda #>menu0_b
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$09
+    ldy #$04
+    lda #<menu0_c
+    sta src_ptr
+    lda #>menu0_c
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$0b
+    ldy #$04
+    lda #<menu0_d
+    sta src_ptr
+    lda #>menu0_d
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$0d
+    ldy #$04
+    lda #<menu0_e
+    sta src_ptr
+    lda #>menu0_e
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$0f
+    ldy #$04
+    lda #<menu0_f
+    sta src_ptr
+    lda #>menu0_f
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$13
+    ldy #$04
+    lda #<menu_next_page
+    sta src_ptr
+    lda #>menu_next_page
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$15
+    ldy #$04
+    lda #<menu_hint
+    sta src_ptr
+    lda #>menu_hint
+    sta src_ptr + 1
+    jsr write_text_at
+    rts
+
+draw_menu_page_one:
+    jsr setup_rom_screen
+    lda #purple
+    sta $d020
+    lda #black
+    sta $d021
+    lda #light_grey
+    jsr fill_color_ram
+    jsr clear_screen_spaces
+    ldx #$00
+    ldy #$05
+    lda #<title_browser
+    sta src_ptr
+    lda #>title_browser
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$02
+    ldy #$0f
+    lda #<title_page_two
+    sta src_ptr
+    lda #>title_page_two
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$05
+    ldy #$04
+    lda #<menu1_a
+    sta src_ptr
+    lda #>menu1_a
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$07
+    ldy #$04
+    lda #<menu1_b
+    sta src_ptr
+    lda #>menu1_b
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$09
+    ldy #$04
+    lda #<menu1_c
+    sta src_ptr
+    lda #>menu1_c
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$0b
+    ldy #$04
+    lda #<menu1_d
+    sta src_ptr
+    lda #>menu1_d
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$0d
+    ldy #$04
+    lda #<menu1_e
+    sta src_ptr
+    lda #>menu1_e
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$13
+    ldy #$04
+    lda #<menu_prev_page
+    sta src_ptr
+    lda #>menu_prev_page
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$15
+    ldy #$04
+    lda #<menu_hint
+    sta src_ptr
+    lda #>menu_hint
+    sta src_ptr + 1
+    jsr write_text_at
+    rts
+
+setup_rom_screen:
+    lda #$1b
+    sta $d011
+    lda #$08
+    sta $d016
+    lda #menu_d018
+    sta $d018
+    lda #$00
+    sta $d022
+    sta $d023
+    sta $d015
+    rts
+
+setup_squares_screen:
+    lda #$1b
+    sta $d011
+    lda #$08
+    sta $d016
+    lda #squares_d018
+    sta $d018
+    lda #$00
+    sta $d022
+    sta $d023
+    sta $d015
+    rts
+
+setup_scattered_screen:
+    lda #$1b
+    sta $d011
+    lda #$08
+    sta $d016
+    lda #scattered_d018
+    sta $d018
+    lda #$00
+    sta $d022
+    sta $d023
+    sta $d015
+    rts
+
+setup_bobs_screen:
+    lda #$1b
+    sta $d011
+    lda #$18
+    sta $d016
+    lda #bobs_d018
+    sta $d018
+    lda #blue
+    sta $d022
+    lda #light_blue
+    sta $d023
+    sta $d020
+    lda #black
+    sta $d021
+    lda #$00
+    sta $d015
+    rts
+
+setup_backdrop_screen:
+    lda #$1b
+    sta $d011
+    lda #$08
+    sta $d016
+    lda #backdrop_d018
+    sta $d018
+    lda #$00
+    sta $d022
+    sta $d023
+    sta $d015
+    rts
+
+prepare_backdrop:
+    jsr setup_backdrop_screen
+    lda #blue
+    sta $d020
+    lda #black
+    sta $d021
+    jsr load_backdrop_screen
+    jsr backup_current_screen
+    rts
+
+load_backdrop_screen:
+    ldx #$00
+load_backdrop_pages:
+    lda transition_backdrop_screen_data+$000,x
+    sta screen_base+$000,x
+    lda transition_backdrop_screen_data+$100,x
+    sta screen_base+$100,x
+    lda transition_backdrop_screen_data+$200,x
+    sta screen_base+$200,x
+    lda transition_backdrop_color_data+$000,x
+    sta color_base+$000,x
+    lda transition_backdrop_color_data+$100,x
+    sta color_base+$100,x
+    lda transition_backdrop_color_data+$200,x
+    sta color_base+$200,x
+    inx
+    bne load_backdrop_pages
+
+    ldx #$00
+load_backdrop_tail:
+    lda transition_backdrop_screen_data+$300,x
+    sta screen_base+$300,x
+    lda transition_backdrop_color_data+$300,x
+    sta color_base+$300,x
+    inx
+    cpx #$e8
+    bne load_backdrop_tail
+    rts
+
+backup_current_screen:
+    ldx #$00
+backup_page_loop:
+    lda screen_base+$000,x
+    sta backdrop_backup+$000,x
+    lda screen_base+$100,x
+    sta backdrop_backup+$100,x
+    lda screen_base+$200,x
+    sta backdrop_backup+$200,x
+    lda color_base+$000,x
+    sta backdrop_color_backup+$000,x
+    lda color_base+$100,x
+    sta backdrop_color_backup+$100,x
+    lda color_base+$200,x
+    sta backdrop_color_backup+$200,x
+    inx
+    bne backup_page_loop
+    ldx #$00
+backup_tail_loop:
+    lda screen_base+$300,x
+    sta backdrop_backup+$300,x
+    lda color_base+$300,x
+    sta backdrop_color_backup+$300,x
+    inx
+    cpx #$e8
+    bne backup_tail_loop
+    rts
+
+hide_all_screen:
+    lda #space_char
+    ldx #$00
+hide_screen_pages:
+    sta screen_base+$000,x
+    sta screen_base+$100,x
+    sta screen_base+$200,x
+    inx
+    bne hide_screen_pages
+    ldx #$00
+hide_screen_tail:
+    sta screen_base+$300,x
+    inx
+    cpx #$e8
+    bne hide_screen_tail
+    lda #black
+    jsr fill_color_ram
+    rts
+
+restore_all_screen_from_backup:
+    ldx #$00
+restore_page_loop:
+    lda backdrop_backup+$000,x
+    sta screen_base+$000,x
+    lda backdrop_backup+$100,x
+    sta screen_base+$100,x
+    lda backdrop_backup+$200,x
+    sta screen_base+$200,x
+    lda backdrop_color_backup+$000,x
+    sta color_base+$000,x
+    lda backdrop_color_backup+$100,x
+    sta color_base+$100,x
+    lda backdrop_color_backup+$200,x
+    sta color_base+$200,x
+    inx
+    bne restore_page_loop
+    ldx #$00
+restore_tail_loop:
+    lda backdrop_backup+$300,x
+    sta screen_base+$300,x
+    lda backdrop_color_backup+$300,x
+    sta color_base+$300,x
+    inx
+    cpx #$e8
+    bne restore_tail_loop
+    rts
+
+restore_color_ram_from_backup:
+    ldx #$00
+restore_color_page_loop:
+    lda backdrop_color_backup+$000,x
+    sta color_base+$000,x
+    lda backdrop_color_backup+$100,x
+    sta color_base+$100,x
+    lda backdrop_color_backup+$200,x
+    sta color_base+$200,x
+    inx
+    bne restore_color_page_loop
+    ldx #$00
+restore_color_tail_loop:
+    lda backdrop_color_backup+$300,x
+    sta color_base+$300,x
+    inx
+    cpx #$e8
+    bne restore_color_tail_loop
+    rts
+
+blank_row:
+    stx temp_row
+    lda row_screen_lo,x
+    sta dst_ptr
+    lda row_screen_hi,x
+    sta dst_ptr + 1
+    lda row_color_lo,x
+    sta color_ptr
+    lda row_color_hi,x
+    sta color_ptr + 1
+    ldy #$00
+blank_row_loop:
+    lda #space_char
+    sta (dst_ptr),y
+    lda #black
+    sta (color_ptr),y
+    iny
+    cpy #40
+    bne blank_row_loop
+    rts
+
+restore_row:
+    stx temp_row
+    lda row_screen_lo,x
+    sta dst_ptr
+    lda row_screen_hi,x
+    sta dst_ptr + 1
+    lda row_backup_lo,x
+    sta backup_ptr
+    lda row_backup_hi,x
+    sta backup_ptr + 1
+    lda row_color_backup_lo,x
+    sta src_ptr
+    lda row_color_backup_hi,x
+    sta src_ptr + 1
+    lda row_color_lo,x
+    sta color_ptr
+    lda row_color_hi,x
+    sta color_ptr + 1
+    ldy #$00
+restore_row_loop:
+    lda (backup_ptr),y
+    sta (dst_ptr),y
+    lda (src_ptr),y
+    sta (color_ptr),y
+    iny
+    cpy #40
+    bne restore_row_loop
+    rts
+
+restore_row_with_effect_color:
+    sta temp_color
+    stx temp_row
+    lda row_screen_lo,x
+    sta dst_ptr
+    lda row_screen_hi,x
+    sta dst_ptr + 1
+    lda row_backup_lo,x
+    sta backup_ptr
+    lda row_backup_hi,x
+    sta backup_ptr + 1
+    lda row_color_lo,x
+    sta color_ptr
+    lda row_color_hi,x
+    sta color_ptr + 1
+    ldy #$00
+restore_row_with_effect_color_loop:
+    lda (backup_ptr),y
+    sta (dst_ptr),y
+    lda temp_color
+    sta (color_ptr),y
+    iny
+    cpy #40
+    bne restore_row_with_effect_color_loop
+    rts
+
+restore_column:
+    sta temp_col
+    ldx #$00
+restore_column_loop:
+    lda row_backup_lo,x
+    sta backup_ptr
+    lda row_backup_hi,x
+    sta backup_ptr + 1
+    lda row_color_backup_lo,x
+    sta src_ptr
+    lda row_color_backup_hi,x
+    sta src_ptr + 1
+    lda row_screen_lo,x
+    sta dst_ptr
+    lda row_screen_hi,x
+    sta dst_ptr + 1
+    lda row_color_lo,x
+    sta color_ptr
+    lda row_color_hi,x
+    sta color_ptr + 1
+    ldy temp_col
+    lda (backup_ptr),y
+    sta (dst_ptr),y
+    lda (src_ptr),y
+    sta (color_ptr),y
+    inx
+    cpx #25
+    bne restore_column_loop
+    rts
+
+restore_column_pair:
+    sta temp_col
+    jsr restore_column
+    inc temp_col
+    lda temp_col
+    jmp restore_column
+
+restore_column_with_color:
+    sta temp_col
+    ldx #$00
+restore_column_color_loop:
+    lda row_backup_lo,x
+    sta backup_ptr
+    lda row_backup_hi,x
+    sta backup_ptr + 1
+    lda row_screen_lo,x
+    sta dst_ptr
+    lda row_screen_hi,x
+    sta dst_ptr + 1
+    lda row_color_lo,x
+    sta color_ptr
+    lda row_color_hi,x
+    sta color_ptr + 1
+    ldy temp_col
+    lda (backup_ptr),y
+    sta (dst_ptr),y
+    lda temp_color
+    sta (color_ptr),y
+    inx
+    cpx #25
+    bne restore_column_color_loop
+    rts
+
+restore_row_range:
+    stx temp_row
+    lda row_backup_lo,x
+    sta backup_ptr
+    lda row_backup_hi,x
+    sta backup_ptr + 1
+    lda row_color_backup_lo,x
+    sta src_ptr
+    lda row_color_backup_hi,x
+    sta src_ptr + 1
+    lda row_screen_lo,x
+    sta dst_ptr
+    lda row_screen_hi,x
+    sta dst_ptr + 1
+    lda row_color_lo,x
+    sta color_ptr
+    lda row_color_hi,x
+    sta color_ptr + 1
+    ldy range_start
+restore_row_range_loop:
+    cpy range_end
+    beq restore_row_range_done
+    lda (backup_ptr),y
+    sta (dst_ptr),y
+    lda (src_ptr),y
+    sta (color_ptr),y
+    iny
+    jmp restore_row_range_loop
+restore_row_range_done:
+    rts
+
+fill_single_row_color:
+    stx temp_row
+    sta temp_color
+    lda row_color_lo,x
+    sta color_ptr
+    lda row_color_hi,x
+    sta color_ptr + 1
+    ldy #$00
+fill_single_row_color_loop:
+    lda temp_color
+    sta (color_ptr),y
+    iny
+    cpy #40
+    bne fill_single_row_color_loop
+    rts
+
+fill_color_ram:
+    sta temp_color
+    ldx #$00
+fill_color_pages:
+    lda temp_color
+    sta color_base+$000,x
+    sta color_base+$100,x
+    sta color_base+$200,x
+    inx
+    bne fill_color_pages
+    ldx #$00
+fill_color_tail:
+    lda temp_color
+    sta color_base+$300,x
+    inx
+    cpx #$e8
+    bne fill_color_tail
+    rts
+
+clear_screen_spaces:
+    lda #space_char
+    ldx #$00
+clear_screen_pages:
+    sta screen_base+$000,x
+    sta screen_base+$100,x
+    sta screen_base+$200,x
+    inx
+    bne clear_screen_pages
+    ldx #$00
+clear_screen_tail:
+    sta screen_base+$300,x
+    inx
+    cpx #$e8
+    bne clear_screen_tail
+    rts
+
+write_text_at:
+    txa
+    sta temp_row
+    tya
+    sta temp_col
+    lda row_screen_lo,x
+    clc
+    adc temp_col
+    sta dst_ptr
+    lda row_screen_hi,x
+    adc #$00
+    sta dst_ptr + 1
+    ldy #$00
+write_text_at_loop:
+    lda (src_ptr),y
+    beq write_text_at_done
+    cmp #'A'
+    bcc +
+    cmp #'Z' + 1
+    bcs +
+    sec
+    sbc #$40
+    bne write_text_store
++
+    cmp #'a'
+    bcc +
+    cmp #'z' + 1
+    bcs +
+    and #$df
+    sec
+    sbc #$40
+    bne write_text_store
++
+write_text_store:
+    sta (dst_ptr),y
+    iny
+    jmp write_text_at_loop
+write_text_at_done:
+    rts
+
+write_centered_from_src:
+    stx temp_row
+    ldy #$00
+measure_center_loop:
+    lda (src_ptr),y
+    beq measure_center_done
+    iny
+    jmp measure_center_loop
+measure_center_done:
+    sty temp_len
+    lda #40
+    sec
+    sbc temp_len
+    lsr
+    tay
+    ldx temp_row
+    jmp write_text_at
+
+menu_title_wash:
+    lda global_frame
+    lsr
+    sta temp_len
+    ldy #39
+menu_title_wash_loop:
+    tya
+    clc
+    adc temp_len
+    and #$0f
+    tax
+    lda title_wash_table,x
+    sta color_base,y
+    dey
+    bpl menu_title_wash_loop
+    rts
+
+wait_frame:
+wait_frame_high:
+    lda $d012
+    cmp #$ff
+    bne wait_frame_high
+wait_frame_low:
+    lda $d012
+    cmp #$ff
+    beq wait_frame_low
+    inc global_frame
+    rts
+
+get_key_upper:
+    jsr $ff9f
+    jsr $ffe4
+    beq get_key_done
+    cmp #'a'
+    bcc get_key_done
+    cmp #'z' + 1
+    bcs get_key_done
+    and #$df
+get_key_done:
+    rts
+
+random8:
+    lda random_state
+    asl
+    bcc +
+    eor #$1d
++
+    sta random_state
+    bne +
+    lda #$5a
+    sta random_state
++
+    rts
+
+build_bob_charset:
+    lda #$00
+    ldx #$00
+clear_bob_charset_pages:
+    sta bobs_charset_base+$000,x
+    sta bobs_charset_base+$100,x
+    sta bobs_charset_base+$200,x
+    sta bobs_charset_base+$300,x
+    sta bobs_charset_base+$400,x
+    sta bobs_charset_base+$500,x
+    sta bobs_charset_base+$600,x
+    sta bobs_charset_base+$700,x
+    inx
+    bne clear_bob_charset_pages
+    ldx #$00
+copy_bob_charset_data:
+    lda bob_charset_data,x
+    sta bobs_charset_base,x
+    inx
+    cpx #64
+    bne copy_bob_charset_data
+    rts
+
+effect_transition_squares_init:
+    jsr setup_squares_screen
+    lda #white
+    sta $d020
+    sta $d021
+    lda #black
+    jsr fill_color_ram
+    lda #58
+    jsr fill_screen_char
+    lda #$00
+    sta trans_intro_counter
+    sta trans_speed_counter
+    sta trans_unlock_counter
+    sta trans_unlock_index
+    sta trans_unlock_steps
+    sta trans_fade_delay_counter
+    sta trans_fade_index
+    sta trans_done
+    sta trans_hold_counter
+    ldx #39
+reset_square_columns:
+    lda #$00
+    sta trans_can_draw_column,x
+    lda #30
+    sta trans_frame_pointers,x
+    dex
+    bpl reset_square_columns
+    rts
+
+effect_transition_squares_update:
+    lda trans_done
+    beq squares_update_active
+    inc trans_hold_counter
+    lda trans_hold_counter
+    cmp #25
+    bcc squares_update_done
+    jmp effect_transition_squares_init
+
+squares_update_active:
+    inc trans_intro_counter
+    lda trans_intro_counter
+    cmp #1
+    bcc squares_update_done
+    inc trans_speed_counter
+    lda trans_speed_counter
+    cmp #1
+    bcc squares_update_done
+    lda #$00
+    sta trans_speed_counter
+    lda trans_unlock_steps
+    cmp #32
+    bcc squares_skip_fade
+    jsr transition_squares_fade
+squares_skip_fade:
+    lda trans_unlock_steps
+    cmp #38
+    bcs squares_update_done
+    jsr transition_squares_unlock
+    lda trans_unlock_steps
+    cmp #38
+    bcs squares_update_done
+    jsr transition_squares_draw
+squares_update_done:
+    rts
+
+transition_squares_unlock:
+    inc trans_unlock_counter
+    lda trans_unlock_counter
+    cmp #4
+    bcc transition_squares_unlock_done
+    lda #$00
+    sta trans_unlock_counter
+    ldx trans_unlock_index
+    inc trans_can_draw_column,x
+    inc trans_unlock_index
+    inc trans_unlock_steps
+transition_squares_unlock_done:
+    rts
+
+transition_squares_draw:
+    lda #$00
+    sta trans_col_index
+    ldy #$00
+transition_squares_draw_column:
+    ldx trans_col_index
+    lda trans_can_draw_column,x
+    bne transition_squares_column_active
+    jmp transition_squares_next_column
+transition_squares_column_active:
+    lda trans_frame_pointers,x
+    sec
+    sbc #$02
+    sta trans_frame_pointers,x
+    cmp #$fe
+    bne transition_squares_continue
+    lda #$00
+    sta trans_can_draw_column,x
+    rts
+transition_squares_continue:
+    tax
+    lda squares_anim_sequence_top,x
+    !for r, 0, 11 {
+        sta screen_base + $28 + (r * $28 * 2),y
+    }
+    lda squares_anim_sequence_bottom,x
+    !for r, 0, 11 {
+        sta screen_base + $50 + (r * $28 * 2),y
+    }
+    inx
+    lda squares_anim_sequence_top,x
+    !for r, 0, 11 {
+        sta screen_base + $29 + (r * $28 * 2),y
+    }
+    lda squares_anim_sequence_bottom,x
+    !for r, 0, 11 {
+        sta screen_base + $51 + (r * $28 * 2),y
+    }
+transition_squares_next_column:
+    inc trans_col_index
+    lda trans_col_index
+    cmp #20
+    beq transition_squares_draw_done
+    iny
+    iny
+    jmp transition_squares_draw_column
+transition_squares_draw_done:
+    rts
+
+transition_squares_fade:
+    ldx trans_fade_index
+    lda squares_fade_table,x
+    sta $d020
+    sta $d021
+    inc trans_fade_delay_counter
+    lda trans_fade_delay_counter
+    cmp #4
+    bcc transition_squares_fade_done
+    lda #$00
+    sta trans_fade_delay_counter
+    inc trans_fade_index
+    lda trans_fade_index
+    cmp #5
+    bne transition_squares_fade_done
+    lda #$01
+    sta trans_done
+transition_squares_fade_done:
+    rts
+
+effect_transition_scattered_init:
+    jsr setup_scattered_screen
+    lda #light_blue
+    sta $d020
+    sta $d021
+    lda #black
+    jsr fill_color_ram
+    lda #58
+    jsr fill_screen_char
+    lda #$5a
+    sta random_state
+    lda #$00
+    sta scatter_total
+    sta scatter_phase
+    sta scatter_fade_delay
+    sta scatter_fade_index
+    sta scatter_hold_counter
+    ldx #23
+scatter_slot_init_loop:
+    txa
+    and #$03
+    sta scatter_frame,x
+    jsr assign_scatter_slot
+    dex
+    bpl scatter_slot_init_loop
+    rts
+
+effect_transition_scattered_update:
+    lda scatter_phase
+    beq scatter_update_active
+    cmp #$01
+    beq scatter_update_fade
+    inc scatter_hold_counter
+    lda scatter_hold_counter
+    cmp #25
+    bcc scatter_update_done
+    jmp effect_transition_scattered_init
+
+scatter_update_active:
+    ldx #$00
+scatter_update_slot_loop:
+    jsr draw_scatter_slot
+    inx
+    cpx #24
+    bne scatter_update_slot_loop
+    lda scatter_total
+    cmp #200
+    bcc scatter_update_done
+    lda #$01
+    sta scatter_phase
+scatter_update_done:
+    rts
+
+scatter_update_fade:
+    inc scatter_fade_delay
+    lda scatter_fade_delay
+    cmp #6
+    bcc scatter_update_done
+    lda #$00
+    sta scatter_fade_delay
+    ldx scatter_fade_index
+    lda scatter_fade_table,x
+    sta $d020
+    sta $d021
+    inc scatter_fade_index
+    lda scatter_fade_index
+    cmp #5
+    bne scatter_update_done
+    lda #$02
+    sta scatter_phase
+    rts
+
+assign_scatter_slot:
+    jsr random8
+    and #$1f
+    cmp #20
+    bcc +
+    sbc #20
++
+    asl
+    sta scatter_x,x
+    jsr random8
+    and #$0f
+    cmp #12
+    bcc +
+    sbc #12
++
+    asl
+    sta scatter_y,x
+    rts
+
+draw_scatter_slot:
+    stx scatter_slot_index
+    lda scatter_frame,x
+    asl
+    sta temp_len
+    lda scatter_x,x
+    sta temp_col
+    lda scatter_y,x
+    sta temp_row
+    lda temp_row
+    tax
+    lda row_screen_lo,x
+    sta dst_ptr
+    lda row_screen_hi,x
+    sta dst_ptr + 1
+    lda row_color_lo,x
+    sta color_ptr
+    lda row_color_hi,x
+    sta color_ptr + 1
+    ldy temp_col
+    ldx temp_len
+    lda squares_anim_sequence_top,x
+    sta (dst_ptr),y
+    lda #black
+    sta (color_ptr),y
+    iny
+    inx
+    lda squares_anim_sequence_top,x
+    sta (dst_ptr),y
+    lda #black
+    sta (color_ptr),y
+    ldx temp_row
+    inx
+    lda row_screen_lo,x
+    sta dst_ptr
+    lda row_screen_hi,x
+    sta dst_ptr + 1
+    lda row_color_lo,x
+    sta color_ptr
+    lda row_color_hi,x
+    sta color_ptr + 1
+    ldy temp_col
+    ldx temp_len
+    lda squares_anim_sequence_bottom,x
+    sta (dst_ptr),y
+    lda #black
+    sta (color_ptr),y
+    iny
+    inx
+    lda squares_anim_sequence_bottom,x
+    sta (dst_ptr),y
+    lda #black
+    sta (color_ptr),y
+    ldx scatter_slot_index
+    inc scatter_frame,x
+    lda scatter_frame,x
+    cmp #17
+    bcc +
+    lda #$00
+    sta scatter_frame,x
+    jsr assign_scatter_slot
+    inc scatter_total
++
+    rts
+
+effect_reflector_init:
+    lda #<name_reflector
+    sta src_ptr
+    lda #>name_reflector
+    sta src_ptr + 1
+    jsr prepare_backdrop
+    jsr hide_all_screen
+    lda #$00
+    sta effect_phase
+    sta effect_cursor
+    sta effect_hold
+    rts
+
+effect_reflector_update:
+    lda effect_phase
+    beq reflector_reveal
+    inc effect_hold
+    lda effect_hold
+    cmp #45
+    bcc reflector_done
+    jmp effect_reflector_init
+reflector_reveal:
+    lda effect_cursor
+    cmp #20
+    bcc +
+    inc effect_phase
+    jmp reflector_done
++
+    lda #19
+    sec
+    sbc effect_cursor
+    jsr restore_column
+    lda #20
+    clc
+    adc effect_cursor
+    jsr restore_column
+    lda effect_cursor
+    cmp #19
+    bcs reflector_no_shine
+    lda #white
+    sta temp_color
+    lda #18
+    sec
+    sbc effect_cursor
+    jsr restore_column_with_color
+    lda #21
+    clc
+    adc effect_cursor
+    jsr restore_column_with_color
+reflector_no_shine:
+    inc effect_cursor
+reflector_done:
+    rts
+
+effect_rastertrans_init:
+    lda #<name_rastertrans
+    sta src_ptr
+    lda #>name_rastertrans
+    sta src_ptr + 1
+    jsr prepare_backdrop
+    lda #$00
+    sta effect_cursor
+    rts
+
+effect_rastertrans_update:
+    jsr restore_color_ram_from_backup
+    ldx #$00
+raster_band_loop:
+    stx raster_temp_x
+    lda effect_cursor
+    sec
+    sbc #11
+    clc
+    adc raster_band_offsets,x
+    tay
+    cpy #25
+    bcs raster_band_next
+    lda raster_band_colors,x
+    sta temp_color
+    tya
+    tax
+    lda temp_color
+    jsr fill_single_row_color
+    ldx raster_temp_x
+raster_band_next:
+    inx
+    cpx #12
+    bne raster_band_loop
+    inc effect_cursor
+    lda effect_cursor
+    cmp #37
+    bcc raster_done
+    jmp effect_rastertrans_init
+raster_done:
+    rts
+
+effect_fade_to_init:
+    lda #<name_fade_to
+    sta src_ptr
+    lda #>name_fade_to
+    sta src_ptr + 1
+    jsr prepare_backdrop
+    lda #$00
+    sta effect_cursor
+    sta effect_counter
+    sta effect_hold
+    rts
+
+effect_fade_to_update:
+    lda effect_cursor
+    cmp #13
+    bcs fade_to_hold_phase
+    inc effect_counter
+    lda effect_counter
+    cmp #3
+    bcc fade_to_done
+    lda #$00
+    sta effect_counter
+    ldx effect_cursor
+    jsr blank_row
+    lda #24
+    sec
+    sbc effect_cursor
+    tax
+    jsr blank_row
+    inc effect_cursor
+    lda effect_cursor
+    cmp #13
+    bcs fade_to_hold_phase
+    tax
+    lda #white
+    jsr fill_single_row_color
+    lda #24
+    sec
+    sbc effect_cursor
+    tax
+    lda #white
+    jsr fill_single_row_color
+fade_to_hold_phase:
+    inc effect_hold
+    lda effect_hold
+    cmp #20
+    bcc fade_to_done
+    jmp effect_fade_to_init
+fade_to_done:
+    rts
+
+effect_fade_from_init:
+    lda #<name_fade_from
+    sta src_ptr
+    lda #>name_fade_from
+    sta src_ptr + 1
+    jsr prepare_backdrop
+    jsr hide_all_screen
+    lda #$00
+    sta effect_cursor
+    sta effect_counter
+    sta effect_hold
+    sta effect_phase
+    rts
+
+effect_fade_from_update:
+    lda effect_cursor
+    cmp #13
+    bcc fade_from_reveal
+    lda effect_phase
+    bne fade_from_hold_phase
+    inc effect_phase
+    jsr restore_color_ram_from_backup
+    jmp fade_from_hold_phase
+fade_from_reveal:
+    inc effect_counter
+    lda effect_counter
+    cmp #3
+    bcc fade_from_done
+    lda #$00
+    sta effect_counter
+    lda #12
+    sec
+    sbc effect_cursor
+    tax
+    lda #white
+    jsr restore_row_with_effect_color
+    lda #12
+    clc
+    adc effect_cursor
+    tax
+    lda #white
+    jsr restore_row_with_effect_color
+    lda effect_cursor
+    beq fade_from_no_settle
+    lda #13
+    sec
+    sbc effect_cursor
+    tax
+    jsr restore_row
+    lda #11
+    clc
+    adc effect_cursor
+    tax
+    jsr restore_row
+fade_from_no_settle:
+    inc effect_cursor
+fade_from_hold_phase:
+    inc effect_hold
+    lda effect_hold
+    cmp #30
+    bcc fade_from_done
+    jmp effect_fade_from_init
+fade_from_done:
+    rts
+
+effect_final_raster_fade_init:
+    lda #<name_final_raster
+    sta src_ptr
+    lda #>name_final_raster
+    sta src_ptr + 1
+    jsr prepare_backdrop
+    lda #$00
+    sta effect_cursor
+    sta effect_counter
+    sta effect_hold
+    ldx #19
+clear_final_bar_state:
+    lda #$00
+    sta final_bar_state,x
+    dex
+    bpl clear_final_bar_state
+    rts
+
+effect_final_raster_fade_update:
+    inc effect_counter
+    lda effect_counter
+    cmp #4
+    bcc final_fade_update_rows
+    lda #$00
+    sta effect_counter
+    lda effect_cursor
+    cmp #20
+    bcs final_fade_update_rows
+    tax
+    lda final_fade_order,x
+    tax
+    lda #$01
+    sta final_bar_state,x
+    inc effect_cursor
+
+final_fade_update_rows:
+    ldx #$00
+final_fade_row_loop:
+    lda final_bar_state,x
+    beq final_fade_next_row
+    tay
+    dey
+    lda final_fade_colors,y
+    txa
+    pha
+    lda final_fade_rows,x
+    tax
+    lda final_fade_colors,y
+    jsr fill_single_row_color
+    cpy #6
+    bne +
+    jsr blank_row
++
+    pla
+    tax
+    inc final_bar_state,x
+    lda final_bar_state,x
+    cmp #8
+    bcc final_fade_next_row
+    lda #$07
+    sta final_bar_state,x
+final_fade_next_row:
+    inx
+    cpx #20
+    bne final_fade_row_loop
+    lda effect_cursor
+    cmp #20
+    bcc final_fade_done
+    inc effect_hold
+    lda effect_hold
+    cmp #30
+    bcc final_fade_done
+    jmp effect_final_raster_fade_init
+final_fade_done:
+    rts
+
+effect_kefrens_init:
+    lda #<name_kefrens
+    sta src_ptr
+    lda #>name_kefrens
+    sta src_ptr + 1
+    jsr prepare_backdrop
+    jsr hide_all_screen
+    lda #$00
+    sta effect_cursor
+    sta effect_counter
+    sta effect_hold
+    sta effect_phase
+    rts
+
+effect_kefrens_update:
+    lda effect_phase
+    cmp #$01
+    beq kefrens_settle_phase
+    bcs kefrens_hold_phase
+    inc effect_counter
+    lda effect_counter
+    cmp #2
+    bcc kefrens_done
+    lda #$00
+    sta effect_counter
+    ldx effect_cursor
+    lda kefrens_row_colors,x
+    pha
+    jsr restore_row_with_effect_color
+    pla
+    ldy effect_cursor
+    lda #24
+    sec
+    sbc effect_cursor
+    tax
+    lda kefrens_row_colors,y
+    jsr restore_row_with_effect_color
+    inc effect_cursor
+    lda effect_cursor
+    cmp #13
+    bcc kefrens_done
+    lda #$01
+    sta effect_phase
+    lda #$00
+    sta effect_cursor
+    rts
+
+kefrens_settle_phase:
+    lda #12
+    sec
+    sbc effect_cursor
+    tax
+    jsr restore_row
+    lda #12
+    clc
+    adc effect_cursor
+    tax
+    jsr restore_row
+    inc effect_cursor
+    lda effect_cursor
+    cmp #13
+    bcc kefrens_done
+    lda #$02
+    sta effect_phase
+    lda #$00
+    sta effect_hold
+    rts
+
+kefrens_hold_phase:
+    inc effect_hold
+    lda effect_hold
+    cmp #35
+    bcc kefrens_done
+    jmp effect_kefrens_init
+kefrens_done:
+    rts
+
+effect_trailblazer_init:
+    lda #<name_trailblazer
+    sta src_ptr
+    lda #>name_trailblazer
+    sta src_ptr + 1
+    jsr prepare_backdrop
+    jsr hide_all_screen
+    lda #$00
+    sta effect_cursor
+    sta effect_hold
+    rts
+
+effect_trailblazer_update:
+    ldx #$00
+trail_row_loop:
+    txa
+    lsr
+    clc
+    adc effect_cursor
+    sta range_end
+    lda range_end
+    cmp #41
+    bcc +
+    lda #40
+    sta range_end
++
+    lda #$00
+    sta range_start
+    txa
+    pha
+    jsr restore_row_range
+    ldy range_end
+    beq trail_no_edge
+    cpy #40
+    bcs trail_no_edge
+    dey
+    lda #white
+    sta (color_ptr),y
+trail_no_edge:
+    pla
+    tax
+    inx
+    cpx #25
+    bne trail_row_loop
+    inc effect_cursor
+    lda effect_cursor
+    cmp #41
+    bcc trail_done
+    inc effect_hold
+    lda effect_hold
+    cmp #25
+    bcc trail_done
+    jmp effect_trailblazer_init
+trail_done:
+    rts
+
+effect_screenfadebobs_init:
+    jsr setup_bobs_screen
+    lda #light_blue
+    jsr fill_color_ram
+    lda #$00
+    jsr fill_screen_char
+    lda #$00
+    sta bobs_unlock_counter
+    sta bobs_unlock_index
+    sta bobs_hold_counter
+    ldx #19
+reset_bobs_columns:
+    lda #$00
+    sta bobs_can_draw_column,x
+    lda #$06
+    sta bobs_frame_pointers,x
+    dex
+    bpl reset_bobs_columns
+    rts
+
+effect_screenfadebobs_update:
+    lda bobs_unlock_index
+    cmp #20
+    bcc bobs_unlock_phase
+    inc bobs_hold_counter
+    lda bobs_hold_counter
+    cmp #30
+    bcc bobs_draw_phase
+    jmp effect_screenfadebobs_init
+bobs_unlock_phase:
+    inc bobs_unlock_counter
+    lda bobs_unlock_counter
+    cmp #2
+    bcc bobs_draw_phase
+    lda #$00
+    sta bobs_unlock_counter
+    ldx bobs_unlock_index
+    inc bobs_can_draw_column,x
+    inc bobs_unlock_index
+bobs_draw_phase:
+    lda #$00
+    sta bobs_col_index
+    ldy #$00
+bobs_draw_column_loop:
+    ldx bobs_col_index
+    lda bobs_can_draw_column,x
+    beq bobs_next_column
+    lda bobs_frame_pointers,x
+    tay
+    lda bobs_anim_sequence,y
+    pha
+    lda bobs_col_index
+    asl
+    sta temp_col
+    pla
+    jsr draw_bobs_column
+    ldx bobs_col_index
+    dec bobs_frame_pointers,x
+    lda bobs_frame_pointers,x
+    cmp #$ff
+    bne bobs_next_column
+    lda #$00
+    sta bobs_can_draw_column,x
+bobs_next_column:
+    inc bobs_col_index
+    lda bobs_col_index
+    cmp #20
+    bne bobs_draw_column_loop
+    rts
+
+draw_bobs_column:
+    sta temp_char
+    ldx #$00
+draw_bobs_column_rows:
+    lda row_screen_lo,x
+    sta dst_ptr
+    lda row_screen_hi,x
+    sta dst_ptr + 1
+    lda row_color_lo,x
+    sta color_ptr
+    lda row_color_hi,x
+    sta color_ptr + 1
+    ldy temp_col
+    lda temp_char
+    sta (dst_ptr),y
+    iny
+    sta (dst_ptr),y
+    lda #light_blue
+    dey
+    sta (color_ptr),y
+    iny
+    sta (color_ptr),y
+    inx
+    inx
+    cpx #24
+    bne draw_bobs_column_rows
+    rts
+
+effect_basicfade_init:
+    lda #<name_basicfade
+    sta src_ptr
+    lda #>name_basicfade
+    sta src_ptr + 1
+    jsr prepare_backdrop
+    jsr hide_all_screen
+    lda #$00
+    sta effect_cursor
+    sta effect_counter
+    sta effect_hold
+    rts
+
+effect_basicfade_update:
+    lda #blue
+    sta $d020
+    inc effect_counter
+    lda effect_counter
+    cmp #3
+    bcc basicfade_done
+    lda #$00
+    sta effect_counter
+    lda effect_cursor
+    cmp #14
+    bcc basicfade_reveal
+    inc effect_hold
+    lda effect_hold
+    cmp #25
+    bcc basicfade_done
+    jmp effect_basicfade_init
+
+basicfade_reveal:
+    tax
+    lda basicfade_group_starts,x
+    sta range_start
+    lda basicfade_group_ends,x
+    sta range_end
+    ldx #$00
+basicfade_reveal_rows:
+    jsr restore_row_range
+    inx
+    cpx #25
+    bne basicfade_reveal_rows
+    lda #light_blue
+    sta $d020
+    inc effect_cursor
+basicfade_done:
+    rts
+
+fill_screen_char:
+    sta temp_char
+    ldx #$00
+fill_screen_char_pages:
+    lda temp_char
+    sta screen_base+$000,x
+    sta screen_base+$100,x
+    sta screen_base+$200,x
+    inx
+    bne fill_screen_char_pages
+    ldx #$00
+fill_screen_char_tail:
+    lda temp_char
+    sta screen_base+$300,x
+    inx
+    cpx #$e8
+    bne fill_screen_char_tail
+    rts
+
+title_browser:
+!text "RETRO DNA TRANSITION BROWSER",0
+title_page_one:
+!text "PAGE 1 OF 2",0
+title_page_two:
+!text "PAGE 2 OF 2",0
+menu0_a:
+!text "A  TRANSITIONSQUARES",0
+menu0_b:
+!text "B  TRANSITIONSCATTERED",0
+menu0_c:
+!text "C  REFLECTORTRANSITION",0
+menu0_d:
+!text "D  RASTERTRANS",0
+menu0_e:
+!text "E  FADETONOBOUNDS",0
+menu0_f:
+!text "F  FADEFROMNOBOUNDS",0
+menu1_a:
+!text "A  FINALRASTERFADE",0
+menu1_b:
+!text "B  KEFRENSPLUSFADEIN",0
+menu1_c:
+!text "C  TRAILBLAZERTRANSITION",0
+menu1_d:
+!text "D  SCREENFADEBOBS",0
+menu1_e:
+!text "E  BASICFADE",0
+menu_next_page:
+!text "N  NEXT PAGE",0
+menu_prev_page:
+!text "P  PREVIOUS PAGE",0
+menu_hint:
+!text "ESC OR RUN STOP RETURNS FROM EFFECTS",0
+hint_back:
+!text "ESC OR RUN STOP BACK TO MENU",0
+hint_keys:
+!text "A TO F OR A TO E TO LAUNCH",0
+
+backdrop_line_a:
+!text "RETRO DNA 2026  NOBOUNDS  TRANSITIONS ",0
+backdrop_line_b:
+!text "GENESIS PROJECT STYLE TRANSITION PREVIEW",0
+
+name_reflector:
+!text "REFLECTORTRANSITION",0
+name_rastertrans:
+!text "RASTERTRANS",0
+name_fade_to:
+!text "FADETONOBOUNDS",0
+name_fade_from:
+!text "FADEFROMNOBOUNDS",0
+name_final_raster:
+!text "FINALRASTERFADE",0
+name_kefrens:
+!text "KEFRENSPLUSFADEIN",0
+name_trailblazer:
+!text "TRAILBLAZERTRANSITION",0
+name_basicfade:
+!text "BASICFADE",0
+
+effect_init_lo:
+!byte <effect_transition_squares_init
+!byte <effect_transition_scattered_init
+!byte <effect_reflector_init
+!byte <effect_rastertrans_init
+!byte <effect_fade_to_init
+!byte <effect_fade_from_init
+!byte <effect_final_raster_fade_init
+!byte <effect_kefrens_init
+!byte <effect_trailblazer_init
+!byte <effect_screenfadebobs_init
+!byte <effect_basicfade_init
+
+effect_init_hi:
+!byte >effect_transition_squares_init
+!byte >effect_transition_scattered_init
+!byte >effect_reflector_init
+!byte >effect_rastertrans_init
+!byte >effect_fade_to_init
+!byte >effect_fade_from_init
+!byte >effect_final_raster_fade_init
+!byte >effect_kefrens_init
+!byte >effect_trailblazer_init
+!byte >effect_screenfadebobs_init
+!byte >effect_basicfade_init
+
+effect_update_lo:
+!byte <effect_transition_squares_update
+!byte <effect_transition_scattered_update
+!byte <effect_reflector_update
+!byte <effect_rastertrans_update
+!byte <effect_fade_to_update
+!byte <effect_fade_from_update
+!byte <effect_final_raster_fade_update
+!byte <effect_kefrens_update
+!byte <effect_trailblazer_update
+!byte <effect_screenfadebobs_update
+!byte <effect_basicfade_update
+
+effect_update_hi:
+!byte >effect_transition_squares_update
+!byte >effect_transition_scattered_update
+!byte >effect_reflector_update
+!byte >effect_rastertrans_update
+!byte >effect_fade_to_update
+!byte >effect_fade_from_update
+!byte >effect_final_raster_fade_update
+!byte >effect_kefrens_update
+!byte >effect_trailblazer_update
+!byte >effect_screenfadebobs_update
+!byte >effect_basicfade_update
+
+row_screen_lo:
+!for r, 0, 24 { !byte <(screen_base + r * 40) }
+row_screen_hi:
+!for r, 0, 24 { !byte >(screen_base + r * 40) }
+row_color_lo:
+!for r, 0, 24 { !byte <(color_base + r * 40) }
+row_color_hi:
+!for r, 0, 24 { !byte >(color_base + r * 40) }
+row_backup_lo:
+!for r, 0, 24 { !byte <(backdrop_backup + r * 40) }
+row_backup_hi:
+!for r, 0, 24 { !byte >(backdrop_backup + r * 40) }
+row_color_backup_lo:
+!for r, 0, 24 { !byte <(backdrop_color_backup + r * 40) }
+row_color_backup_hi:
+!for r, 0, 24 { !byte >(backdrop_color_backup + r * 40) }
+
+squares_anim_sequence_top:
+!byte $00,$00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e
+!byte $0d,$0e,$0f,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$1a,$1b,$1c
+!byte $1d,$1d,$1d,$1d,$1d,$1d,$1d,$1d,$00
+squares_anim_sequence_bottom:
+!byte $00,$1e,$1f,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$2a,$2b,$2a
+!byte $2b,$2c,$2d,$2e,$2f,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$1d
+!byte $1d,$1d,$1d,$1d,$1d,$1d,$1d,$1d
+squares_fade_table:
+!byte white, light_grey, grey, dark_grey, black
+
+scatter_fade_table:
+!byte light_blue, purple, red, brown, black
+
+raster_band_offsets:
+!byte $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+raster_band_colors:
+!byte black, blue, blue, light_blue, cyan, white, white, cyan, light_blue, blue, blue, black
+
+title_wash_table:
+!byte blue, blue, light_blue, light_blue, cyan, cyan, white, white
+!byte white, cyan, cyan, light_blue, light_blue, blue, blue, blue
+
+final_fade_order:
+!byte 7,14,3,18,6,10,0,8,16,5,19,12,1,17,9,13,2,15,11,4
+final_fade_rows:
+!byte 0,1,2,3,5,6,7,8,10,11,12,13,15,16,17,18,20,21,22,23
+final_fade_colors:
+!byte light_blue, yellow, white, grey, dark_grey, black, black
+
+kefrens_row_colors:
+!byte blue, light_blue, cyan, white, cyan, light_blue, blue
+!byte light_blue, cyan, white, cyan, light_blue, blue
+!byte light_blue
+
+bobs_anim_sequence:
+!byte 0,1,2,3,2,1,0
+
+basicfade_group_starts:
+!byte 0,18,6,30,12,24,36,3,21,9,27,15,33,39
+basicfade_group_ends:
+!byte 3,21,9,33,15,27,39,6,24,12,30,18,36,40
+
+bob_charset_data:
+!byte $00,$00,$00,$00,$00,$00,$00,$00
+!byte $00,$00,$00,$18,$18,$00,$00,$00
+!byte $00,$18,$3c,$7e,$7e,$3c,$18,$00
+!byte $18,$3c,$7e,$ff,$ff,$7e,$3c,$18
+!byte $00,$00,$18,$3c,$3c,$18,$00,$00
+!byte $00,$18,$7e,$ff,$ff,$7e,$18,$00
+!byte $00,$00,$3c,$7e,$7e,$3c,$00,$00
+!byte $18,$18,$3c,$7e,$7e,$3c,$18,$18
+
+menu_page:
+!byte $00
+current_effect:
+!byte $00
+last_key:
+!byte $00
+global_frame:
+!byte $00
+random_state:
+!byte $5a
+effect_vector:
+!word $0000
+
+temp_row:
+!byte $00
+temp_col:
+!byte $00
+temp_len:
+!byte $00
+temp_color:
+!byte $00
+temp_char:
+!byte $00
+range_start:
+!byte $00
+range_end:
+!byte $00
+effect_phase:
+!byte $00
+effect_cursor:
+!byte $00
+effect_counter:
+!byte $00
+effect_hold:
+!byte $00
+raster_temp_x:
+!byte $00
+temp_ptr_lo:
+!byte $00
+temp_ptr_hi:
+!byte $00
+scatter_slot_index:
+!byte $00
+
+trans_intro_counter:
+!byte $00
+trans_speed_counter:
+!byte $00
+trans_unlock_counter:
+!byte $00
+trans_unlock_index:
+!byte $00
+trans_unlock_steps:
+!byte $00
+trans_fade_delay_counter:
+!byte $00
+trans_fade_index:
+!byte $00
+trans_done:
+!byte $00
+trans_col_index:
+!byte $00
+trans_hold_counter:
+!byte $00
+trans_can_draw_column:
+!fill 40,0
+trans_frame_pointers:
+!fill 40,0
+
+scatter_total:
+!byte $00
+scatter_phase:
+!byte $00
+scatter_fade_delay:
+!byte $00
+scatter_fade_index:
+!byte $00
+scatter_hold_counter:
+!byte $00
+scatter_x:
+!fill 24,0
+scatter_y:
+!fill 24,0
+scatter_frame:
+!fill 24,0
+
+final_bar_state:
+!fill 20,0
+
+bobs_unlock_counter:
+!byte $00
+bobs_unlock_index:
+!byte $00
+bobs_col_index:
+!byte $00
+bobs_hold_counter:
+!byte $00
+bobs_can_draw_column:
+!fill 20,0
+bobs_frame_pointers:
+!fill 20,0
+
+!source "src/generated/transition_backdrop.inc"
+
+* = squares_charset_base
+!bin "src/assets/transitionsquares_charset.bin"
+!fill 8, 0
+
+* = scattered_charset_base
+!bin "src/assets/transitionscattered_charset.bin"
+!fill 8, 0
+
+* = backdrop_charset_base
+!bin "src/assets/transition_backdrop_charset.bin"
+!fill 8, 0
+
+* = backdrop_backup
+!fill 1000, 0
+
+* = backdrop_color_backup
+!fill 1000, 0

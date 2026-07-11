@@ -22,7 +22,9 @@ if ! command -v acme >/dev/null 2>&1; then
 fi
 
 cd "$ROOT_DIR"
+python3 scripts/generate_filled_sine.py
 python3 scripts/generate_retrodna_multicolor.py
+python3 scripts/generate_circlescroller_sprite_text.py
 acme src/main.a
 
 echo "Built build/wide_borders_framework.prg"

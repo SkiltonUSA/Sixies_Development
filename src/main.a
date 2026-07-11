@@ -1,21 +1,86 @@
 ; Wide Borders Framework
-; Static RetroDNA multicolour bitmap centered on screen with lower-border opening.
+; Page 1: static RetroDNA multicolour bitmap with lower-border opening.
+; Page 2: effects page - filled sinewave + 3-layer charset parallax background,
+;         colour-cycled wave gradient, "RETRO DNA" sprites in the open border.
+; SPACE toggles between pages.
 
 !to "build/wide_borders_framework.prg", cbm
 
 frame_flag       = $02
 frame_counter    = $03
 current_bg_color = $04
+current_page     = $05          ; 0 = logo, 1 = effects
+key_prev         = $06
+cycle_step       = $07
+cycle_offset     = $08
+tmp0             = $0c
+tmp1             = $0d
+tmp2             = $0e
+tmp3             = $0f
+wave_row         = $12
+wave_char_top    = $13
+wave_char_mid    = $14
+wave_char_bot    = $15
+field_anim       = $16
+str_col          = $17
+v_d011_full      = $18          ; $d011 value with 25 rows for the active page
+v_d011_open      = $19          ; same value with 24 rows (border opening)
+src_ptr          = $f7          ; generic source pointer ($f7/$f8)
+tile_ptr         = $f9          ; generic dest pointer ($f9/$fa)
+row_ptr          = $fb          ; screen pointer ($fb/$fc)
+color_ptr        = $fd          ; colour RAM pointer ($fd/$fe)
 
-vic_bank_value   = $03          ; bank 0: $0000-$3fff
+; ---- page 1 (logo, VIC bank 0) ----
+; The corrected logo path uses screen RAM at $0c00 and bitmap RAM at $2000 so
+; page 1 stays fully isolated from the page-2 screen/charset in bank 1.
+page1_vic_bank_bits = $03       ; %11 -> bank 0: $0000-$3fff
 bitmap_mode_25   = $3b          ; bitmap mode, 25 rows
 bitmap_mode_24   = $33          ; bitmap mode, 24 rows
 bitmap_d018      = $38          ; screen=$0c00, bitmap=$2000 within bank 0
-                                ; (screen must avoid $1000-$1fff: VIC sees char ROM there in bank 0)
 bitmap_d016      = $18          ; 40 columns, multicolour bitmap mode
+
+; ---- page 2 (effects, VIC bank 1: no char ROM shadow) ----
+vic_bank1_bits   = $02          ; %10 -> bank 1: $4000-$7fff
+text_mode_25     = $1b          ; text mode, 25 rows
+text_mode_24     = $13          ; text mode, 24 rows
+text_d018        = $12          ; screen=$4400, charset=$4800 within bank 1
+text_d016        = $08          ; 40 columns, hires
+screen2_base     = $4400
+color_base       = $d800
+font2_base       = $4800
+sprite_data      = $7e00        ; 3 runtime-built border sprites
+sprite_ptr0      = (sprite_data - $4000) / 64
+
+wave_char_base   = 64
+wave_char_full   = wave_char_base + 1
+tile_data        = font2_base + wave_char_base * 8
+
+field_top_row    = 6
+field_rows       = 14
+field_cols       = 40
+
+; parallax layer chars live just above the wave charset (chars 251-253)
+plx_char_a       = 251          ; near layer, 1 px/frame
+plx_char_b       = 252          ; mid layer,  1 px / 2 frames
+plx_char_c       = 253          ; far layer,  1 px / 4 frames
+plx_data_a       = font2_base + plx_char_a * 8
+plx_data_b       = font2_base + plx_char_b * 8
+plx_data_c       = font2_base + plx_char_c * 8
+
 top_irq_line     = $00
 border_irq_line  = 249
 default_bg_color = $00
+
+; advance row_ptr one screen row down (clobbers A)
+!macro next_row {
+    lda row_ptr
+    clc
+    adc #40
+    sta row_ptr
+    bcc +
+    inc row_ptr + 1
++
+}
 
 ; ---- BASIC stub: SYS 2061 ($080d) ----
 * = $0801
@@ -35,15 +100,23 @@ entry:
     lda #$00
     sta frame_flag
     sta frame_counter
+    sta current_page
+    sta key_prev
+    sta cycle_step
+    sta cycle_offset
 
     lda #bitmap_mode_25
+    sta v_d011_full
     sta $d011
+    lda #bitmap_mode_24
+    sta v_d011_open
     lda #bitmap_d016
     sta $d016
     lda #bitmap_d018
     sta $d018
     lda $dd00
-    ora #vic_bank_value
+    and #$fc
+    ora #page1_vic_bank_bits
     sta $dd00
     lda #$3b
     sta $dd02
@@ -52,6 +125,13 @@ entry:
     jsr set_bg_color
     jsr copy_color_ram
     jsr hide_sprites
+    jsr init_page2_assets
+!ifdef START_PAGE2 {
+    ; debug build: boot straight into the effects page (acme -DSTART_PAGE2=1)
+    lda #$01
+    sta current_page
+    jsr set_page2
+}
     jsr init_irq
 
 main:
@@ -59,6 +139,11 @@ main:
     beq main
     lda #$00
     sta frame_flag
+    lda current_page
+    beq main_no_effects
+    jsr page2_frame
+main_no_effects:
+    jsr scan_space_key
     jmp main
 
 set_bg_color:
@@ -68,7 +153,7 @@ set_bg_color:
     rts
 
 ; The generated colour table lives in ordinary RAM so PRG loading never
-; crosses the I/O area. Copy its 1,000 nybbles into colour RAM at startup.
+; crosses the I/O area. Copy its 1,000 nybbles into colour RAM.
 copy_color_ram:
     ldx #$00
 copy_color_pages:
@@ -99,7 +184,23 @@ hide_sprites:
     sta $d01d
     rts
 
-apply_border_sprite_state:
+; ---- SPACE toggles pages (direct matrix scan, edge triggered) ----
+scan_space_key:
+    lda #$7f
+    sta $dc00
+    lda $dc01
+    and #$10                    ; row 7 / bit 4 = SPACE, 0 when held
+    beq space_down
+    lda #$00
+    sta key_prev
+    rts
+space_down:
+    lda key_prev
+    bne space_done
+    lda #$01
+    sta key_prev
+    jsr toggle_page
+space_done:
     rts
 
 ; ---- split IRQ: top-of-frame bookkeeping plus lower-border opening ----
@@ -165,14 +266,13 @@ irq_main:
     sta $d020
     lda #$ff
     sta $d019
-    jsr apply_border_sprite_state
-    lda #bitmap_mode_24
+    lda v_d011_open
     sta $d011
 wait_border_open:
     lda $d012
     cmp #252
     bcc wait_border_open
-    lda #bitmap_mode_25
+    lda v_d011_full
     sta $d011
     lda #top_irq_line
     sta $d012
@@ -187,4 +287,520 @@ wait_border_open:
     pla
     rti
 
+; ------------------------------------------------------------------
+; page 2 code and tables ($0c00-$0fff holds the logo screen, so the
+; effects page lives in the free block behind it)
+; ------------------------------------------------------------------
+* = $1000
+
+toggle_page:
+    lda current_page
+    eor #$01
+    sta current_page
+    bne set_page2
+
+set_page1:
+    lda #bitmap_mode_25
+    sta v_d011_full
+    sta $d011
+    lda #bitmap_mode_24
+    sta v_d011_open
+    lda #bitmap_d016
+    sta $d016
+    lda #bitmap_d018
+    sta $d018
+    lda $dd00
+    and #$fc
+    ora #page1_vic_bank_bits
+    sta $dd00
+    lda #$00
+    sta $d015
+    jmp copy_color_ram
+
+set_page2:
+    lda #text_mode_25
+    sta v_d011_full
+    sta $d011
+    lda #text_mode_24
+    sta v_d011_open
+    lda #text_d016
+    sta $d016
+    lda #text_d018
+    sta $d018
+    lda $dd00
+    and #$fc
+    ora #vic_bank1_bits
+    sta $dd00
+    jsr paint_page2_colors
+    jmp enable_border_sprites
+
+; ---- one-time page 2 setup, called with interrupts still off ----
+init_page2_assets:
+    jsr build_charset2
+    jsr clear_screen2
+    jsr paint_parallax_rows
+    jsr build_border_sprites
+    lda #$00
+    sta $7fff                   ; idle-fetch byte shown in the open border
+    rts
+
+; ---- copy the ROM charset into bank 1 RAM, overlay wave + parallax chars ----
+build_charset2:
+    lda $01
+    pha
+    lda #$33
+    sta $01
+    ldx #$00
+copy_rom_charset:
+    lda $d000, x
+    sta font2_base + $000, x
+    lda $d100, x
+    sta font2_base + $100, x
+    lda $d200, x
+    sta font2_base + $200, x
+    lda $d300, x
+    sta font2_base + $300, x
+    lda $d400, x
+    sta font2_base + $400, x
+    lda $d500, x
+    sta font2_base + $500, x
+    lda $d600, x
+    sta font2_base + $600, x
+    lda $d700, x
+    sta font2_base + $700, x
+    inx
+    bne copy_rom_charset
+    pla
+    sta $01
+
+    ; wave glyphs generated by scripts/generate_filled_sine.py
+    lda #<wave_charset
+    sta src_ptr
+    lda #>wave_charset
+    sta src_ptr + 1
+    lda #<tile_data
+    sta tile_ptr
+    lda #>tile_data
+    sta tile_ptr + 1
+    ldx #wave_char_pages
+copy_wave_page:
+    ldy #$00
+copy_wave_page_loop:
+    lda (src_ptr), y
+    sta (tile_ptr), y
+    iny
+    bne copy_wave_page_loop
+    inc src_ptr + 1
+    inc tile_ptr + 1
+    dex
+    bne copy_wave_page
+    ldy #$00
+copy_wave_tail:
+    cpy #wave_char_tail
+    beq copy_wave_done
+    lda (src_ptr), y
+    sta (tile_ptr), y
+    iny
+    bne copy_wave_tail
+copy_wave_done:
+
+    ldx #$07
+copy_plx_chars:
+    lda plx_pattern_a, x
+    sta plx_data_a, x
+    lda plx_pattern_b, x
+    sta plx_data_b, x
+    lda plx_pattern_c, x
+    sta plx_data_c, x
+    dex
+    bpl copy_plx_chars
+    rts
+
+clear_screen2:
+    ldx #$00
+    lda #$20
+clear2_loop:
+    sta screen2_base + $000, x
+    sta screen2_base + $100, x
+    sta screen2_base + $200, x
+    sta screen2_base + $300, x
+    inx
+    bne clear2_loop
+
+    lda #sprite_ptr0
+    sta screen2_base + $3f8
+    lda #sprite_ptr0 + 1
+    sta screen2_base + $3f9
+    lda #sprite_ptr0 + 2
+    sta screen2_base + $3fa
+    rts
+
+; ---- static parallax bands: far layer outside, near layer inside ----
+paint_parallax_rows:
+    ldx #$00
+paint_plx_loop:
+    lda #plx_char_c
+    sta screen2_base + 0 * 40, x
+    sta screen2_base + 24 * 40, x
+    lda #plx_char_b
+    sta screen2_base + 1 * 40, x
+    sta screen2_base + 23 * 40, x
+    lda #plx_char_a
+    sta screen2_base + 2 * 40, x
+    sta screen2_base + 22 * 40, x
+    inx
+    cpx #40
+    bne paint_plx_loop
+    rts
+
+; ---- colour RAM is shared between pages, so repaint it on every switch ----
+paint_page2_colors:
+    ldx #$00
+paint_p2c_loop:
+    lda #$0b                    ; far layer: dark grey
+    sta color_base + 0 * 40, x
+    sta color_base + 24 * 40, x
+    lda #$0c                    ; mid layer: medium grey
+    sta color_base + 1 * 40, x
+    sta color_base + 23 * 40, x
+    lda #$0f                    ; near layer: light grey
+    sta color_base + 2 * 40, x
+    sta color_base + 22 * 40, x
+    lda #$00
+    sta color_base + 3 * 40, x
+    sta color_base + 4 * 40, x
+    sta color_base + 5 * 40, x
+    sta color_base + 20 * 40, x
+    sta color_base + 21 * 40, x
+    inx
+    cpx #40
+    bne paint_p2c_loop
+    jmp cycle_field_colors
+
+; ---- per-frame work for the effects page ----
+page2_frame:
+    lda frame_counter
+    and #$3f
+    sta field_anim
+    jsr render_filled_sine
+    jsr rotate_parallax
+    jmp cycle_field_colors
+
+; ---- parallax: rotate the layer chars left with wraparound ----
+; near layer every frame, mid every 2nd, far every 4th (NoBounds-style
+; charset animation: the screen never changes, only the glyphs do)
+rotate_parallax:
+    ldx #$07
+rot_a_loop:
+    lda plx_data_a, x
+    asl
+    adc #$00
+    sta plx_data_a, x
+    dex
+    bpl rot_a_loop
+
+    lda frame_counter
+    lsr
+    bcs rot_done
+    ldx #$07
+rot_b_loop:
+    lda plx_data_b, x
+    asl
+    adc #$00
+    sta plx_data_b, x
+    dex
+    bpl rot_b_loop
+
+    lda frame_counter
+    and #$03
+    bne rot_done
+    ldx #$07
+rot_c_loop:
+    lda plx_data_c, x
+    asl
+    adc #$00
+    sta plx_data_c, x
+    dex
+    bpl rot_c_loop
+rot_done:
+    rts
+
+; ---- colour cycling over the wave field (gleaned from G*P ColourCycle:
+; keep the pattern static, animate only the colours) ----
+cycle_field_colors:
+    inc cycle_step
+    lda cycle_step
+    and #$03
+    bne cycle_paint
+    ldx cycle_offset
+    inx
+    cpx #14
+    bcc cycle_store
+    ldx #$00
+cycle_store:
+    stx cycle_offset
+
+cycle_paint:
+    ldx #$00                    ; field row
+cycle_row_loop:
+    stx tmp0
+    txa
+    clc
+    adc cycle_offset
+    tay
+    lda field_gradient, y
+    sta tmp1
+    lda field_color_lo, x
+    sta color_ptr
+    lda field_color_hi, x
+    sta color_ptr + 1
+    lda tmp1
+    ldy #$00
+cycle_col_loop:
+    sta (color_ptr), y
+    iny
+    cpy #field_cols
+    bne cycle_col_loop
+    ldx tmp0
+    inx
+    cpx #field_rows
+    bne cycle_row_loop
+    rts
+
+; ---- render the filled sinewave using the generated y0/y1 lookup tables ----
+; Each column is walked top to bottom with a single pointer and every row is
+; written exactly once (blanks above the wave edge, fill chars below), so the
+; visible field is never blanked while the raster beam is inside it.
+render_filled_sine:
+    ldx #$00
+render_wave_col:
+    stx str_col
+    ldy str_col
+    lda field_phase, y
+    clc
+    adc field_anim
+    and #$3f
+    tay
+    lda sine_curve, y
+    sta tmp1
+
+    ldy str_col
+    lda field_phase_next, y
+    clc
+    adc field_anim
+    and #$3f
+    tay
+    lda sine_curve, y
+    sta tmp2
+
+    sec
+    lda tmp2
+    sbc tmp1
+    clc
+    adc #$08
+    sta tmp3
+
+    lda tmp1
+    and #$f0
+    lsr
+    lsr
+    lsr
+    lsr
+    clc
+    adc #$01
+    sta wave_row
+
+    lda tmp1
+    and #$0f
+    asl
+    asl
+    asl
+    asl
+    ora tmp3
+    tay
+
+    lda wave_lookup_top, y
+    sta wave_char_top
+    lda wave_lookup_mid, y
+    sta wave_char_mid
+    lda wave_lookup_bot, y
+    sta wave_char_bot
+
+    lda field_col_lo, x
+    sta row_ptr
+    lda field_col_hi, x
+    sta row_ptr + 1
+
+    ldy #$00
+    ldx wave_row
+    dex
+    beq wave_top_edge
+wave_blank_loop:
+    lda #$20
+    sta (row_ptr), y
+    +next_row
+    dex
+    bne wave_blank_loop
+
+wave_top_edge:
+    lda wave_char_top
+    sta (row_ptr), y
+    +next_row
+    lda wave_char_mid
+    sta (row_ptr), y
+    +next_row
+    lda wave_char_bot
+    sta (row_ptr), y
+    +next_row
+
+    ldx wave_row
+    inx
+    inx
+fill_wave_col:
+    cpx #field_rows
+    bcs render_wave_next
+    lda #wave_char_full
+    sta (row_ptr), y
+    +next_row
+    inx
+    bne fill_wave_col
+
+render_wave_next:
+    ldx str_col
+    inx
+    cpx #field_cols
+    beq render_wave_done
+    jmp render_wave_col
+render_wave_done:
+    rts
+
+; ---- "RETRO DNA" built into 3 sprites straight from the ROM charset copy:
+; 3 glyphs per sprite in rows 0-7, X/Y expanded, parked in the open border ----
+build_border_sprites:
+    ldx #$00
+    lda #$00
+clear_sprite_loop:
+    sta sprite_data, x
+    inx
+    cpx #192
+    bne clear_sprite_loop
+
+    ldx #$00                    ; glyph index 0-8
+build_glyph_loop:
+    stx tmp0
+
+    ; src_ptr = font2_base + screen_code * 8
+    lda sprite_text, x
+    ldy #$00
+    sty tmp1
+    asl
+    rol tmp1
+    asl
+    rol tmp1
+    asl
+    rol tmp1
+    sta src_ptr
+    lda tmp1
+    clc
+    adc #>font2_base
+    sta src_ptr + 1
+
+    ; tile_ptr = sprite_data + (glyph / 3) * 64 + (glyph % 3)
+    lda sprite_dst_lo, x
+    sta tile_ptr
+    lda #>sprite_data
+    sta tile_ptr + 1
+
+    ldx #$00                    ; glyph row 0-7
+build_glyph_row:
+    txa
+    tay
+    lda (src_ptr), y
+    sta tmp2
+    txa
+    sta tmp3
+    asl
+    adc tmp3                    ; y = row * 3 (sprite row stride)
+    tay
+    lda tmp2
+    sta (tile_ptr), y
+    inx
+    cpx #$08
+    bne build_glyph_row
+
+    ldx tmp0
+    inx
+    cpx #$09
+    bne build_glyph_loop
+    rts
+
+enable_border_sprites:
+    lda #112
+    sta $d000
+    lda #160
+    sta $d002
+    lda #208
+    sta $d004
+    lda #255                    ; top of the opened lower border
+    sta $d001
+    sta $d003
+    sta $d005
+    lda #$00
+    sta $d010
+    sta $d01c
+    lda #$01
+    sta $d027
+    sta $d029
+    lda #$0e
+    sta $d028
+    lda #$07
+    sta $d015
+    sta $d017
+    sta $d01d
+    rts
+
+apply_border_sprite_state:
+    rts
+
+; ---- tables ----
+sprite_text:
+!scr "ret"
+!scr "ro "
+!scr "dna"
+
+sprite_dst_lo:
+!for i, 0, 8 { !byte <(sprite_data + (i / 3) * 64 + (i - (i / 3) * 3)) }
+
+plx_pattern_a:
+!byte $00, $7c, $fe, $fe, $fe, $7c, $00, $00
+plx_pattern_b:
+!byte $00, $00, $78, $78, $00, $00, $00, $00
+plx_pattern_c:
+!byte $00, $00, $00, $80, $80, $00, $00, $00
+
+; RetroDNA-ish gradient, doubled so (row + offset) never needs a wrap
+field_gradient:
+!byte $04, $0e, $03, $0d, $01, $01, $0d, $03, $0e, $04, $0a, $08, $07, $09
+!byte $04, $0e, $03, $0d, $01, $01, $0d, $03, $0e, $04, $0a, $08, $07, $09
+
+field_col_lo:
+!for c, 0, field_cols - 1 { !byte <(screen2_base + field_top_row * 40 + c) }
+field_col_hi:
+!for c, 0, field_cols - 1 { !byte >(screen2_base + field_top_row * 40 + c) }
+field_color_lo:
+!for r, 0, field_rows - 1 { !byte <(color_base + (field_top_row + r) * 40) }
+field_color_hi:
+!for r, 0, field_rows - 1 { !byte >(color_base + (field_top_row + r) * 40) }
+field_phase:
+!for c, 0, field_cols - 1 { !byte (c * 64) / field_cols }
+field_phase_next:
+!for c, 0, field_cols - 1 { !byte ((c + 1) * 64) / field_cols }
+
+; ---- generated data ----
+; logo: screen at $0c00, bitmap at $2000, colour source at $4000
 !source "src/generated/retrodna_multicolor.inc"
+
+; wave charset + lookup tables, CPU-only data parked away from the page-1
+; colour source at $4000 and the page-1 bitmap at $2000.
+* = $9000
+!source "src/generated/filled_sine.inc"

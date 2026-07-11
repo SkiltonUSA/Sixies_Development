@@ -13,8 +13,11 @@ OUT = ROOT / "src" / "generated" / "retrodna_multicolor.inc"
 CANVAS_W = 320
 CANVAS_H = 200
 LOGO_W = 304
+LOGO_Y_OFFSET = 8
+LOGO_ROW_START_THRESHOLD = 48
 BITMAP_ADDR = 0x2000
 SCREEN_ADDR = 0x0C00
+COLOR_SOURCE_ADDR = 0x4000
 
 C64_PALETTE = [
     (0x02, 0x02, 0x02),  # 0 black
@@ -37,7 +40,7 @@ C64_PALETTE = [
 
 
 def run_ffmpeg() -> bytes:
-    vf = f"scale={LOGO_W}:-1:flags=bilinear,pad={CANVAS_W}:{CANVAS_H}:(ow-iw)/2:(oh-ih)/2:black,format=rgba"
+    vf = f"scale={LOGO_W}:-1:flags=bilinear,pad={CANVAS_W}:{CANVAS_H}:(ow-iw)/2:(oh-ih)/2+{LOGO_Y_OFFSET}:black,format=rgba"
     cmd = [
         "ffmpeg",
         "-v",
@@ -86,6 +89,20 @@ def nearest_c64(rgb: tuple[int, int, int]) -> int:
             best = idx
             best_d = d
     return best
+
+
+def clear_sparse_pre_logo_rows(
+    pixels: list[tuple[int, int, int]],
+) -> list[tuple[int, int, int]]:
+    cleaned = pixels[:]
+    for y in range(CANVAS_H):
+        start = y * CANVAS_W
+        row = cleaned[start : start + CANVAS_W]
+        coloured = sum(1 for rgb in row if max(rgb) > 24)
+        if coloured >= LOGO_ROW_START_THRESHOLD:
+            break
+        cleaned[start : start + CANVAS_W] = [(0, 0, 0)] * CANVAS_W
+    return cleaned
 
 
 def choose_cell_colors(cell_idx: list[int]) -> tuple[int, int, int]:
@@ -156,10 +173,10 @@ def write_include(screen: list[int], color_ram: list[int], bitmap: list[int]) ->
         f"; Source: {INPUT.relative_to(ROOT)}",
         f"* = ${SCREEN_ADDR:04x}",
         *emit_bytes("retrodna_screen", screen),
+        f"* = ${COLOR_SOURCE_ADDR:04x}",
+        *emit_bytes("retrodna_color_source", color_ram),
         f"* = ${BITMAP_ADDR:04x}",
         *emit_bytes("retrodna_bitmap", bitmap),
-        "* = $4000",
-        *emit_bytes("retrodna_color_source", color_ram),
         "",
     ]
     OUT.parent.mkdir(parents=True, exist_ok=True)
@@ -171,7 +188,7 @@ def main() -> None:
     expected = CANVAS_W * CANVAS_H * 4
     if len(raw) != expected:
         raise RuntimeError(f"unexpected raw frame size: {len(raw)} != {expected}")
-    pixels = composite_rgba(raw)
+    pixels = clear_sparse_pre_logo_rows(composite_rgba(raw))
     screen, color_ram, bitmap = build_bitmap(pixels)
     write_include(screen, color_ram, bitmap)
     print(f"Wrote {OUT}")

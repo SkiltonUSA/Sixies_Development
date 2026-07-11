@@ -11,8 +11,8 @@ OUT_PATH = ROOT_DIR / "src" / "generated" / "filled_sine.inc"
 
 SUBPIX = 2
 WAVE_CHAR_BASE = 64
-FIELD_MID = 72
-FIELD_AMP = 35
+FIELD_MID = 48
+FIELD_AMP = 22
 
 
 def mk8x8(yoffs: int, a: int, b: int, c: int) -> tuple[tuple[int, ...], ...]:
