@@ -33,8 +33,8 @@ squares_charset_base = $2000
 scattered_charset_base = $2800
 bobs_charset_base = $3000
 backdrop_charset_base = $3800
-backdrop_backup = $6000
-backdrop_color_backup = $6400
+backdrop_backup = $7000
+backdrop_color_backup = $7400
 
 src_ptr = $f7
 dst_ptr = $f9
@@ -97,7 +97,15 @@ menu_loop:
     beq main_menu
     lda menu_page
     beq menu_page_zero
+    cmp #$01
+    bne +
     jmp menu_page_one
++
+    cmp #$02
+    bne +
+    jmp menu_page_two
++
+    jmp menu_page_three
 
 menu_page_zero:
     lda last_key
@@ -118,6 +126,13 @@ menu_page_zero:
 
 menu_page_one:
     lda last_key
+    cmp #'N'
+    bne +
+    lda #$02
+    sta menu_page
+    jmp main_menu
++
+    lda last_key
     cmp #'P'
     bne +
     lda #$00
@@ -131,6 +146,62 @@ menu_page_one:
     bcs menu_loop
     clc
     adc #$06
+    sta current_effect
+    jsr run_current_effect
+    jmp main_menu
+
+menu_page_two:
+    lda last_key
+    cmp #'N'
+    bne +
+    lda #$03
+    sta menu_page
+    jmp main_menu
++
+    lda last_key
+    cmp #'P'
+    bne +
+    lda #$01
+    sta menu_page
+    jmp main_menu
++
+    lda last_key
+    sec
+    sbc #'A'
+    cmp #$05
+    bcc +
+    jmp menu_loop
++
+    clc
+    adc #$0b
+    sta current_effect
+    jsr run_current_effect
+    jmp main_menu
+
+menu_page_three:
+    lda last_key
+    cmp #'N'
+    bne +
+    lda #$00
+    sta menu_page
+    jmp main_menu
++
+    lda last_key
+    cmp #'P'
+    bne +
+    lda #$02
+    sta menu_page
+    jmp main_menu
++
+    lda last_key
+    sec
+    sbc #'A'
+    cmp #$04
+    bcc +
+    jmp menu_loop
++
+    clc
+    adc #$10
     sta current_effect
     jsr run_current_effect
     jmp main_menu
@@ -166,7 +237,15 @@ call_effect_vector:
 draw_current_menu_page:
     lda menu_page
     beq draw_menu_page_zero
+    cmp #$01
+    bne +
     jmp draw_menu_page_one
++
+    cmp #$02
+    bne +
+    jmp draw_menu_page_two
++
+    jmp draw_menu_page_three
 
 draw_menu_page_zero:
     jsr setup_rom_screen
@@ -315,6 +394,168 @@ draw_menu_page_one:
     sta src_ptr + 1
     jsr write_text_at
     ldx #$15
+    ldy #$04
+    lda #<menu_next_page
+    sta src_ptr
+    lda #>menu_next_page
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$17
+    ldy #$04
+    lda #<menu_hint
+    sta src_ptr
+    lda #>menu_hint
+    sta src_ptr + 1
+    jsr write_text_at
+    rts
+
+draw_menu_page_two:
+    jsr setup_rom_screen
+    lda #cyan
+    sta $d020
+    lda #black
+    sta $d021
+    lda #light_blue
+    jsr fill_color_ram
+    jsr clear_screen_spaces
+    ldx #$00
+    ldy #$05
+    lda #<title_browser
+    sta src_ptr
+    lda #>title_browser
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$02
+    ldy #$09
+    lda #<title_page_three
+    sta src_ptr
+    lda #>title_page_three
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$05
+    ldy #$04
+    lda #<menu2_a
+    sta src_ptr
+    lda #>menu2_a
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$07
+    ldy #$04
+    lda #<menu2_b
+    sta src_ptr
+    lda #>menu2_b
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$09
+    ldy #$04
+    lda #<menu2_c
+    sta src_ptr
+    lda #>menu2_c
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$0b
+    ldy #$04
+    lda #<menu2_d
+    sta src_ptr
+    lda #>menu2_d
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$0d
+    ldy #$04
+    lda #<menu2_e
+    sta src_ptr
+    lda #>menu2_e
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$13
+    ldy #$04
+    lda #<menu_prev_page
+    sta src_ptr
+    lda #>menu_prev_page
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$15
+    ldy #$04
+    lda #<menu_next_page
+    sta src_ptr
+    lda #>menu_next_page
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$17
+    ldy #$04
+    lda #<menu_hint
+    sta src_ptr
+    lda #>menu_hint
+    sta src_ptr + 1
+    jsr write_text_at
+    rts
+
+draw_menu_page_three:
+    jsr setup_rom_screen
+    lda #green
+    sta $d020
+    lda #black
+    sta $d021
+    lda #light_green
+    jsr fill_color_ram
+    jsr clear_screen_spaces
+    ldx #$00
+    ldy #$05
+    lda #<title_browser
+    sta src_ptr
+    lda #>title_browser
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$02
+    ldy #$09
+    lda #<title_page_four
+    sta src_ptr
+    lda #>title_page_four
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$05
+    ldy #$04
+    lda #<menu3_a
+    sta src_ptr
+    lda #>menu3_a
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$07
+    ldy #$04
+    lda #<menu3_b
+    sta src_ptr
+    lda #>menu3_b
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$09
+    ldy #$04
+    lda #<menu3_c
+    sta src_ptr
+    lda #>menu3_c
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$0b
+    ldy #$04
+    lda #<menu3_d
+    sta src_ptr
+    lda #>menu3_d
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$13
+    ldy #$04
+    lda #<menu_prev_page
+    sta src_ptr
+    lda #>menu_prev_page
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$15
+    ldy #$04
+    lda #<menu_next_page
+    sta src_ptr
+    lda #>menu_next_page
+    sta src_ptr + 1
+    jsr write_text_at
+    ldx #$17
     ldy #$04
     lda #<menu_hint
     sta src_ptr
@@ -747,6 +988,60 @@ clear_screen_tail:
     inx
     cpx #$e8
     bne clear_screen_tail
+    rts
+
+set_row_pointers:
+    lda row_screen_lo,x
+    sta dst_ptr
+    lda row_screen_hi,x
+    sta dst_ptr + 1
+    lda row_color_lo,x
+    sta color_ptr
+    lda row_color_hi,x
+    sta color_ptr + 1
+    rts
+
+plot_char_cell:
+    txa
+    pha
+    tya
+    pha
+    ldx temp_row
+    jsr set_row_pointers
+    ldy temp_col
+    lda temp_char
+    sta (dst_ptr),y
+    lda temp_color
+    sta (color_ptr),y
+    pla
+    tay
+    pla
+    tax
+    rts
+
+draw_pattern_row:
+    jsr set_row_pointers
+    ldy #$00
+draw_pattern_row_loop:
+    tya
+    clc
+    adc temp_len
+    and range_end
+    bne draw_pattern_row_blank
+    lda temp_char
+    sta (dst_ptr),y
+    lda temp_color
+    sta (color_ptr),y
+    jmp draw_pattern_row_next
+draw_pattern_row_blank:
+    lda #$00
+    sta (dst_ptr),y
+    lda #black
+    sta (color_ptr),y
+draw_pattern_row_next:
+    iny
+    cpy #40
+    bne draw_pattern_row_loop
     rts
 
 write_text_at:
@@ -1756,6 +2051,250 @@ basicfade_reveal_rows:
 basicfade_done:
     rts
 
+effect_colourcycle_init:
+    lda #<name_colourcycle
+    sta src_ptr
+    lda #>name_colourcycle
+    sta src_ptr + 1
+    jsr prepare_backdrop
+    lda #$00
+    sta effect_cursor
+    sta effect_counter
+    sta effect_hold
+    rts
+
+effect_colourcycle_update:
+    ldx #$00
+colourcycle_row_loop:
+    txa
+    clc
+    adc effect_cursor
+    and #$0f
+    tay
+    lda colourcycle_row_palette,y
+    jsr fill_single_row_color
+    inx
+    cpx #25
+    bne colourcycle_row_loop
+    lda effect_cursor
+    and #$07
+    tay
+    lda colourcycle_row_palette,y
+    sta $d020
+    sta $d021
+    inc effect_counter
+    lda effect_counter
+    and #$01
+    bne colourcycle_skip_step
+    inc effect_cursor
+colourcycle_skip_step:
+    inc effect_hold
+    lda effect_hold
+    cmp #160
+    bcc colourcycle_done
+    jmp effect_colourcycle_init
+colourcycle_done:
+    rts
+
+effect_parallax_init:
+    lda #<name_parallax
+    sta src_ptr
+    lda #>name_parallax
+    sta src_ptr + 1
+    jsr setup_bobs_screen
+    lda #blue
+    sta $d020
+    lda #black
+    sta $d021
+    lda #blue
+    jsr fill_color_ram
+    lda #$00
+    jsr fill_screen_char
+    lda #$00
+    sta effect_cursor
+    sta effect_counter
+    sta effect_hold
+    rts
+
+effect_parallax_update:
+    lda #$00
+    jsr fill_screen_char
+    lda #blue
+    jsr fill_color_ram
+
+    lda effect_cursor
+    lsr
+    lsr
+    sta temp_len
+    lda #$07
+    sta range_end
+    lda #$02
+    sta temp_char
+    lda #light_blue
+    sta temp_color
+    ldx #$03
+    jsr draw_pattern_row
+    ldx #$15
+    jsr draw_pattern_row
+
+    lda effect_cursor
+    lsr
+    sta temp_len
+    lda #$03
+    sta range_end
+    lda #$04
+    sta temp_char
+    lda #cyan
+    sta temp_color
+    ldx #$06
+    jsr draw_pattern_row
+    ldx #$12
+    jsr draw_pattern_row
+
+    lda effect_cursor
+    sta temp_len
+    lda #$01
+    sta range_end
+    lda #$06
+    sta temp_char
+    lda #white
+    sta temp_color
+    ldx #$09
+    jsr draw_pattern_row
+    ldx #$0f
+    jsr draw_pattern_row
+
+    inc effect_cursor
+    inc effect_hold
+    lda effect_hold
+    cmp #180
+    bcc parallax_done
+    jmp effect_parallax_init
+parallax_done:
+    rts
+
+effect_tinycircle_init:
+    lda #<name_tinycircle
+    sta src_ptr
+    lda #>name_tinycircle
+    sta src_ptr + 1
+    jsr setup_bobs_screen
+    lda #purple
+    sta $d020
+    lda #black
+    sta $d021
+    lda #blue
+    jsr fill_color_ram
+    lda #$00
+    jsr fill_screen_char
+    lda #$00
+    sta effect_cursor
+    sta effect_counter
+    rts
+
+effect_tinycircle_update:
+    lda #$00
+    jsr fill_screen_char
+    lda #blue
+    jsr fill_color_ram
+    ldx #$00
+tinycircle_loop:
+    lda tiny_phase_offsets,x
+    clc
+    adc effect_cursor
+    and #$3f
+    tay
+    lda orbit_col_table,y
+    sta temp_col
+    lda orbit_row_table,y
+    sta temp_row
+    txa
+    clc
+    adc effect_cursor
+    and #$03
+    clc
+    adc #$03
+    sta temp_char
+    lda tiny_colors,x
+    sta temp_color
+    jsr plot_char_cell
+    inx
+    cpx #8
+    bne tinycircle_loop
+    inc effect_counter
+    lda effect_counter
+    and #$01
+    bne tinycircle_skip_step
+    inc effect_cursor
+tinycircle_skip_step:
+tinycircle_done:
+    rts
+
+effect_infinitebobs_init:
+    lda #<name_infinitebobs
+    sta src_ptr
+    lda #>name_infinitebobs
+    sta src_ptr + 1
+    jsr setup_bobs_screen
+    lda #purple
+    sta $d020
+    lda #black
+    sta $d021
+    lda #blue
+    jsr fill_color_ram
+    lda #$00
+    jsr fill_screen_char
+    lda #$00
+    sta effect_cursor
+    sta effect_counter
+    sta effect_hold
+    rts
+
+effect_infinitebobs_update:
+    lda #$00
+    jsr fill_screen_char
+    lda #blue
+    jsr fill_color_ram
+    ldx #$00
+infinitebobs_loop:
+    lda infinite_x_offsets,x
+    clc
+    adc effect_cursor
+    and #$3f
+    tay
+    lda wide_col_table,y
+    sta temp_col
+    lda infinite_y_offsets,x
+    clc
+    adc effect_counter
+    and #$3f
+    tay
+    lda wide_row_table,y
+    sta temp_row
+    txa
+    clc
+    adc effect_cursor
+    and #$07
+    sta temp_char
+    lda infinite_colors,x
+    sta temp_color
+    jsr plot_char_cell
+    inx
+    cpx #12
+    bne infinitebobs_loop
+    inc effect_cursor
+    lda effect_counter
+    clc
+    adc #$02
+    sta effect_counter
+    inc effect_hold
+    lda effect_hold
+    cmp #180
+    bcc infinitebobs_done
+    jmp effect_infinitebobs_init
+infinitebobs_done:
+    rts
+
 fill_screen_char:
     sta temp_char
     ldx #$00
@@ -1776,11 +2315,15 @@ fill_screen_char_tail:
     rts
 
 title_browser:
-!text "RETRO DNA TRANSITION BROWSER",0
+!text "RETRO DNA NOBOUNDS BROWSER",0
 title_page_one:
-!text "PAGE 1 OF 2",0
+!text "PAGE 1 OF 4  TRANSITIONS",0
 title_page_two:
-!text "PAGE 2 OF 2",0
+!text "PAGE 2 OF 4  TRANSITIONS",0
+title_page_three:
+!text "PAGE 3 OF 4  EFFECTS",0
+title_page_four:
+!text "PAGE 4 OF 4  EFFECTS",0
 menu0_a:
 !text "A  TRANSITIONSQUARES",0
 menu0_b:
@@ -1803,6 +2346,24 @@ menu1_d:
 !text "D  SCREENFADEBOBS",0
 menu1_e:
 !text "E  BASICFADE",0
+menu2_a:
+!text "A  COLOURCYCLE",0
+menu2_b:
+!text "B  PARALLAX",0
+menu2_c:
+!text "C  KEFRENSPLUS",0
+menu2_d:
+!text "D  TRAILBLAZER",0
+menu2_e:
+!text "E  BASICFADE",0
+menu3_a:
+!text "A  SCREENFADEBOBS",0
+menu3_b:
+!text "B  REFLECTORTW",0
+menu3_c:
+!text "C  TINYCIRCLESCROLL",0
+menu3_d:
+!text "D  INFINITEBOBS",0
 menu_next_page:
 !text "N  NEXT PAGE",0
 menu_prev_page:
@@ -1835,6 +2396,14 @@ name_trailblazer:
 !text "TRAILBLAZERTRANSITION",0
 name_basicfade:
 !text "BASICFADE",0
+name_colourcycle:
+!text "COLOURCYCLE",0
+name_parallax:
+!text "PARALLAX",0
+name_tinycircle:
+!text "TINYCIRCLESCROLL",0
+name_infinitebobs:
+!text "INFINITEBOBS",0
 
 effect_init_lo:
 !byte <effect_transition_squares_init
@@ -1848,6 +2417,15 @@ effect_init_lo:
 !byte <effect_trailblazer_init
 !byte <effect_screenfadebobs_init
 !byte <effect_basicfade_init
+!byte <effect_colourcycle_init
+!byte <effect_parallax_init
+!byte <effect_kefrens_init
+!byte <effect_trailblazer_init
+!byte <effect_basicfade_init
+!byte <effect_screenfadebobs_init
+!byte <effect_reflector_init
+!byte <effect_tinycircle_init
+!byte <effect_infinitebobs_init
 
 effect_init_hi:
 !byte >effect_transition_squares_init
@@ -1861,6 +2439,15 @@ effect_init_hi:
 !byte >effect_trailblazer_init
 !byte >effect_screenfadebobs_init
 !byte >effect_basicfade_init
+!byte >effect_colourcycle_init
+!byte >effect_parallax_init
+!byte >effect_kefrens_init
+!byte >effect_trailblazer_init
+!byte >effect_basicfade_init
+!byte >effect_screenfadebobs_init
+!byte >effect_reflector_init
+!byte >effect_tinycircle_init
+!byte >effect_infinitebobs_init
 
 effect_update_lo:
 !byte <effect_transition_squares_update
@@ -1874,6 +2461,15 @@ effect_update_lo:
 !byte <effect_trailblazer_update
 !byte <effect_screenfadebobs_update
 !byte <effect_basicfade_update
+!byte <effect_colourcycle_update
+!byte <effect_parallax_update
+!byte <effect_kefrens_update
+!byte <effect_trailblazer_update
+!byte <effect_basicfade_update
+!byte <effect_screenfadebobs_update
+!byte <effect_reflector_update
+!byte <effect_tinycircle_update
+!byte <effect_infinitebobs_update
 
 effect_update_hi:
 !byte >effect_transition_squares_update
@@ -1887,6 +2483,15 @@ effect_update_hi:
 !byte >effect_trailblazer_update
 !byte >effect_screenfadebobs_update
 !byte >effect_basicfade_update
+!byte >effect_colourcycle_update
+!byte >effect_parallax_update
+!byte >effect_kefrens_update
+!byte >effect_trailblazer_update
+!byte >effect_basicfade_update
+!byte >effect_screenfadebobs_update
+!byte >effect_reflector_update
+!byte >effect_tinycircle_update
+!byte >effect_infinitebobs_update
 
 row_screen_lo:
 !for r, 0, 24 { !byte <(screen_base + r * 40) }
@@ -1957,6 +2562,47 @@ bob_charset_data:
 !byte $00,$18,$7e,$ff,$ff,$7e,$18,$00
 !byte $00,$00,$3c,$7e,$7e,$3c,$00,$00
 !byte $18,$18,$3c,$7e,$7e,$3c,$18,$18
+
+colourcycle_row_palette:
+!byte blue, light_blue, cyan, white, light_grey, white, cyan, light_blue
+!byte purple, light_red, red, orange, yellow, orange, red, purple
+
+tiny_phase_offsets:
+!byte 0,8,16,24,32,40,48,56
+tiny_colors:
+!byte cyan, light_blue, white, light_grey, light_blue, cyan, white, light_grey
+
+infinite_x_offsets:
+!byte 0,5,11,16,21,27,32,37,43,48,53,59
+infinite_y_offsets:
+!byte 0,9,18,27,36,45,54,63,8,17,26,35
+infinite_colors:
+!byte cyan, light_blue, white, light_grey, cyan, light_blue
+!byte white, light_grey, cyan, light_blue, white, light_grey
+
+orbit_col_table:
+!byte 20,21,23,24,26,27,28,30,31,32,32,33,34,34,35,35
+!byte 35,35,35,34,34,33,32,32,31,30,28,27,26,24,23,21
+!byte 20,19,17,16,14,13,12,10,9,8,8,7,6,6,5,5
+!byte 5,5,5,6,6,7,8,8,9,10,12,13,14,16,17,19
+
+orbit_row_table:
+!byte 19,19,19,19,18,18,18,17,17,16,16,15,15,14,13,13
+!byte 12,11,11,10,9,9,8,8,7,7,6,6,6,5,5,5
+!byte 5,5,5,5,6,6,6,7,7,8,8,9,9,10,11,11
+!byte 12,13,13,14,15,15,16,16,17,17,18,18,18,19,19,19
+
+wide_col_table:
+!byte 20,22,24,25,27,28,30,31,33,34,35,36,37,37,38,38
+!byte 38,38,38,37,37,36,35,34,33,31,30,28,27,25,24,22
+!byte 20,18,16,15,13,12,10,9,7,6,5,4,3,3,2,2
+!byte 2,2,2,3,3,4,5,6,7,9,10,12,13,15,16,18
+
+wide_row_table:
+!byte 22,22,22,22,21,21,20,20,19,18,18,17,16,15,14,13
+!byte 12,11,10,9,8,7,6,6,5,4,4,3,3,2,2,2
+!byte 2,2,2,2,3,3,4,4,5,6,6,7,8,9,10,11
+!byte 12,13,14,15,16,17,18,18,19,20,20,21,21,22,22,22
 
 menu_page:
 !byte $00
