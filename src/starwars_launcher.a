@@ -1,0 +1,26 @@
+!to "build/SWLAUNCH.PRG", cbm
+
+STARWARS_GO = $9fcc
+
+* = $0800
+base_play_music:
+    inc $fe
+    bne base_play_music_done
+    inc $ff
+base_play_music_done:
+    rts
+
+launch_starwars:
+    sei
+    lda #$00
+    sta $d01a
+    sta $088f
+    lda #$80
+    sta $fe
+    lda #$03
+    sta $ff
+    lda #$35
+    sta $01
+    jsr STARWARS_GO
+hold:
+    jmp hold

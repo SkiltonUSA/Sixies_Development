@@ -1,0 +1,1659 @@
+; Nobounds menu demo
+; Sources:
+; - XMarksTheSpot/SourceCode/DemoParts/Metalux-Plasma.asm
+; - NoBounds/Parts/PlasmaVector/PlasmaVectorIntro.asm
+; - NoBounds/Link/PlasmaVector/RazorbackUnbound*
+; - NoBounds/Parts/HiresLoader/*
+; - NoBounds/Link/StarWars/*
+
+!to "build/dhaka.prg", cbm
+
+mode            = $02
+key_code        = $03
+key_lock        = $04
+frame_counter   = $05
+plasma_x_phase  = $06
+plasma_y_phase  = $07
+menu_pulse      = $08
+reveal_step     = $09
+effect_timer    = $0a
+column_phase    = $0b
+column_dir      = $0c
+column_left_y   = $0d
+column_right_y  = $0e
+tmp0            = $0f
+tmp1            = $10
+tmp2            = $11
+row_counter     = $12
+star_index      = $13
+star_tick       = $14
+razor_phase     = $15
+star_load_step  = $16
+scr_ptr         = $fb
+col_ptr         = $fd
+txt_ptr         = $f9
+
+KERNAL_SETLFS   = $ffba
+KERNAL_SETNAM   = $ffbd
+KERNAL_CLOSE    = $ffc3
+KERNAL_CLRCHN   = $ffcc
+KERNAL_LOAD     = $ffd5
+
+MODE_MENU       = $00
+MODE_METALUX    = $01
+MODE_PV_FADE    = $02
+MODE_BITMAP     = $03
+MODE_HIRES      = $04
+MODE_RAZOR_PLASMA = $05
+MODE_STARWARS   = $06
+RAZOR_PLASMA_COLS = 18
+RAZOR_PLASMA_MAP_TAIL = 320 - (RAZOR_PLASMA_COLS * 8)
+STARWARS_BOOTSTRAP = $c000
+STARWARS_GO = $9fcc
+
+!ifndef START_MODE {
+START_MODE      = MODE_MENU
+}
+
+SCREEN          = $0400
+COLOR_RAM       = $d800
+BITMAP          = $4000
+BITMAP_SCREEN   = $6000
+HIRES_CHARSET   = $2800
+METALUX_CHARSET = $3000
+SPRITES         = $3800
+SPRITES_PTR     = SPRITES / $40
+
+* = $0801
+!byte $0c,$08,$0a,$00,$9e
+!text "2061"
+!byte $00,$00,$00
+
+* = $080d
+entry:
+    sei
+    ldx #$ff
+    txs
+    lda #$7f
+    sta $dc0d
+    sta $dd0d
+    lda $dc0d
+    lda $dd0d
+    lda #$00
+    sta $d01a
+    lda #$ff
+    sta $d019
+    lda #$35
+    sta $01
+
+    lda #START_MODE
+    sta mode
+    lda #$00
+    sta key_lock
+    sta frame_counter
+    sta plasma_x_phase
+    sta plasma_y_phase
+    sta menu_pulse
+
+!if START_MODE = MODE_MENU {
+    jsr init_menu
+}
+!if START_MODE = MODE_METALUX {
+    jsr init_metalux
+}
+!if START_MODE = MODE_PV_FADE {
+    jsr init_pv_fade
+}
+!if START_MODE = MODE_BITMAP {
+    jsr init_bitmap
+}
+!if START_MODE = MODE_HIRES {
+    jsr init_hires
+}
+!if START_MODE = MODE_RAZOR_PLASMA {
+    jsr init_razor_plasma
+}
+!if START_MODE = MODE_STARWARS {
+    jsr init_starwars
+}
+
+main_loop:
+    jsr wait_frame
+    inc frame_counter
+    jsr scan_keys
+    jsr handle_keys
+    lda mode
+    bne mode_not_menu
+    jmp update_menu
+mode_not_menu:
+    cmp #MODE_METALUX
+    bne mode_not_metalux
+    jmp update_metalux
+mode_not_metalux:
+    cmp #MODE_PV_FADE
+    bne mode_not_pv_fade
+    jmp update_pv_fade
+mode_not_pv_fade:
+    cmp #MODE_BITMAP
+    bne mode_not_bitmap
+    jmp update_bitmap
+mode_not_bitmap:
+    cmp #MODE_HIRES
+    bne mode_check_extra
+    jmp update_hires
+mode_check_extra:
+    cmp #MODE_RAZOR_PLASMA
+    bne mode_not_razor_plasma
+    jmp update_razor_plasma
+mode_not_razor_plasma:
+    cmp #MODE_STARWARS
+    bne mode_fallthrough
+    jmp update_starwars
+mode_fallthrough:
+    jmp main_loop
+
+update_menu:
+    lda frame_counter
+    lsr
+    lsr
+    and #$07
+    tax
+    lda menu_colors, x
+    sta $d020
+    lda #$06
+    sta $d021
+    jmp main_loop
+
+handle_keys:
+    lda key_code
+    beq handle_keys_done
+    cmp #$20
+    bne not_space
+    lda mode
+    beq handle_keys_done
+    jsr init_menu
+    lda #MODE_MENU
+    sta mode
+    jmp handle_keys_done
+not_space:
+    cmp #$01
+    bne not_1
+    lda #MODE_METALUX
+    sta mode
+    jsr init_metalux
+    jmp handle_keys_done
+not_1:
+    cmp #$02
+    bne not_2
+    lda #MODE_PV_FADE
+    sta mode
+    jsr init_pv_fade
+    jmp handle_keys_done
+not_2:
+    cmp #$03
+    bne not_3
+    lda #MODE_BITMAP
+    sta mode
+    jsr init_bitmap
+    jmp handle_keys_done
+not_3:
+    cmp #$04
+    bne not_4
+    lda #MODE_HIRES
+    sta mode
+    jsr init_hires
+    jmp handle_keys_done
+not_4:
+    cmp #$05
+    bne not_5
+    lda #MODE_RAZOR_PLASMA
+    sta mode
+    jsr init_razor_plasma
+    jmp handle_keys_done
+not_5:
+    cmp #$06
+    bne handle_keys_done
+    lda #MODE_STARWARS
+    sta mode
+    jsr init_starwars
+handle_keys_done:
+    rts
+
+wait_frame:
+wf0:
+    lda $d012
+    cmp #$f8
+    bne wf0
+wf1:
+    lda $d012
+    cmp #$f8
+    beq wf1
+    rts
+
+scan_keys:
+    lda #$00
+    sta key_code
+
+    lda #$7f
+    sta $dc00
+    lda $dc01
+    and #%00000001
+    bne sk_no_1
+    lda #$02
+    sta key_code
+sk_no_1:
+    lda key_code
+    bne sk_have
+    lda $dc01
+    and #%00001000
+    bne sk_no_2
+    lda #$02
+    sta key_code
+sk_no_2:
+    lda key_code
+    bne sk_have
+    lda $dc01
+    and #%00010000
+    bne sk_row1
+    lda #$20
+    sta key_code
+    jmp sk_have
+
+sk_row1:
+    lda #$fd
+    sta $dc00
+    lda $dc01
+    and #%00000001
+    bne sk_no_3
+    lda #$03
+    sta key_code
+sk_no_3:
+    lda key_code
+    bne sk_have
+    lda $dc01
+    and #%00001000
+    bne sk_row2
+    lda #$04
+    sta key_code
+    jmp sk_have
+
+sk_row2:
+    lda #$fb
+    sta $dc00
+    lda $dc01
+    and #%00000001
+    bne sk_no_5
+    lda #$05
+    sta key_code
+sk_no_5:
+    lda key_code
+    bne sk_have
+    lda $dc01
+    and #%00001000
+    bne sk_have
+    lda #$06
+    sta key_code
+
+sk_have:
+    lda #$ff
+    sta $dc00
+    lda key_code
+    bne sk_pressed
+    lda #$00
+    sta key_lock
+    rts
+sk_pressed:
+    lda key_lock
+    beq sk_new
+    lda #$00
+    sta key_code
+    rts
+sk_new:
+    lda #$01
+    sta key_lock
+    rts
+
+init_menu:
+    jsr disable_raster_irq
+    lda $dd00
+    and #%11111100
+    ora #%00000011
+    sta $dd00
+    lda #$1b
+    sta $d011
+    lda #$08
+    sta $d016
+    lda #$14
+    sta $d018
+    lda #$00
+    sta $d015
+    lda #$20
+    jsr clear_text_screen
+    lda #$0e
+    jsr fill_color_ram
+
+    lda #<menu_title
+    sta txt_ptr
+    lda #>menu_title
+    sta txt_ptr+1
+    lda #<$0450
+    sta scr_ptr
+    lda #>$0450
+    sta scr_ptr+1
+    jsr write_text
+
+    lda #<menu_line_1
+    sta txt_ptr
+    lda #>menu_line_1
+    sta txt_ptr+1
+    lda #<$04c8
+    sta scr_ptr
+    lda #>$04c8
+    sta scr_ptr+1
+    jsr write_text
+
+    lda #<menu_line_2
+    sta txt_ptr
+    lda #>menu_line_2
+    sta txt_ptr+1
+    lda #<$0518
+    sta scr_ptr
+    lda #>$0518
+    sta scr_ptr+1
+    jsr write_text
+
+    lda #<menu_line_3
+    sta txt_ptr
+    lda #>menu_line_3
+    sta txt_ptr+1
+    lda #<$0568
+    sta scr_ptr
+    lda #>$0568
+    sta scr_ptr+1
+    jsr write_text
+
+    lda #<menu_line_4
+    sta txt_ptr
+    lda #>menu_line_4
+    sta txt_ptr+1
+    lda #<$05b8
+    sta scr_ptr
+    lda #>$05b8
+    sta scr_ptr+1
+    jsr write_text
+
+    lda #<menu_line_5
+    sta txt_ptr
+    lda #>menu_line_5
+    sta txt_ptr+1
+    lda #<$0608
+    sta scr_ptr
+    lda #>$0608
+    sta scr_ptr+1
+    jsr write_text
+
+    lda #<menu_line_6
+    sta txt_ptr
+    lda #>menu_line_6
+    sta txt_ptr+1
+    lda #<$0658
+    sta scr_ptr
+    lda #>$0658
+    sta scr_ptr+1
+    jsr write_text
+
+    lda #<menu_footer_1
+    sta txt_ptr
+    lda #>menu_footer_1
+    sta txt_ptr+1
+    lda #<$06a8
+    sta scr_ptr
+    lda #>$06a8
+    sta scr_ptr+1
+    jsr write_text
+
+    lda #<menu_footer_2
+    sta txt_ptr
+    lda #>menu_footer_2
+    sta txt_ptr+1
+    lda #<$06d0
+    sta scr_ptr
+    lda #>$06d0
+    sta scr_ptr+1
+    jsr write_text
+
+    lda #$06
+    sta $d021
+    lda #$0e
+    sta $d020
+    rts
+
+clear_text_screen:
+    ldx #$00
+cts_loop:
+    sta SCREEN, x
+    sta SCREEN+$100, x
+    sta SCREEN+$200, x
+    sta SCREEN+$2e8, x
+    inx
+    bne cts_loop
+    rts
+
+fill_color_ram:
+    ldx #$00
+fcr_loop:
+    sta COLOR_RAM, x
+    sta COLOR_RAM+$100, x
+    sta COLOR_RAM+$200, x
+    sta COLOR_RAM+$2e8, x
+    inx
+    bne fcr_loop
+    rts
+
+write_text:
+    ldy #$00
+wt_loop:
+    lda (txt_ptr), y
+    beq wt_done
+    sta (scr_ptr), y
+    iny
+    bne wt_loop
+wt_done:
+    rts
+
+init_metalux:
+    jsr disable_raster_irq
+    lda $dd00
+    and #%11111100
+    ora #%00000011
+    sta $dd00
+    lda #$1b
+    sta $d011
+    lda #$18
+    sta $d016
+    lda #$1c
+    sta $d018
+    lda #$00
+    sta $d015
+    lda #$00
+    jsr clear_text_screen
+    lda #$06
+    jsr fill_color_ram
+    lda #$00
+    sta plasma_x_phase
+    sta plasma_y_phase
+    sta $d020
+    lda #$06
+    sta $d021
+    rts
+
+update_metalux:
+    jsr build_metalux_buffers
+
+    lda #<SCREEN
+    sta scr_ptr
+    lda #>SCREEN
+    sta scr_ptr+1
+    lda #<COLOR_RAM
+    sta col_ptr
+    lda #>COLOR_RAM
+    sta col_ptr+1
+    lda #$00
+    sta row_counter
+
+metalux_row_loop:
+    ldy row_counter
+    lda metalux_ybuf, y
+    sta tmp0
+    ldy #$00
+metalux_col_loop:
+    lda metalux_xbuf, y
+    clc
+    adc tmp0
+    lsr
+    lsr
+    lsr
+    lsr
+    tax
+    lda metalux_ramp, x
+    sta (scr_ptr), y
+    lda metalux_palette, x
+    sta (col_ptr), y
+    iny
+    cpy #40
+    bne metalux_col_loop
+
+    clc
+    lda scr_ptr
+    adc #40
+    sta scr_ptr
+    bcc metalux_scr_ok
+    inc scr_ptr+1
+metalux_scr_ok:
+    clc
+    lda col_ptr
+    adc #40
+    sta col_ptr
+    bcc metalux_col_ok
+    inc col_ptr+1
+metalux_col_ok:
+    inc row_counter
+    lda row_counter
+    cmp #25
+    bne metalux_row_loop
+
+    dec plasma_x_phase
+    inc plasma_y_phase
+    jmp main_loop
+
+build_metalux_buffers:
+    ldx #$00
+metalux_xbuf_loop:
+    lda plasma_x_phase
+    clc
+    adc metalux_xofs_a, x
+    tay
+    lda metalux_sin, y
+    sta tmp0
+    lda plasma_y_phase
+    clc
+    adc metalux_xofs_b, x
+    tay
+    lda metalux_sin, y
+    clc
+    adc tmp0
+    sta metalux_xbuf, x
+    inx
+    cpx #40
+    bne metalux_xbuf_loop
+
+    ldx #$00
+metalux_ybuf_loop:
+    lda plasma_x_phase
+    clc
+    adc metalux_yofs_a, x
+    tay
+    lda metalux_sin, y
+    sta tmp0
+    lda plasma_y_phase
+    clc
+    adc metalux_yofs_b, x
+    tay
+    lda metalux_sin, y
+    clc
+    adc tmp0
+    sta metalux_ybuf, x
+    inx
+    cpx #25
+    bne metalux_ybuf_loop
+    rts
+
+init_bitmap_mode:
+    jsr disable_raster_irq
+    lda $dd00
+    and #%11111100
+    ora #%00000010
+    sta $dd00
+    lda #$3b
+    sta $d011
+    lda #$18
+    sta $d016
+    lda #$80
+    sta $d018
+    lda #$00
+    sta $d015
+    lda #$00
+    sta $d020
+    sta $d021
+    rts
+
+init_pv_fade:
+    jsr init_bitmap_mode
+    jsr clear_razor_left_map
+    lda #$00
+    jsr clear_bitmap_screen
+    jsr clear_bitmap_colors
+    lda #$00
+    sta reveal_step
+    sta effect_timer
+    rts
+
+update_pv_fade:
+    inc effect_timer
+    lda effect_timer
+    and #$01
+    bne pv_fade_done
+    lda reveal_step
+    cmp #20
+    bcs pv_fade_hold
+    tax
+    lda pv_left_columns, x
+    sta tmp1
+    lda pv_right_columns, x
+    sta tmp2
+    jsr copy_bitmap_column_pair
+    inc reveal_step
+    jmp pv_fade_done
+pv_fade_hold:
+    lda frame_counter
+    lsr
+    lsr
+    and #$07
+    tax
+    lda menu_colors, x
+    sta $d020
+pv_fade_done:
+    jmp main_loop
+
+init_bitmap:
+    jsr init_bitmap_mode
+    jsr clear_razor_left_map
+    jsr copy_full_bitmap_screen
+    jsr copy_full_bitmap_colors
+    lda #$00
+    sta effect_timer
+    rts
+
+update_bitmap:
+    lda frame_counter
+    lsr
+    lsr
+    and #$07
+    tax
+    lda bitmap_border_colors, x
+    sta $d020
+    jmp main_loop
+
+init_razor_plasma:
+    jsr init_bitmap_mode
+    jsr copy_combined_left_map
+    jsr copy_full_bitmap_screen
+    jsr copy_full_bitmap_colors
+    lda #$00
+    sta razor_phase
+    sta $d020
+    sta $d021
+    rts
+
+update_razor_plasma:
+    lda #<BITMAP_SCREEN
+    sta scr_ptr
+    lda #>BITMAP_SCREEN
+    sta scr_ptr+1
+    lda #<COLOR_RAM
+    sta col_ptr
+    lda #>COLOR_RAM
+    sta col_ptr+1
+    lda #$00
+    sta row_counter
+
+razor_plasma_row:
+    ldy #$00
+razor_plasma_col:
+    tya
+    clc
+    adc row_counter
+    adc razor_phase
+    and #$0f
+    tax
+    lda razor_screen_plasma, x
+    sta (scr_ptr), y
+    lda razor_color_plasma, x
+    sta (col_ptr), y
+    iny
+    cpy #RAZOR_PLASMA_COLS
+    bne razor_plasma_col
+
+    clc
+    lda scr_ptr
+    adc #40
+    sta scr_ptr
+    bcc razor_plasma_scr_ok
+    inc scr_ptr+1
+razor_plasma_scr_ok:
+    clc
+    lda col_ptr
+    adc #40
+    sta col_ptr
+    bcc razor_plasma_col_ok
+    inc col_ptr+1
+razor_plasma_col_ok:
+    inc row_counter
+    lda row_counter
+    cmp #25
+    bne razor_plasma_row
+
+    inc razor_phase
+    jmp main_loop
+
+copy_combined_left_map:
+    lda #<combined_map_shadow
+    sta scr_ptr
+    lda #>combined_map_shadow
+    sta scr_ptr+1
+    lda #<BITMAP
+    sta col_ptr
+    lda #>BITMAP
+    sta col_ptr+1
+    lda #25
+    sta row_counter
+copy_combined_row:
+    ldx #RAZOR_PLASMA_COLS
+copy_combined_cell:
+    ldy #$00
+copy_combined_byte:
+    lda (scr_ptr), y
+    sta (col_ptr), y
+    iny
+    cpy #8
+    bne copy_combined_byte
+    jsr advance_map_cell
+    dex
+    bne copy_combined_cell
+    jsr advance_map_row_tail
+    dec row_counter
+    bne copy_combined_row
+    rts
+
+clear_razor_left_map:
+    lda #<BITMAP
+    sta col_ptr
+    lda #>BITMAP
+    sta col_ptr+1
+    lda #25
+    sta row_counter
+clear_razor_map_row:
+    ldx #RAZOR_PLASMA_COLS
+clear_razor_map_cell:
+    ldy #$00
+    lda #$00
+clear_razor_map_byte:
+    sta (col_ptr), y
+    iny
+    cpy #8
+    bne clear_razor_map_byte
+    jsr advance_dest_map_cell
+    dex
+    bne clear_razor_map_cell
+    jsr advance_dest_map_row_tail
+    dec row_counter
+    bne clear_razor_map_row
+    rts
+
+advance_map_cell:
+    clc
+    lda scr_ptr
+    adc #8
+    sta scr_ptr
+    bcc advance_map_cell_src_ok
+    inc scr_ptr+1
+advance_map_cell_src_ok:
+advance_dest_map_cell:
+    clc
+    lda col_ptr
+    adc #8
+    sta col_ptr
+    bcc advance_map_cell_done
+    inc col_ptr+1
+advance_map_cell_done:
+    rts
+
+advance_map_row_tail:
+    clc
+    lda scr_ptr
+    adc #RAZOR_PLASMA_MAP_TAIL
+    sta scr_ptr
+    bcc advance_map_row_src_ok
+    inc scr_ptr+1
+advance_map_row_src_ok:
+advance_dest_map_row_tail:
+    clc
+    lda col_ptr
+    adc #RAZOR_PLASMA_MAP_TAIL
+    sta col_ptr
+    bcc advance_map_row_done
+    inc col_ptr+1
+advance_map_row_done:
+    rts
+
+init_starwars:
+    jmp STARWARS_BOOTSTRAP
+
+load_starwars_file:
+    pha
+    txa
+    pha
+    tya
+    pha
+    lda #$02
+    jsr KERNAL_CLOSE
+    jsr KERNAL_CLRCHN
+    pla
+    tay
+    pla
+    tax
+    pla
+    jsr KERNAL_SETNAM
+    lda #$01
+    ldx #$08
+    ldy #$01
+    jsr KERNAL_SETLFS
+    lda #$00
+    tax
+    tay
+    jsr KERNAL_LOAD
+    bcs starwars_load_error
+    rts
+
+starwars_load_error:
+    sta tmp0
+    lda #$35
+    sta $01
+    jsr init_menu
+    lda #<starwars_load_error_text
+    sta txt_ptr
+    lda #>starwars_load_error_text
+    sta txt_ptr+1
+    lda #<(SCREEN+$28*19)
+    sta scr_ptr
+    lda #>(SCREEN+$28*19)
+    sta scr_ptr+1
+    jsr write_text
+    lda star_load_step
+    clc
+    adc #$30
+    sta SCREEN+$28*19+16
+    lda tmp0
+    clc
+    adc #$30
+    sta SCREEN+$28*19+18
+    lda #MODE_MENU
+    sta mode
+    pla
+    pla
+    rts
+
+update_starwars:
+    jmp main_loop
+
+copy_bitmap_column_pair:
+    lda #<bitmap_screen_shadow
+    clc
+    adc tmp1
+    sta scr_ptr
+    lda #>bitmap_screen_shadow
+    adc #$00
+    sta scr_ptr+1
+    lda #<BITMAP_SCREEN
+    clc
+    adc tmp1
+    sta col_ptr
+    lda #>BITMAP_SCREEN
+    adc #$00
+    sta col_ptr+1
+    lda #$00
+    sta row_counter
+pv_left_loop:
+    ldy #$00
+    lda (scr_ptr), y
+    sta (col_ptr), y
+    clc
+    lda scr_ptr
+    adc #40
+    sta scr_ptr
+    bcc pv_left_src_ok
+    inc scr_ptr+1
+pv_left_src_ok:
+    clc
+    lda col_ptr
+    adc #40
+    sta col_ptr
+    bcc pv_left_dst_ok
+    inc col_ptr+1
+pv_left_dst_ok:
+    inc row_counter
+    lda row_counter
+    cmp #25
+    bne pv_left_loop
+
+    lda #<bitmap_color_shadow
+    clc
+    adc tmp1
+    sta scr_ptr
+    lda #>bitmap_color_shadow
+    adc #$00
+    sta scr_ptr+1
+    lda #<COLOR_RAM
+    clc
+    adc tmp1
+    sta col_ptr
+    lda #>COLOR_RAM
+    adc #$00
+    sta col_ptr+1
+    lda #$00
+    sta row_counter
+pv_left_color_loop:
+    ldy #$00
+    lda (scr_ptr), y
+    sta (col_ptr), y
+    clc
+    lda scr_ptr
+    adc #40
+    sta scr_ptr
+    bcc pv_left_col_src_ok
+    inc scr_ptr+1
+pv_left_col_src_ok:
+    clc
+    lda col_ptr
+    adc #40
+    sta col_ptr
+    bcc pv_left_col_dst_ok
+    inc col_ptr+1
+pv_left_col_dst_ok:
+    inc row_counter
+    lda row_counter
+    cmp #25
+    bne pv_left_color_loop
+
+    lda #<bitmap_screen_shadow
+    clc
+    adc tmp2
+    sta scr_ptr
+    lda #>bitmap_screen_shadow
+    adc #$00
+    sta scr_ptr+1
+    lda #<BITMAP_SCREEN
+    clc
+    adc tmp2
+    sta col_ptr
+    lda #>BITMAP_SCREEN
+    adc #$00
+    sta col_ptr+1
+    lda #$00
+    sta row_counter
+pv_right_loop:
+    ldy #$00
+    lda (scr_ptr), y
+    sta (col_ptr), y
+    clc
+    lda scr_ptr
+    adc #40
+    sta scr_ptr
+    bcc pv_right_src_ok
+    inc scr_ptr+1
+pv_right_src_ok:
+    clc
+    lda col_ptr
+    adc #40
+    sta col_ptr
+    bcc pv_right_dst_ok
+    inc col_ptr+1
+pv_right_dst_ok:
+    inc row_counter
+    lda row_counter
+    cmp #25
+    bne pv_right_loop
+
+    lda #<bitmap_color_shadow
+    clc
+    adc tmp2
+    sta scr_ptr
+    lda #>bitmap_color_shadow
+    adc #$00
+    sta scr_ptr+1
+    lda #<COLOR_RAM
+    clc
+    adc tmp2
+    sta col_ptr
+    lda #>COLOR_RAM
+    adc #$00
+    sta col_ptr+1
+    lda #$00
+    sta row_counter
+pv_right_color_loop:
+    ldy #$00
+    lda (scr_ptr), y
+    sta (col_ptr), y
+    clc
+    lda scr_ptr
+    adc #40
+    sta scr_ptr
+    bcc pv_right_col_src_ok
+    inc scr_ptr+1
+pv_right_col_src_ok:
+    clc
+    lda col_ptr
+    adc #40
+    sta col_ptr
+    bcc pv_right_col_dst_ok
+    inc col_ptr+1
+pv_right_col_dst_ok:
+    inc row_counter
+    lda row_counter
+    cmp #25
+    bne pv_right_color_loop
+    rts
+
+clear_bitmap_screen:
+    ldx #$00
+cbs_loop:
+    sta BITMAP_SCREEN, x
+    sta BITMAP_SCREEN+$100, x
+    sta BITMAP_SCREEN+$200, x
+    sta BITMAP_SCREEN+$2e8, x
+    inx
+    bne cbs_loop
+    rts
+
+clear_bitmap_colors:
+    ldx #$00
+cbc_loop:
+    sta COLOR_RAM, x
+    sta COLOR_RAM+$100, x
+    sta COLOR_RAM+$200, x
+    sta COLOR_RAM+$2e8, x
+    inx
+    bne cbc_loop
+    rts
+
+copy_full_bitmap_screen:
+    ldx #$00
+cfbs_loop:
+    lda bitmap_screen_shadow, x
+    sta BITMAP_SCREEN, x
+    lda bitmap_screen_shadow+$100, x
+    sta BITMAP_SCREEN+$100, x
+    lda bitmap_screen_shadow+$200, x
+    sta BITMAP_SCREEN+$200, x
+    lda bitmap_screen_shadow+$2e8, x
+    sta BITMAP_SCREEN+$2e8, x
+    inx
+    bne cfbs_loop
+    rts
+
+copy_full_bitmap_colors:
+    ldx #$00
+cfbc_loop:
+    lda bitmap_color_shadow, x
+    sta COLOR_RAM, x
+    lda bitmap_color_shadow+$100, x
+    sta COLOR_RAM+$100, x
+    lda bitmap_color_shadow+$200, x
+    sta COLOR_RAM+$200, x
+    lda bitmap_color_shadow+$2e8, x
+    sta COLOR_RAM+$2e8, x
+    inx
+    bne cfbc_loop
+    rts
+
+init_hires:
+    jsr disable_raster_irq
+    lda $dd00
+    and #%11111100
+    ora #%00000011
+    sta $dd00
+    lda #$1b
+    sta $d011
+    lda #$c8
+    sta $d016
+    lda #$1a
+    sta $d018
+    lda #$00
+    sta $d020
+    sta $d021
+    lda #$00
+    jsr clear_text_screen
+    lda #$0c
+    jsr fill_color_ram
+    jsr draw_hires_background
+    jsr init_hires_sprites
+    lda #$00
+    sta column_dir
+    sta effect_timer
+    lda #$00
+    sta column_phase
+    lda #$2f
+    sta column_left_y
+    lda #$40
+    sta column_right_y
+    jsr reposition_hires_trails
+    rts
+
+draw_hires_background:
+    lda #<SCREEN
+    sta scr_ptr
+    lda #>SCREEN
+    sta scr_ptr+1
+    lda #$00
+    sta row_counter
+hires_bg_row:
+    ldx #$00
+    ldy #$00
+hires_bg_col:
+    lda hires_row_clear, x
+    sta (scr_ptr), y
+    inx
+    cpx #5
+    bne hires_bg_no_wrap
+    ldx #$00
+hires_bg_no_wrap:
+    iny
+    cpy #40
+    bne hires_bg_col
+    clc
+    lda scr_ptr
+    adc #40
+    sta scr_ptr
+    bcc hires_bg_row_ok
+    inc scr_ptr+1
+hires_bg_row_ok:
+    inc row_counter
+    lda row_counter
+    cmp #25
+    bne hires_bg_row
+
+    ldx #$00
+    ldy #$00
+hires_hline:
+    lda hires_row_horizontal, y
+    sta SCREEN+$28*4, x
+    sta SCREEN+$28*8, x
+    sta SCREEN+$28*12, x
+    sta SCREEN+$28*16, x
+    sta SCREEN+$28*20, x
+    iny
+    cpy #5
+    bne hires_hline_nowrap
+    ldy #$00
+hires_hline_nowrap:
+    inx
+    cpx #40
+    bne hires_hline
+    rts
+
+init_hires_sprites:
+    lda #$00
+    sta $d01c
+    sta $d01d
+    sta $d017
+    lda #$ff
+    sta $d01b
+    sta $d015
+
+    lda #SPRITES_PTR
+    sta SCREEN+$03f8
+    lda #SPRITES_PTR+1
+    sta SCREEN+$03f9
+    sta SCREEN+$03fa
+    sta SCREEN+$03fb
+    sta SCREEN+$03fc
+    sta SCREEN+$03fd
+    sta SCREEN+$03fe
+    lda #SPRITES_PTR+2
+    sta SCREEN+$03ff
+
+    lda #$00
+    sta $d010
+
+    lda #$97
+    sta $d000
+    sta $d002
+    sta $d004
+    sta $d006
+    lda #$c7
+    sta $d008
+    sta $d00a
+    sta $d00c
+    sta $d00e
+
+    ldx #$00
+hires_sprite_colors:
+    lda #$0c
+    sta $d027, x
+    inx
+    cpx #8
+    bne hires_sprite_colors
+    rts
+
+update_hires:
+    lda column_phase
+    tax
+    lda hires_accel, x
+    sta tmp0
+    lda #$40
+    sec
+    sbc tmp0
+    sta column_left_y
+    lda #$40
+    clc
+    adc tmp0
+    sta column_right_y
+    jsr reposition_hires_trails
+
+    lda column_dir
+    beq hires_phase_down
+    dec column_phase
+    lda column_phase
+    bne hires_done
+    lda #$00
+    sta column_dir
+    beq hires_done
+hires_phase_down:
+    inc column_phase
+    lda column_phase
+    cmp #23
+    bcc hires_done
+    lda #$01
+    sta column_dir
+hires_done:
+    jmp main_loop
+
+reposition_hires_trails:
+    ldx #$00
+    lda column_left_y
+    sta tmp0
+    ldy #$00
+hires_left_y:
+    lda tmp0
+    sta $d001, x
+    clc
+    adc #21
+    sta tmp0
+    inx
+    inx
+    iny
+    cpy #4
+    bne hires_left_y
+
+    ldx #$00
+    lda column_right_y
+    sta tmp0
+    ldy #$00
+hires_right_y:
+    lda tmp0
+    sta $d009, x
+    clc
+    adc #21
+    sta tmp0
+    inx
+    inx
+    iny
+    cpy #4
+    bne hires_right_y
+    rts
+
+disable_raster_irq:
+    sei
+    lda #$00
+    sta $d01a
+    lda #$ff
+    sta $d019
+    rts
+
+menu_colors:
+!byte $0e,$03,$01,$07,$0d,$05,$0a,$0f
+
+bitmap_border_colors:
+!byte $00,$06,$0b,$04,$0c,$0e,$03,$01
+
+metalux_ramp:
+!byte $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f
+
+metalux_palette:
+!byte $06,$0e,$03,$01,$0d,$05,$0a,$0f,$07,$08,$02,$09,$04,$0c,$0b,$01
+
+pv_left_columns:
+!byte 19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0
+
+pv_right_columns:
+!byte 20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39
+
+hires_row_clear:
+!byte 0,0,0,1,0
+
+hires_row_horizontal:
+!byte 2,2,2,3,2
+
+hires_accel:
+!byte $10,$0f,$0e,$0e,$0d,$0d,$0c,$0b,$0a,$09,$08,$07,$07,$06,$05,$04
+!byte $04,$03,$03,$02,$02,$01,$01,$00
+
+razor_screen_plasma:
+!byte $16,$1e,$3e,$3d,$5d,$5a,$7a,$7f,$af,$a7,$97,$9b,$bb,$b3,$63,$61
+
+razor_color_plasma:
+!byte $00,$06,$0b,$04,$0c,$0e,$03,$01,$0d,$05,$0a,$0f,$07,$08,$02,$09
+
+swcode_name:
+!text "SWCODE"
+swcode_name_end:
+swscreen_name:
+!text "SWSCREEN"
+swscreen_name_end:
+swfont_name:
+!text "SWFONT"
+swfont_name_end:
+swtext_name:
+!text "SWTEXT"
+swtext_name_end:
+swsprites_name:
+!text "SWSPRITES"
+swsprites_name_end:
+swbase_name:
+!text "SWBASE"
+swbase_name_end:
+swmusic_name:
+!text "SWMUSIC"
+swmusic_name_end:
+swdisk_name:
+!text "SWDISK"
+swdisk_name_end:
+
+!ct scr
+starwars_load_error_text:
+!text "star load error 0"
+!byte 0
+
+menu_title:
+!text "nobounds plasma and graphics menu"
+!byte 0
+menu_line_1:
+!text "1  metalux plasma  (xmarksthespot)"
+!byte 0
+menu_line_2:
+!text "2  razorback column fade (nobounds)"
+!byte 0
+menu_line_3:
+!text "3  razorback bitmap view (nobounds)"
+!byte 0
+menu_line_4:
+!text "4  hiresloader columns (nobounds)"
+!byte 0
+menu_line_5:
+!text "5  razorback plasma background"
+!byte 0
+menu_line_6:
+!text "6  starwars scroller (nobounds)"
+!byte 0
+menu_footer_1:
+!text "press 1 to 6 to switch modes"
+!byte 0
+menu_footer_2:
+!text "press space from any effect to return"
+!byte 0
+
+!ct raw
+
+metalux_xbuf:
+!fill 40, 0
+metalux_ybuf:
+!fill 25, 0
+
+metalux_xofs_a:
+!byte $00,$05,$0a,$0f,$14,$19,$1e,$23,$28,$2d,$32,$37,$3c,$41,$46,$4b
+!byte $50,$55,$5a,$5f,$64,$69,$6e,$73,$78,$7d,$82,$87,$8c,$91,$96,$9b
+!byte $a0,$a5,$aa,$af,$b4,$b9,$be,$c3
+
+metalux_xofs_b:
+!byte $00,$04,$08,$0c,$10,$14,$18,$1c,$20,$24,$28,$2c,$30,$34,$38,$3c
+!byte $40,$44,$48,$4c,$50,$54,$58,$5c,$60,$64,$68,$6c,$70,$74,$78,$7c
+!byte $80,$84,$88,$8c,$90,$94,$98,$9c
+
+metalux_yofs_a:
+!byte $00,$03,$06,$09,$0c,$0f,$12,$15,$18,$1b,$1e,$21,$24,$27,$2a,$2d
+!byte $30,$33,$36,$39,$3c,$3f,$42,$45,$48
+
+metalux_yofs_b:
+!byte $00,$02,$04,$06,$08,$0a,$0c,$0e,$10,$12,$14,$16,$18,$1a,$1c,$1e
+!byte $20,$22,$24,$26,$28,$2a,$2c,$2e,$30
+
+metalux_sin:
+!byte $40,$42,$43,$45,$46,$48,$49,$4b,$4c,$4e,$4f,$51,$52,$54,$55,$57
+!byte $58,$5a,$5b,$5c,$5e,$5f,$60,$62,$63,$64,$66,$67,$68,$69,$6a,$6b
+!byte $6d,$6e,$6f,$70,$71,$72,$73,$74,$74,$75,$76,$77,$78,$78,$79,$7a
+!byte $7a,$7b,$7b,$7c,$7c,$7d,$7d,$7d,$7e,$7e,$7e,$7f,$7f,$7f,$7f,$7f
+!byte $7f,$7f,$7f,$7f,$7f,$7f,$7e,$7e,$7e,$7d,$7d,$7d,$7c,$7c,$7b,$7b
+!byte $7a,$7a,$79,$78,$78,$77,$76,$75,$74,$74,$73,$72,$71,$70,$6f,$6e
+!byte $6d,$6b,$6a,$69,$68,$67,$66,$64,$63,$62,$60,$5f,$5e,$5c,$5b,$5a
+!byte $58,$57,$55,$54,$52,$51,$4f,$4e,$4c,$4b,$49,$48,$46,$45,$43,$42
+!byte $40,$3e,$3d,$3b,$3a,$38,$37,$35,$34,$32,$31,$2f,$2e,$2c,$2b,$29
+!byte $28,$26,$25,$24,$22,$21,$20,$1e,$1d,$1c,$1a,$19,$18,$17,$16,$15
+!byte $13,$12,$11,$10,$0f,$0e,$0d,$0c,$0c,$0b,$0a,$09,$08,$08,$07,$06
+!byte $06,$05,$05,$04,$04,$03,$03,$03,$02,$02,$02,$01,$01,$01,$01,$01
+!byte $01,$01,$01,$01,$01,$01,$02,$02,$02,$03,$03,$03,$04,$04,$05,$05
+!byte $06,$06,$07,$08,$08,$09,$0a,$0b,$0c,$0c,$0d,$0e,$0f,$10,$11,$12
+!byte $13,$15,$16,$17,$18,$19,$1a,$1c,$1d,$1e,$20,$21,$22,$24,$25,$26
+!byte $28,$29,$2b,$2c,$2e,$2f,$31,$32,$34,$35,$37,$38,$3a,$3b,$3d,$3e
+
+* = $2800
+hires_charset:
+!byte $00,$00,$00,$00,$00,$00,$00,$00
+!byte $80,$80,$80,$80,$80,$80,$80,$80
+!byte $00,$00,$ff,$00,$00,$00,$00,$00
+!byte $80,$80,$ff,$80,$80,$80,$80,$80
+!fill $800-32, 0
+
+* = $3000
+metalux_charset:
+!byte $00,$00,$00,$00,$00,$00,$00,$00
+!byte $88,$00,$00,$00,$88,$00,$00,$00
+!byte $88,$00,$22,$00,$88,$00,$22,$00
+!byte $aa,$00,$22,$00,$aa,$00,$22,$00
+!byte $aa,$00,$aa,$00,$aa,$00,$aa,$00
+!byte $aa,$44,$aa,$00,$aa,$44,$aa,$00
+!byte $aa,$44,$aa,$11,$aa,$44,$aa,$11
+!byte $aa,$55,$aa,$11,$aa,$55,$aa,$11
+!byte $aa,$55,$aa,$55,$aa,$55,$aa,$55
+!byte $ee,$55,$aa,$55,$ee,$55,$aa,$55
+!byte $ee,$55,$bb,$55,$ee,$55,$bb,$55
+!byte $ff,$55,$bb,$55,$ff,$55,$bb,$55
+!byte $ff,$55,$ff,$55,$ff,$55,$ff,$55
+!byte $ff,$dd,$ff,$55,$ff,$dd,$ff,$55
+!byte $ff,$dd,$ff,$77,$ff,$dd,$ff,$77
+!byte $ff,$ff,$ff,$77,$ff,$ff,$ff,$77
+!fill $800-128, 0
+
+* = $3800
+sprite_image_0:
+!byte $00,$18,$00,$00,$3c,$00,$00,$7e,$00,$00,$ff,$00,$01,$ff,$80,$03
+!byte $ff,$c0,$07,$ff,$e0,$0f,$ff,$f0,$1f,$ff,$f8,$3f,$ff,$fc,$7f,$ff
+!byte $fe,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$01
+sprite_image_1:
+!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$01
+sprite_image_2:
+!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$7f,$ff
+!byte $fe,$3f,$ff,$fc,$1f,$ff,$f8,$0f,$ff,$f0,$07,$ff,$e0,$03,$ff,$c0
+!byte $01,$ff,$80,$00,$ff,$00,$00,$7e,$00,$00,$3c,$00,$00,$18,$00,$01
+
+* = $4000
+bitmap_map:
+!bin "src/assets/razorbackunbound.map"
+
+* = $9000
+bitmap_screen_shadow:
+!bin "src/assets/razorbackunbound.scr"
+
+* = $9400
+bitmap_color_shadow:
+!bin "src/assets/razorbackunbound.col"
+
+* = $9800
+combined_map_shadow:
+!bin "src/assets/combinedbitmap.map"
+
+* = $c000
+starwars_bootstrap:
+    sei
+    lda #$00
+    sta $d01a
+    sta $d015
+    lda #$7f
+    sta $dc0d
+    sta $dd0d
+    lda $dc0d
+    lda $dd0d
+    lda #$37
+    sta $01
+    cli
+
+    lda #$01
+    sta star_load_step
+    lda #boot_swcode_name_end - boot_swcode_name
+    ldx #<boot_swcode_name
+    ldy #>boot_swcode_name
+    jsr starwars_boot_load
+
+    inc star_load_step
+    lda #boot_swscreen_name_end - boot_swscreen_name
+    ldx #<boot_swscreen_name
+    ldy #>boot_swscreen_name
+    jsr starwars_boot_load
+
+    inc star_load_step
+    lda #boot_swfont_name_end - boot_swfont_name
+    ldx #<boot_swfont_name
+    ldy #>boot_swfont_name
+    jsr starwars_boot_load
+
+    inc star_load_step
+    lda #boot_swtext_name_end - boot_swtext_name
+    ldx #<boot_swtext_name
+    ldy #>boot_swtext_name
+    jsr starwars_boot_load
+
+    inc star_load_step
+    lda #boot_swsprites_name_end - boot_swsprites_name
+    ldx #<boot_swsprites_name
+    ldy #>boot_swsprites_name
+    jsr starwars_boot_load
+
+    inc star_load_step
+    lda #boot_swbase_name_end - boot_swbase_name
+    ldx #<boot_swbase_name
+    ldy #>boot_swbase_name
+    jsr starwars_boot_load
+
+    inc star_load_step
+    lda #boot_swmusic_name_end - boot_swmusic_name
+    ldx #<boot_swmusic_name
+    ldy #>boot_swmusic_name
+    jsr starwars_boot_load
+
+    inc star_load_step
+    lda #boot_swdisk_name_end - boot_swdisk_name
+    ldx #<boot_swdisk_name
+    ldy #>boot_swdisk_name
+    jsr starwars_boot_load
+
+    sei
+    lda #$00
+    sta $fe
+    sta $ff
+    sta $088f       ; PartDone
+    sta $08ff       ; full-demo marker: clear = standalone, scroll loops forever
+    jsr $0900
+    lda $dd00
+    and #%11111100
+    sta $dd00
+    lda #$3f
+    sta $dd02
+    lda #<starwars_nmi_rti
+    sta $fffa
+    lda #>starwars_nmi_rti
+    sta $fffb
+    lda #$35
+    sta $01
+
+    ; Phase-lock CIA2 Timer B to the raster (63 cycles per line).
+    ; The part's stable-raster IRQs read $dd06 for jitter compensation;
+    ; in the original demo this is done by Entry.prg (PreDemoSetup,
+    ; borrowed from Spindle by lft).
+starwars_timerb_vblank:
+    bit $d011
+    bmi starwars_timerb_vblank
+starwars_timerb_wait:
+    bit $d011
+    bpl starwars_timerb_wait
+    ldx $d012
+    inx
+starwars_timerb_resync:
+    cpx $d012
+    bne starwars_timerb_resync
+    ldy #$00
+    sty $dd07
+    lda #62
+    sta $dd06
+    iny
+    sty $d01a
+    dey
+    dey
+    sty $dc02
+    cmp ($00,x)
+    cmp ($00,x)
+    cmp ($00,x)
+    lda #$11
+    sta $dd0f
+    txa
+    inx
+    inx
+    cmp $d012
+    bne starwars_timerb_resync
+
+    jsr STARWARS_GO
+    lda #$37
+    sta $01
+    jmp ($fffc)
+
+starwars_nmi_rti:
+    rti
+
+starwars_boot_load:
+    jsr KERNAL_SETNAM
+    lda #$01
+    ldx #$08
+    ldy #$01
+    jsr KERNAL_SETLFS
+    lda #$00
+    tax
+    tay
+    jsr KERNAL_LOAD
+    bcs starwars_boot_error
+    rts
+
+starwars_boot_error:
+    lda #$02
+    sta $d020
+    lda star_load_step
+    sta $d021
+starwars_boot_error_loop:
+    jmp starwars_boot_error_loop
+
+boot_swcode_name:
+!text "SWCODE"
+boot_swcode_name_end:
+boot_swscreen_name:
+!text "SWSCREEN"
+boot_swscreen_name_end:
+boot_swfont_name:
+!text "SWFONT"
+boot_swfont_name_end:
+boot_swtext_name:
+!text "SWTEXT"
+boot_swtext_name_end:
+boot_swsprites_name:
+!text "SWSPRITES"
+boot_swsprites_name_end:
+boot_swbase_name:
+!text "SWBASE"
+boot_swbase_name_end:
+boot_swmusic_name:
+!text "SWMUSIC"
+boot_swmusic_name_end:
+boot_swdisk_name:
+!text "SWDISK"
+boot_swdisk_name_end:
