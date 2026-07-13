@@ -18,10 +18,14 @@ fi
 
 cd "$ROOT_DIR"
 python3 scripts/generate_tables.py
+python3 scripts/generate_sid_frequency_table.py
+python3 scripts/generate_starwars_sid_frames.py
 acme src/main.a
 acme -DSPARKLE_PAYLOAD=1 src/main.a
 acme src/starwars_loader.a
 acme src/starwars_direct.a
+acme src/music/starwars_40s.a
+python3 scripts/package_sid.py
 echo "Built build/bangalore.prg ($(stat -f%z build/bangalore.prg) bytes)"
 echo "Built build/bangalore-sparkle-part.prg ($(stat -f%z build/bangalore-sparkle-part.prg) bytes)"
 echo "Built build/bangalore-loader.prg ($(stat -f%z build/bangalore-loader.prg) bytes)"
