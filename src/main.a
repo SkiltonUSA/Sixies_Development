@@ -1,0 +1,330 @@
+; Bangalore Star Wars scroller intro
+; Inspired by https://c64demo.com/star-wars-scrollers/ and the Nobounds
+; StarWars part referenced by the repo's Nobounds branch.
+
+!to "build/bangalore-lite.prg", cbm
+
+SCREEN = $0400
+COLOR_RAM = $d800
+
+frame = $02
+scroll_tick = $03
+scroll_phase = $04
+row_index = $05
+copy_count = $06
+tmp_color = $07
+tmp_index = $08
+src_ptr = $fb
+dst_ptr = $fd
+col_ptr = $f9
+
+* = $0801
+!byte $0c,$08,$0a,$00,$9e
+!text "2061"
+!byte $00,$00,$00
+
+* = $080d
+entry:
+    sei
+    ldx #$ff
+    txs
+    lda #$7f
+    sta $dc0d
+    sta $dd0d
+    lda $dc0d
+    lda $dd0d
+    lda #$00
+    sta $d01a
+    lda #$ff
+    sta $d019
+
+    lda #$1b
+    sta $d011
+    lda #$08
+    sta $d016
+    lda #$14
+    sta $d018
+    lda #$00
+    sta $d015
+    sta $d020
+    sta $d021
+    sta frame
+    sta scroll_tick
+    lda #CRAWL_SPAN
+    sta scroll_phase
+
+main_loop:
+    jsr wait_frame
+    inc frame
+    inc scroll_tick
+    lda scroll_tick
+    and #$1f
+    bne render_only
+    inc scroll_phase
+    lda scroll_phase
+    cmp #NUM_LINES
+    bne render_only
+    lda #$00
+    sta scroll_phase
+render_only:
+    jsr render_frame
+    jmp main_loop
+
+wait_frame:
+wf0:
+    lda $d012
+    cmp #$f8
+    bne wf0
+wf1:
+    lda $d012
+    cmp #$f8
+    beq wf1
+    rts
+
+render_frame:
+    jsr clear_screen
+    jsr draw_stars
+    jsr draw_titles
+    jsr draw_crawl
+    jsr draw_reflection
+    rts
+
+clear_screen:
+    ldx #$00
+    lda #$20
+clear_screen_loop:
+    sta SCREEN,x
+    sta SCREEN+$100,x
+    sta SCREEN+$200,x
+    sta SCREEN+$300,x
+    inx
+    bne clear_screen_loop
+
+    ldx #$00
+    lda #$00
+clear_color_loop:
+    sta COLOR_RAM,x
+    sta COLOR_RAM+$100,x
+    sta COLOR_RAM+$200,x
+    sta COLOR_RAM+$300,x
+    inx
+    bne clear_color_loop
+    rts
+
+draw_titles:
+    ldx #$00
+draw_title_loop:
+    stx row_index
+    lda title_line_lo,x
+    sta src_ptr
+    lda title_line_hi,x
+    sta src_ptr+1
+    lda title_screen_lo,x
+    sta dst_ptr
+    lda title_screen_hi,x
+    sta dst_ptr+1
+    lda title_color_lo,x
+    sta col_ptr
+    lda title_color_hi,x
+    sta col_ptr+1
+    lda title_colors,x
+    sta tmp_color
+    ldy #$00
+draw_title_chars:
+    lda (src_ptr),y
+    sta (dst_ptr),y
+    lda tmp_color
+    sta (col_ptr),y
+    iny
+    cpy #40
+    bne draw_title_chars
+    ldx row_index
+    inx
+    cpx #2
+    bne draw_title_loop
+    rts
+
+draw_stars:
+    ldx #$00
+draw_star_loop:
+    stx row_index
+    lda star_pos_lo,x
+    sta dst_ptr
+    lda star_pos_hi,x
+    sta dst_ptr+1
+    lda star_color_lo,x
+    sta col_ptr
+    lda star_color_hi,x
+    sta col_ptr+1
+    txa
+    clc
+    adc frame
+    and #$03
+    tax
+    lda star_chars,x
+    ldy #$00
+    sta (dst_ptr),y
+    lda star_colors,x
+    sta (col_ptr),y
+    ldx row_index
+    inx
+    cpx #STAR_COUNT
+    bne draw_star_loop
+    rts
+
+draw_crawl:
+    ldx #$00
+crawl_row_loop:
+    stx row_index
+    ; far rows show earlier text lines, so the crawl climbs toward the horizon
+    lda scroll_phase
+    sec
+    sbc crawl_offsets,x
+    bcs crawl_index_ready
+    adc #NUM_LINES
+crawl_index_ready:
+    tay
+    lda crawl_line_lo,y
+    sta src_ptr
+    lda crawl_line_hi,y
+    sta src_ptr+1
+
+    ldx row_index
+    lda crawl_starts,x
+    jsr add_to_src
+    ldx row_index
+    lda crawl_screen_rows_lo,x
+    sta dst_ptr
+    lda crawl_screen_rows_hi,x
+    sta dst_ptr+1
+    lda crawl_starts,x
+    jsr add_to_dst
+    ldx row_index
+    lda crawl_color_rows_lo,x
+    sta col_ptr
+    lda crawl_color_rows_hi,x
+    sta col_ptr+1
+    lda crawl_starts,x
+    jsr add_to_col
+
+    ldx row_index
+    lda crawl_widths,x
+    sta copy_count
+    lda crawl_colors,x
+    sta tmp_color
+    jsr copy_text_span
+    ldx row_index
+    inx
+    cpx #CRAWL_ROWS
+    bne crawl_row_loop
+    rts
+
+draw_reflection:
+    ldx #$00
+reflect_row_loop:
+    stx row_index
+    ; mirror the nearest crawl rows below the plane
+    lda scroll_phase
+    sec
+    sbc reflect_offsets,x
+    bcs reflect_index_ready
+    adc #NUM_LINES
+reflect_index_ready:
+    tay
+    lda crawl_line_lo,y
+    sta src_ptr
+    lda crawl_line_hi,y
+    sta src_ptr+1
+
+    ldx row_index
+    lda reflect_starts,x
+    sta tmp_index
+    lda frame
+    and #$01
+    clc
+    adc tmp_index
+    jsr add_to_src
+    ldx row_index
+    lda reflect_screen_rows_lo,x
+    sta dst_ptr
+    lda reflect_screen_rows_hi,x
+    sta dst_ptr+1
+    lda reflect_starts,x
+    sta tmp_index
+    lda frame
+    and #$01
+    clc
+    adc tmp_index
+    jsr add_to_dst
+    ldx row_index
+    lda reflect_color_rows_lo,x
+    sta col_ptr
+    lda reflect_color_rows_hi,x
+    sta col_ptr+1
+    lda reflect_starts,x
+    sta tmp_index
+    lda frame
+    and #$01
+    clc
+    adc tmp_index
+    jsr add_to_col
+
+    ldx row_index
+    lda reflect_widths,x
+    sta copy_count
+    lda reflect_colors,x
+    sta tmp_color
+    jsr copy_text_span
+    ldx row_index
+    inx
+    cpx #REFLECT_ROWS
+    bne reflect_row_loop
+    rts
+
+copy_text_span:
+    ldy #$00
+copy_text_loop:
+    lda (src_ptr),y
+    sta (dst_ptr),y
+    lda tmp_color
+    sta (col_ptr),y
+    iny
+    cpy copy_count
+    bne copy_text_loop
+    rts
+
+add_to_src:
+    clc
+    adc src_ptr
+    sta src_ptr
+    bcc add_to_src_done
+    inc src_ptr+1
+add_to_src_done:
+    rts
+
+add_to_dst:
+    clc
+    adc dst_ptr
+    sta dst_ptr
+    bcc add_to_dst_done
+    inc dst_ptr+1
+add_to_dst_done:
+    rts
+
+add_to_col:
+    clc
+    adc col_ptr
+    sta col_ptr
+    bcc add_to_col_done
+    inc col_ptr+1
+add_to_col_done:
+    rts
+
+star_chars:
+    !byte $20,$2e,$2a,$2e
+star_colors:
+    !byte $00,$0b,$01,$0f
+title_colors:
+    !byte $01,$07
+
+!source "src/generated/starwars_tables.inc"

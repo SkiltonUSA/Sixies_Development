@@ -1,0 +1,82 @@
+; Direct runner for local VICE runs.
+; The run script preloads all companion PRGs through the VICE monitor, then
+; jumps here. This avoids slow or fragile KERNAL runtime loads.
+
+!to "build/bangalore-direct.prg", cbm
+
+STARWARS_GO = $9fcc
+
+* = $c000
+entry:
+    sei
+    lda #$00
+    sta $d01a
+    sta $d015
+
+    ; The KERNAL leaves CIA1 Timer A enabled for its jiffy-clock IRQ. Once the
+    ; StarWars part installs its own hardware IRQ vector, an unacknowledged CIA
+    ; IRQ would enter that raster handler immediately (rather than at line 50)
+    ; and prevent the raster chain from ever reaching the music/frame update.
+    lda #$7f
+    sta $dc0d
+    sta $dd0d
+    lda $dc0d
+    lda $dd0d
+
+    lda #$00
+    sta $fe
+    sta $ff
+    sta $088f       ; PartDone from DISK-StarWars.prg
+    sta $08ff       ; standalone marker: clear means loop forever
+    jsr $0900       ; SID init
+    lda $dd00
+    and #%11111100
+    sta $dd00
+    lda #$3f
+    sta $dd02
+    lda #<nmi_rti
+    sta $fffa
+    lda #>nmi_rti
+    sta $fffb
+    lda #$35
+    sta $01
+
+timerb_vblank:
+    bit $d011
+    bmi timerb_vblank
+timerb_wait:
+    bit $d011
+    bpl timerb_wait
+    ldx $d012
+    inx
+timerb_resync:
+    cpx $d012
+    bne timerb_resync
+    ldy #$00
+    sty $dd07
+    lda #62
+    sta $dd06
+    iny
+    sty $d01a
+    dey
+    dey
+    sty $dc02
+    cmp ($00,x)
+    cmp ($00,x)
+    cmp ($00,x)
+    lda #$11
+    sta $dd0f
+    txa
+    inx
+    inx
+    cmp $d012
+    bne timerb_resync
+
+    jsr STARWARS_GO
+    lda #$37
+    sta $01
+hold:
+    jmp hold
+
+nmi_rti:
+    rti

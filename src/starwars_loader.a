@@ -1,0 +1,329 @@
+; Standalone loader for the generated Nobounds / Genesis Project StarWars part.
+; It vendors the generated binary part files into a D64 and starts the real
+; pixel-level perspective scroller at $9fcc.
+
+!to "build/bangalore.prg", cbm
+
+KERNAL_SETLFS = $ffba
+KERNAL_SETNAM = $ffbd
+KERNAL_CLOSE  = $ffc3
+KERNAL_CLRCHN = $ffcc
+KERNAL_LOAD   = $ffd5
+
+STARWARS_GO = $9fcc
+SCREEN = $0400
+COLOR_RAM = $d800
+BOOT_SRC = $fb
+BOOT_DST = $fd
+LOADER_DEST = $c000
+
+* = $0801
+!byte $0c,$08,$0a,$00,$9e
+!text "2061"
+!byte $00,$00,$00
+
+* = $080d
+boot:
+    sei
+    lda #<loader_image
+    sta BOOT_SRC
+    lda #>loader_image
+    sta BOOT_SRC+1
+    lda #<LOADER_DEST
+    sta BOOT_DST
+    lda #>LOADER_DEST
+    sta BOOT_DST+1
+    lda #<loader_size
+    sta copy_remaining
+    lda #>loader_size
+    sta copy_remaining+1
+
+copy_loader:
+    ldy #$00
+    lda (BOOT_SRC),y
+    sta (BOOT_DST),y
+    inc BOOT_SRC
+    bne copy_src_ok
+    inc BOOT_SRC+1
+copy_src_ok:
+    inc BOOT_DST
+    bne copy_dst_ok
+    inc BOOT_DST+1
+copy_dst_ok:
+    lda copy_remaining
+    bne copy_dec_lo
+    dec copy_remaining+1
+copy_dec_lo:
+    dec copy_remaining
+    lda copy_remaining
+    ora copy_remaining+1
+    bne copy_loader
+    jmp LOADER_DEST
+
+copy_remaining:
+    !word $0000
+
+loader_image:
+!pseudopc LOADER_DEST {
+entry:
+    sei
+    lda #$00
+    sta $d01a
+    sta $d015
+    lda #$37
+    sta $01
+    cli
+    jsr init_status_screen
+
+    lda #$01
+    sta load_step
+    jsr show_load_step
+    lda #swcode_name_end - swcode_name
+    ldx #<swcode_name
+    ldy #>swcode_name
+    jsr load_file
+
+    inc load_step
+    jsr show_load_step
+    lda #swscreen_name_end - swscreen_name
+    ldx #<swscreen_name
+    ldy #>swscreen_name
+    jsr load_file
+
+    inc load_step
+    jsr show_load_step
+    lda #swfont_name_end - swfont_name
+    ldx #<swfont_name
+    ldy #>swfont_name
+    jsr load_file
+
+    inc load_step
+    jsr show_load_step
+    lda #swtext_name_end - swtext_name
+    ldx #<swtext_name
+    ldy #>swtext_name
+    jsr load_file
+
+    inc load_step
+    jsr show_load_step
+    lda #swsprites_name_end - swsprites_name
+    ldx #<swsprites_name
+    ldy #>swsprites_name
+    jsr load_file
+
+    inc load_step
+    jsr show_load_step
+    lda #swbase_name_end - swbase_name
+    ldx #<swbase_name
+    ldy #>swbase_name
+    jsr load_file
+
+    inc load_step
+    jsr show_load_step
+    lda #swmusic_name_end - swmusic_name
+    ldx #<swmusic_name
+    ldy #>swmusic_name
+    jsr load_file
+
+    inc load_step
+    jsr show_load_step
+    lda #swdisk_name_end - swdisk_name
+    ldx #<swdisk_name
+    ldy #>swdisk_name
+    jsr load_file
+
+    lda #$09
+    sta load_step
+    jsr show_load_step
+    sei
+    lda #$7f
+    sta $dc0d
+    sta $dd0d
+    lda $dc0d
+    lda $dd0d
+    lda #$00
+    sta $fe
+    sta $ff
+    sta $088f       ; PartDone from DISK-StarWars.prg
+    sta $08ff       ; standalone marker: clear means loop forever
+    jsr $0900       ; SID init
+    lda $dd00
+    and #%11111100
+    sta $dd00
+    lda #$3f
+    sta $dd02
+    lda #<nmi_rti
+    sta $fffa
+    lda #>nmi_rti
+    sta $fffb
+    lda #$35
+    sta $01
+
+    ; Phase-lock CIA2 Timer B to the raster. The Nobounds stable IRQ code reads
+    ; $dd06 for jitter compensation, matching its original full-demo setup.
+timerb_vblank:
+    bit $d011
+    bmi timerb_vblank
+timerb_wait:
+    bit $d011
+    bpl timerb_wait
+    ldx $d012
+    inx
+timerb_resync:
+    cpx $d012
+    bne timerb_resync
+    ldy #$00
+    sty $dd07
+    lda #62
+    sta $dd06
+    iny
+    sty $d01a
+    dey
+    dey
+    sty $dc02
+    cmp ($00,x)
+    cmp ($00,x)
+    cmp ($00,x)
+    lda #$11
+    sta $dd0f
+    txa
+    inx
+    inx
+    cmp $d012
+    bne timerb_resync
+
+    jsr STARWARS_GO
+    lda #$37
+    sta $01
+hold:
+    jmp hold
+
+nmi_rti:
+    rti
+
+init_status_screen:
+    lda #$1b
+    sta $d011
+    lda #$08
+    sta $d016
+    lda #$14
+    sta $d018
+    lda #$06
+    sta $d021
+    lda #$00
+    sta $d020
+    ldx #$00
+    lda #$20
+clear_status_screen:
+    sta SCREEN,x
+    sta SCREEN+$100,x
+    sta SCREEN+$200,x
+    sta SCREEN+$300,x
+    inx
+    bne clear_status_screen
+    ldx #$00
+    lda #$0e
+clear_status_color:
+    sta COLOR_RAM,x
+    sta COLOR_RAM+$100,x
+    sta COLOR_RAM+$200,x
+    sta COLOR_RAM+$300,x
+    inx
+    bne clear_status_color
+    ldx #$00
+status_title_loop:
+    lda status_title,x
+    beq status_title_done
+    sta SCREEN+$00f0,x
+    inx
+    bne status_title_loop
+status_title_done:
+    rts
+
+show_load_step:
+    ldx #$00
+status_step_loop:
+    lda status_step,x
+    beq status_step_done
+    sta SCREEN+$0140,x
+    inx
+    bne status_step_loop
+status_step_done:
+    lda load_step
+    sta $d020
+    clc
+    adc #$30
+    sta SCREEN+$0146
+    rts
+
+load_file:
+    pha
+    txa
+    pha
+    tya
+    pha
+    lda #$02
+    jsr KERNAL_CLOSE
+    jsr KERNAL_CLRCHN
+    pla
+    tay
+    pla
+    tax
+    pla
+    jsr KERNAL_SETNAM
+    lda #$02
+    ldx #$08
+    ldy #$01
+    jsr KERNAL_SETLFS
+    lda #$00
+    tax
+    tay
+    jsr KERNAL_LOAD
+    bcs load_error
+    rts
+
+load_error:
+    lda #$02
+    sta $d020
+    lda load_step
+    sta $d021
+load_error_loop:
+    jmp load_error_loop
+
+load_step:
+    !byte $00
+
+status_title:
+!scr "bangalore starwars loader"
+!byte $00
+status_step:
+!scr "load  0/9"
+!byte $00
+
+swcode_name:
+!text "SWCODE.PRG"
+swcode_name_end:
+swscreen_name:
+!text "SWSCREEN.PRG"
+swscreen_name_end:
+swfont_name:
+!text "SWFONT.PRG"
+swfont_name_end:
+swtext_name:
+!text "SWTEXT.PRG"
+swtext_name_end:
+swsprites_name:
+!text "SWSPRITES.PRG"
+swsprites_name_end:
+swbase_name:
+!text "SWBASE.PRG"
+swbase_name_end:
+swmusic_name:
+!text "SWMUSIC.PRG"
+swmusic_name_end:
+swdisk_name:
+!text "SWDISK.PRG"
+swdisk_name_end:
+}
+
+loader_size = swdisk_name_end - entry
