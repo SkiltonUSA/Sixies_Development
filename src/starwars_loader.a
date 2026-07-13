@@ -2,7 +2,7 @@
 ; It vendors the generated binary part files into a D64 and starts the real
 ; pixel-level perspective scroller at $9fcc.
 
-!to "build/bangalore.prg", cbm
+!to "build/bangalore-loader.prg", cbm
 
 KERNAL_SETLFS = $ffba
 KERNAL_SETNAM = $ffbd

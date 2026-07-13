@@ -7,4 +7,7 @@ run:
 setup:
 	./scripts/setup.sh
 
-.PHONY: build run setup
+sparkle:
+	./scripts/build_sparkle.sh
+
+.PHONY: build run setup sparkle

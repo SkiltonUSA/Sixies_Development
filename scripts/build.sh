@@ -17,11 +17,14 @@ if ! command -v acme >/dev/null 2>&1; then
 fi
 
 cd "$ROOT_DIR"
-python3 scripts/generate_tables.py > src/generated/starwars_tables.inc
+python3 scripts/generate_tables.py
 acme src/main.a
+acme -DSPARKLE_PAYLOAD=1 src/main.a
 acme src/starwars_loader.a
 acme src/starwars_direct.a
 echo "Built build/bangalore.prg ($(stat -f%z build/bangalore.prg) bytes)"
+echo "Built build/bangalore-sparkle-part.prg ($(stat -f%z build/bangalore-sparkle-part.prg) bytes)"
+echo "Built build/bangalore-loader.prg ($(stat -f%z build/bangalore-loader.prg) bytes)"
 echo "Built build/bangalore-direct.prg ($(stat -f%z build/bangalore-direct.prg) bytes)"
 echo "Built build/bangalore-lite.prg ($(stat -f%z build/bangalore-lite.prg) bytes)"
 
@@ -62,7 +65,7 @@ fi
 if [[ -n "$C1541_BIN" ]]; then
   rm -f build/bangalore.d64
   "$C1541_BIN" -format "bangalore,01" d64 build/bangalore.d64 \
-    -write build/bangalore.prg BANGALORE \
+    -write build/bangalore-loader.prg BANGALORE \
     -write build/SWCODE.PRG SWCODE.PRG \
     -write build/SWSCREEN.PRG SWSCREEN.PRG \
     -write build/SWFONT.PRG SWFONT.PRG \
@@ -82,3 +85,5 @@ if command -v exomizer >/dev/null 2>&1; then
 else
   echo "exomizer not found; skipping crunched build (brew install exomizer)"
 fi
+
+python3 scripts/generate_sparkle_sls.py

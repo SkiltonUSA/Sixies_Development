@@ -1,27 +1,31 @@
-; Bangalore Star Wars scroller intro
-; Inspired by https://c64demo.com/star-wars-scrollers/ and the Nobounds
-; StarWars part referenced by the repo's Nobounds branch.
+; Bangalore Star Wars scroller intro -- bitmap perspective version.
+; Technique ported from the NoBounds public release (StarWars.cpp/.asm)
+; and https://c64demo.com/star-wars-scrollers/:
+;   - hires bitmap, background = 1-bits, ink = 0-bits (glyphs AND together)
+;   - 16 cyclic 256-byte column buffers of font-row indices
+;   - generated unrolled plotter with perspective bit-picked FontData
 
-!to "build/bangalore-lite.prg", cbm
+!ifdef SPARKLE_PAYLOAD {
+    !to "build/bangalore-sparkle-part.prg", cbm
+} else {
+    !to "build/bangalore.prg", cbm
+}
 
-SCREEN = $0400
-COLOR_RAM = $d800
+SCREEN = $c000                  ; VIC bank 3, screen offset $0000
+BITMAP = $e000                  ; VIC bank 3, bitmap offset $2000
+SCROLL_DATA = $7000             ; 16 pages, CPU-only (VIC never reads these)
 
-frame = $02
-scroll_tick = $03
-scroll_phase = $04
-row_index = $05
-copy_count = $06
-tmp_color = $07
-tmp_index = $08
-src_ptr = $fb
-dst_ptr = $fd
-col_ptr = $f9
+text_ptr = $fb
+row_counter = $02
+col_save = $03
+tmp = $04
 
-* = $0801
-!byte $0c,$08,$0a,$00,$9e
-!text "2061"
-!byte $00,$00,$00
+!ifndef SPARKLE_PAYLOAD {
+    * = $0801
+    !byte $0c,$08,$0a,$00,$9e
+    !text "2061"
+    !byte $00,$00,$00
+}
 
 * = $080d
 entry:
@@ -38,36 +42,103 @@ entry:
     lda #$ff
     sta $d019
 
-    lda #$1b
+    lda $dd00
+    and #$fc                    ; VIC bank 3 ($c000-$ffff)
+    sta $dd00
+    lda #$3b                    ; bitmap mode on
     sta $d011
     lda #$08
     sta $d016
-    lda #$14
+    lda #$08                    ; screen $c000, bitmap $e000
     sta $d018
     lda #$00
     sta $d015
     sta $d020
-    sta $d021
-    sta frame
-    sta scroll_tick
-    lda #CRAWL_SPAN
-    sta scroll_phase
+
+; bitmap: fill $e000-$ffff with $ff (all background)
+    lda #<BITMAP
+    sta text_ptr
+    lda #>BITMAP
+    sta text_ptr+1
+    ldx #$20
+    lda #$ff
+    ldy #$00
+clear_bitmap_page:
+    sta (text_ptr),y
+    iny
+    bne clear_bitmap_page
+    inc text_ptr+1
+    dex
+    bne clear_bitmap_page
+
+; screen RAM: one colour byte per char row
+    lda #<SCREEN
+    sta text_ptr
+    lda #>SCREEN
+    sta text_ptr+1
+    ldx #$00
+screen_row_loop:
+    lda screen_row_colors,x
+    ldy #39
+screen_col_loop:
+    sta (text_ptr),y
+    dey
+    bpl screen_col_loop
+    lda text_ptr
+    clc
+    adc #40
+    sta text_ptr
+    bcc screen_row_next
+    inc text_ptr+1
+screen_row_next:
+    inx
+    cpx #25
+    bne screen_row_loop
+
+; punch the starfield into the bitmap (0-bit = white pixel)
+    ldx #$00
+star_loop:
+    lda star_lo,x
+    clc
+    adc #<BITMAP
+    sta text_ptr
+    lda star_hi,x
+    adc #>BITMAP
+    sta text_ptr+1
+    ldy #$00
+    lda star_val,x
+    sta (text_ptr),y
+    inx
+    cpx #STAR_COUNT
+    bne star_loop
+
+; scroll buffers: index 0 = blank font row
+    lda #<SCROLL_DATA
+    sta text_ptr
+    lda #>SCROLL_DATA
+    sta text_ptr+1
+    ldx #$10
+    lda #$00
+    tay
+clear_scroll_page:
+    sta (text_ptr),y
+    iny
+    bne clear_scroll_page
+    inc text_ptr+1
+    dex
+    bne clear_scroll_page
+
+    lda #$00
+    sta row_counter
+    lda #<scroll_text
+    sta text_ptr
+    lda #>scroll_text
+    sta text_ptr+1
 
 main_loop:
     jsr wait_frame
-    inc frame
-    inc scroll_tick
-    lda scroll_tick
-    and #$1f
-    bne render_only
-    inc scroll_phase
-    lda scroll_phase
-    cmp #NUM_LINES
-    bne render_only
-    lda #$00
-    sta scroll_phase
-render_only:
-    jsr render_frame
+    jsr plotter
+    jsr update_scroll
     jmp main_loop
 
 wait_frame:
@@ -81,250 +152,80 @@ wf1:
     beq wf1
     rts
 
-render_frame:
-    jsr clear_screen
-    jsr draw_stars
-    jsr draw_titles
-    jsr draw_crawl
-    jsr draw_reflection
+; advance the crawl one source row and stream the next row of text into
+; the cyclic column buffers, just below the visible window
+update_scroll:
+    inc plot_base+1
+    lda plot_base+1
+    clc
+    adc #SCROLL_WINDOW
+    tax                         ; x = write position in the cyclic buffers
+    ldy row_counter
+    cpy #16
+    bcs write_gap_row
+
+    lda font_row_lo,y
+    sta font_read+1
+    lda font_row_hi,y
+    sta font_read+2
+    lda #>SCROLL_DATA
+    sta font_write+2
+    ldy #$00
+glyph_col_loop:
+    lda (text_ptr),y
+    sty col_save
+    tay
+font_read:
+    lda remapped_font,y
+font_write:
+    sta SCROLL_DATA,x
+    inc font_write+2
+    ldy col_save
+    iny
+    cpy #16
+    bne glyph_col_loop
+    inc row_counter
     rts
 
-clear_screen:
-    ldx #$00
-    lda #$20
-clear_screen_loop:
-    sta SCREEN,x
-    sta SCREEN+$100,x
-    sta SCREEN+$200,x
-    sta SCREEN+$300,x
-    inx
-    bne clear_screen_loop
-
-    ldx #$00
+write_gap_row:
+    lda #>SCROLL_DATA
+    sta gap_write+2
+    ldy #16
     lda #$00
-clear_color_loop:
-    sta COLOR_RAM,x
-    sta COLOR_RAM+$100,x
-    sta COLOR_RAM+$200,x
-    sta COLOR_RAM+$300,x
-    inx
-    bne clear_color_loop
-    rts
+gap_loop:
+gap_write:
+    sta SCROLL_DATA,x
+    inc gap_write+2
+    dey
+    bne gap_loop
 
-draw_titles:
-    ldx #$00
-draw_title_loop:
-    stx row_index
-    lda title_line_lo,x
-    sta src_ptr
-    lda title_line_hi,x
-    sta src_ptr+1
-    lda title_screen_lo,x
-    sta dst_ptr
-    lda title_screen_hi,x
-    sta dst_ptr+1
-    lda title_color_lo,x
-    sta col_ptr
-    lda title_color_hi,x
-    sta col_ptr+1
-    lda title_colors,x
-    sta tmp_color
+    inc row_counter
+    lda row_counter
+    cmp #ROWS_PER_TEXT_LINE
+    bne update_done
+    lda #$00
+    sta row_counter
+    lda text_ptr                ; next text line
+    clc
+    adc #16
+    sta text_ptr
+    bcc check_wrap
+    inc text_ptr+1
+check_wrap:
     ldy #$00
-draw_title_chars:
-    lda (src_ptr),y
-    sta (dst_ptr),y
-    lda tmp_color
-    sta (col_ptr),y
-    iny
-    cpy #40
-    bne draw_title_chars
-    ldx row_index
-    inx
-    cpx #2
-    bne draw_title_loop
+    lda (text_ptr),y
+    cmp #$ff
+    bne update_done
+    lda #<scroll_text
+    sta text_ptr
+    lda #>scroll_text
+    sta text_ptr+1
+update_done:
     rts
 
-draw_stars:
-    ldx #$00
-draw_star_loop:
-    stx row_index
-    lda star_pos_lo,x
-    sta dst_ptr
-    lda star_pos_hi,x
-    sta dst_ptr+1
-    lda star_color_lo,x
-    sta col_ptr
-    lda star_color_hi,x
-    sta col_ptr+1
-    txa
-    clc
-    adc frame
-    and #$03
-    tax
-    lda star_chars,x
-    ldy #$00
-    sta (dst_ptr),y
-    lda star_colors,x
-    sta (col_ptr),y
-    ldx row_index
-    inx
-    cpx #STAR_COUNT
-    bne draw_star_loop
-    rts
+!source "src/generated/sw_data.inc"
+!source "src/generated/sw_plot.inc"
 
-draw_crawl:
-    ldx #$00
-crawl_row_loop:
-    stx row_index
-    ; far rows show earlier text lines, so the crawl climbs toward the horizon
-    lda scroll_phase
-    sec
-    sbc crawl_offsets,x
-    bcs crawl_index_ready
-    adc #NUM_LINES
-crawl_index_ready:
-    tay
-    lda crawl_line_lo,y
-    sta src_ptr
-    lda crawl_line_hi,y
-    sta src_ptr+1
-
-    ldx row_index
-    lda crawl_starts,x
-    jsr add_to_src
-    ldx row_index
-    lda crawl_screen_rows_lo,x
-    sta dst_ptr
-    lda crawl_screen_rows_hi,x
-    sta dst_ptr+1
-    lda crawl_starts,x
-    jsr add_to_dst
-    ldx row_index
-    lda crawl_color_rows_lo,x
-    sta col_ptr
-    lda crawl_color_rows_hi,x
-    sta col_ptr+1
-    lda crawl_starts,x
-    jsr add_to_col
-
-    ldx row_index
-    lda crawl_widths,x
-    sta copy_count
-    lda crawl_colors,x
-    sta tmp_color
-    jsr copy_text_span
-    ldx row_index
-    inx
-    cpx #CRAWL_ROWS
-    bne crawl_row_loop
-    rts
-
-draw_reflection:
-    ldx #$00
-reflect_row_loop:
-    stx row_index
-    ; mirror the nearest crawl rows below the plane
-    lda scroll_phase
-    sec
-    sbc reflect_offsets,x
-    bcs reflect_index_ready
-    adc #NUM_LINES
-reflect_index_ready:
-    tay
-    lda crawl_line_lo,y
-    sta src_ptr
-    lda crawl_line_hi,y
-    sta src_ptr+1
-
-    ldx row_index
-    lda reflect_starts,x
-    sta tmp_index
-    lda frame
-    and #$01
-    clc
-    adc tmp_index
-    jsr add_to_src
-    ldx row_index
-    lda reflect_screen_rows_lo,x
-    sta dst_ptr
-    lda reflect_screen_rows_hi,x
-    sta dst_ptr+1
-    lda reflect_starts,x
-    sta tmp_index
-    lda frame
-    and #$01
-    clc
-    adc tmp_index
-    jsr add_to_dst
-    ldx row_index
-    lda reflect_color_rows_lo,x
-    sta col_ptr
-    lda reflect_color_rows_hi,x
-    sta col_ptr+1
-    lda reflect_starts,x
-    sta tmp_index
-    lda frame
-    and #$01
-    clc
-    adc tmp_index
-    jsr add_to_col
-
-    ldx row_index
-    lda reflect_widths,x
-    sta copy_count
-    lda reflect_colors,x
-    sta tmp_color
-    jsr copy_text_span
-    ldx row_index
-    inx
-    cpx #REFLECT_ROWS
-    bne reflect_row_loop
-    rts
-
-copy_text_span:
-    ldy #$00
-copy_text_loop:
-    lda (src_ptr),y
-    sta (dst_ptr),y
-    lda tmp_color
-    sta (col_ptr),y
-    iny
-    cpy copy_count
-    bne copy_text_loop
-    rts
-
-add_to_src:
-    clc
-    adc src_ptr
-    sta src_ptr
-    bcc add_to_src_done
-    inc src_ptr+1
-add_to_src_done:
-    rts
-
-add_to_dst:
-    clc
-    adc dst_ptr
-    sta dst_ptr
-    bcc add_to_dst_done
-    inc dst_ptr+1
-add_to_dst_done:
-    rts
-
-add_to_col:
-    clc
-    adc col_ptr
-    sta col_ptr
-    bcc add_to_col_done
-    inc col_ptr+1
-add_to_col_done:
-    rts
-
-star_chars:
-    !byte $20,$2e,$2a,$2e
-star_colors:
-    !byte $00,$0b,$01,$0f
-title_colors:
-    !byte $01,$07
-
-!source "src/generated/starwars_tables.inc"
+!if * > SCROLL_DATA {
+    !error "program overlaps the scroll buffers at SCROLL_DATA"
+}
