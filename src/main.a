@@ -23,9 +23,6 @@ col_save = $03
 tmp = $04
 logo_src = $05
 logo_dst = $07
-transition_step = $09
-transition_delay = $0a
-transition_col = $0b
 
 !ifndef SPARKLE_PAYLOAD {
     * = $0801
@@ -204,7 +201,6 @@ clear_scroll_page:
     sta text_ptr
     lda #>scroll_text
     sta text_ptr+1
-    jsr opening_transition_init
 
 ; Galway Nights soundtrack: the unrolled plotter takes more than one
 ; frame, so the player is clocked from a raster IRQ instead of the main
@@ -232,7 +228,6 @@ main_loop:
     jsr wait_frame
     jsr plotter
     jsr update_scroll
-    jsr opening_transition_update
     jmp main_loop
 
 wait_frame:
@@ -250,96 +245,6 @@ music_irq:
     asl $d019                   ; acknowledge the raster interrupt
     jsr galway_play
     jmp $ea81                   ; restore registers and rti
-
-; Opening transition adapted from the center-out column reveal used by the
-; transition browser: the demo bitmap is fully prepared, but all bitmap screen
-; colour cells start black.  Restoring two colour columns per step reveals the
-; live scroller without moving the expensive bitmap data.
-opening_transition_init:
-    lda #$00
-    sta transition_step
-    sta transition_delay
-    sta $d021
-    ldx #$00
-hide_screen_colors:
-    sta SCREEN+$000,x
-    sta SCREEN+$100,x
-    sta SCREEN+$200,x
-    sta SCREEN+$300,x
-    inx
-    bne hide_screen_colors
-    rts
-
-opening_transition_update:
-    lda transition_step
-    cmp #20
-    bcc opening_transition_active
-    rts
-opening_transition_active:
-    inc transition_delay
-    lda transition_delay
-    and #$01
-    beq opening_transition_do_step
-    rts
-opening_transition_do_step:
-    lda #$00
-    sta transition_delay
-    ldx transition_step
-    lda reveal_left_columns,x
-    jsr restore_screen_column
-    ldx transition_step
-    lda reveal_right_columns,x
-    jsr restore_screen_column
-    inc transition_step
-    rts
-
-restore_screen_column:
-    sta transition_col
-    lda #<logo_colors
-    sta logo_src
-    lda #>logo_colors
-    sta logo_src+1
-    lda #<SCREEN
-    sta logo_dst
-    lda #>SCREEN
-    sta logo_dst+1
-    ldx #$00
-restore_logo_rows:
-    ldy transition_col
-    lda (logo_src),y
-    sta (logo_dst),y
-    lda logo_src
-    clc
-    adc #40
-    sta logo_src
-    bcc restore_logo_src_ok
-    inc logo_src+1
-restore_logo_src_ok:
-    lda logo_dst
-    clc
-    adc #40
-    sta logo_dst
-    bcc restore_logo_dst_ok
-    inc logo_dst+1
-restore_logo_dst_ok:
-    inx
-    cpx #10
-    bne restore_logo_rows
-restore_crawl_rows:
-    ldy transition_col
-    lda screen_row_colors,x
-    sta (logo_dst),y
-    lda logo_dst
-    clc
-    adc #40
-    sta logo_dst
-    bcc restore_crawl_dst_ok
-    inc logo_dst+1
-restore_crawl_dst_ok:
-    inx
-    cpx #25
-    bne restore_crawl_rows
-    rts
 
 ; advance the crawl one source row and stream the next row of text into
 ; the cyclic column buffers, just below the visible window
@@ -414,11 +319,6 @@ update_done:
 
 !source "src/generated/sw_data.inc"
 !source "src/generated/sw_plot.inc"
-
-reveal_left_columns:
-    !byte 19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0
-reveal_right_columns:
-    !byte 20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39
 
 !if * > SCROLL_DATA {
     !error "program overlaps the scroll buffers at SCROLL_DATA"
