@@ -33,7 +33,6 @@ echo "Built build/bangalore.prg ($(stat -f%z build/bangalore.prg) bytes)"
 echo "Built build/bangalore-sparkle-part.prg ($(stat -f%z build/bangalore-sparkle-part.prg) bytes)"
 echo "Built build/bangalore-loader.prg ($(stat -f%z build/bangalore-loader.prg) bytes)"
 echo "Built build/bangalore-direct.prg ($(stat -f%z build/bangalore-direct.prg) bytes)"
-echo "Built build/bangalore-lite.prg ($(stat -f%z build/bangalore-lite.prg) bytes)"
 
 cp src/assets/starwars/swcode.prg build/SWCODE.PRG
 cp src/assets/starwars/basecode.prg build/SWBASE.PRG
@@ -84,13 +83,6 @@ if [[ -n "$C1541_BIN" ]]; then
   echo "Built build/bangalore.d64"
 else
   echo "c1541 not found; skipping D64 build"
-fi
-
-if command -v exomizer >/dev/null 2>&1; then
-  exomizer sfx sys build/bangalore-lite.prg -o build/bangalore-lite_sfx.prg >/dev/null
-  echo "Crunched build/bangalore-lite_sfx.prg ($(stat -f%z build/bangalore-lite_sfx.prg) bytes)"
-else
-  echo "exomizer not found; skipping crunched build (brew install exomizer)"
 fi
 
 python3 scripts/generate_sparkle_sls.py

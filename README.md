@@ -64,8 +64,6 @@ Output:
 - `build/bangalore-sparkle-part.prg` -- Sparkle2 payload, assembled at `$080d`
 - `build/bangalore-loader.prg` -- D64 loader for the original Nobounds part
 - `build/bangalore-direct.prg` -- monitor-preload runner for the original part
-- `build/bangalore-lite.prg` -- older character-mode comparison build
-- `build/bangalore-lite_sfx.prg` -- crunched comparison build when `exomizer` is available
 - `build/bangalore.d64`
 - `build/bangalore.sls` -- Sparkle2 loader script
 - `build/bangalore-sparkle.d64` -- Sparkle2 disk, when Sparkle2 can run locally
