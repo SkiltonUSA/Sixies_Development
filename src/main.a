@@ -13,6 +13,8 @@
 
 SCREEN = $c000                  ; VIC bank 3, screen offset $0000
 BITMAP = $e000                  ; VIC bank 3, bitmap offset $2000
+SCREENFADEBOBS_CHARSET = $c800  ; VIC bank 3, charset offset $0800
+SCREENFADEBOBS_FRAMES = 70      ; one silent pre-roll before bitmap mode starts
 SCROLL_DATA = $7800             ; 16 pages, CPU-only (VIC never reads these)
 LOGO_BYTES = 3200               ; 320x80 hires bitmap bytes
 LOGO_COLOR_BYTES = 400          ; 40x10 screen colour bytes
@@ -23,6 +25,20 @@ col_save = $03
 tmp = $04
 logo_src = $05
 logo_dst = $07
+
+; The exported char-mode fade lives in the same VIC bank as the bitmap part so
+; no bank switch is required between the intro and the crawl.
+screenfadebobs_screen_base = SCREEN
+screenfadebobs_color_base = $d800
+screenfadebobs_d018 = $02
+screenfadebobs_charset_base = SCREENFADEBOBS_CHARSET
+screenfadebobs_dst_ptr = $f9
+screenfadebobs_color_ptr = $fb
+screenfadebobs_border_color = $00
+screenfadebobs_background_color = $00
+screenfadebobs_multi1_color = $0c
+screenfadebobs_multi2_color = $01
+screenfadebobs_bob_color = $0f
 
 !ifndef SPARKLE_PAYLOAD {
     * = $0801
@@ -51,6 +67,10 @@ entry:
     lda $dd00
     and #$fc                    ; VIC bank 3 ($c000-$ffff)
     sta $dd00
+    ; Run the exported char-mode reveal before enabling bitmap mode or music IRQ.
+    ; This keeps the loader/direct paths unchanged and leaves the crawl setup
+    ; deterministic after the intro completes.
+    jsr run_screenfadebobs_intro
     lda #$3b                    ; bitmap mode on
     sta $d011
     lda #$08
@@ -241,6 +261,17 @@ wf1:
     beq wf1
     rts
 
+run_screenfadebobs_intro:
+    jsr screenfadebobs_build_charset
+    jsr screenfadebobs_init
+    ldx #SCREENFADEBOBS_FRAMES
+screenfadebobs_intro_loop:
+    jsr wait_frame
+    jsr screenfadebobs_update
+    dex
+    bne screenfadebobs_intro_loop
+    rts
+
 music_irq:
     asl $d019                   ; acknowledge the raster interrupt
     jsr galway_play
@@ -328,6 +359,7 @@ update_done:
 * = $9000
 !source "src/generated/galway_nights.inc"
 !source "src/music/galway_player.inc"
+!source "src/screenfadebobs.inc"
 !source "src/generated/logo.inc"
 
 !if * > $c000 {
