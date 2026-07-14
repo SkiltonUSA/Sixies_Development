@@ -67,7 +67,6 @@ RUN_D64=1 ./scripts/run.sh
 Output:
 
 - `build/better-off-alone-markov.sid` -- continuously looping 137 BPM PAL PSID
-- `build/better-off-alone-markov.prg` -- assembled C64 music driver used by the PSID
 - `build/galway-nights.sid` -- original Martin Galway style 107 BPM PAL PSID
 - `build/galway-nights.prg` -- standalone runnable driver for the same tune
 - `build/StarwarsScrollerDemo.prg` -- native bitmap perspective scroller (default run target)
