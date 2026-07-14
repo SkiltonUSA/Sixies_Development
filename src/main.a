@@ -13,8 +13,9 @@
 
 SCREEN = $c000                  ; VIC bank 3, screen offset $0000
 BITMAP = $e000                  ; VIC bank 3, bitmap offset $2000
-SCREENFADEBOBS_CHARSET = $c800  ; VIC bank 3, charset offset $0800
-SCREENFADEBOBS_FRAMES = 70      ; one silent pre-roll before bitmap mode starts
+SHIP_TRANSITION_CHARSET = $c800 ; blank character for the sprite backdrop
+SHIP_TRANSITION_SPRITES = $c400 ; eight layers forming four TIE quadrants
+SHIP_TRANSITION_FRAMES = 90     ; 1.8-second PAL flyby before bitmap setup
 SCROLL_DATA = $7800             ; 16 pages, CPU-only (VIC never reads these)
 LOGO_BYTES = 3200               ; 320x80 hires bitmap bytes
 LOGO_COLOR_BYTES = 400          ; 40x10 screen colour bytes
@@ -25,20 +26,19 @@ col_save = $03
 tmp = $04
 logo_src = $05
 logo_dst = $07
+transition_step = $09
+transition_delay = $0a
+transition_col = $0b
+intro_frame_counter = $0c
 
-; The exported char-mode fade lives in the same VIC bank as the bitmap part so
-; no bank switch is required between the intro and the crawl.
-screenfadebobs_screen_base = SCREEN
-screenfadebobs_color_base = $d800
-screenfadebobs_d018 = $02
-screenfadebobs_charset_base = SCREENFADEBOBS_CHARSET
-screenfadebobs_dst_ptr = $f9
-screenfadebobs_color_ptr = $fb
-screenfadebobs_border_color = $00
-screenfadebobs_background_color = $00
-screenfadebobs_multi1_color = $0c
-screenfadebobs_multi2_color = $01
-screenfadebobs_bob_color = $0f
+; The ship transition shares VIC bank 3 with the bitmap part, but uses hardware
+; sprites so every ship can move independently without touching screen cells.
+shiptransition_screen_base = SCREEN
+shiptransition_charset_base = SHIP_TRANSITION_CHARSET
+shiptransition_sprite_base = SHIP_TRANSITION_SPRITES
+shiptransition_vic_bank_base = $c000
+shiptransition_detail_color = $0b
+shiptransition_hull_color = $0f
 
 !ifndef SPARKLE_PAYLOAD {
     * = $0801
@@ -67,11 +67,9 @@ entry:
     lda $dd00
     and #$fc                    ; VIC bank 3 ($c000-$ffff)
     sta $dd00
-    ; Run the exported char-mode reveal before enabling bitmap mode or music IRQ.
-    ; This keeps the loader/direct paths unchanged and leaves the crawl setup
-    ; deterministic after the intro completes.
-    jsr run_screenfadebobs_intro
-    lda #$3b                    ; bitmap mode on
+    ; Run the hardware-sprite flyby before enabling bitmap mode or music IRQ.
+    jsr run_ship_transition_intro
+    lda #$2b                    ; bitmap mode on, display hidden during setup
     sta $d011
     lda #$08
     sta $d016
@@ -221,6 +219,9 @@ clear_scroll_page:
     sta text_ptr
     lda #>scroll_text
     sta text_ptr+1
+    jsr opening_transition_init
+    lda #$3b                    ; show the black mask; reveal starts in main loop
+    sta $d011
 
 ; Galway Nights soundtrack: the unrolled plotter takes more than one
 ; frame, so the player is clocked from a raster IRQ instead of the main
@@ -248,6 +249,7 @@ main_loop:
     jsr wait_frame
     jsr plotter
     jsr update_scroll
+    jsr opening_transition_update
     jmp main_loop
 
 wait_frame:
@@ -261,21 +263,116 @@ wf1:
     beq wf1
     rts
 
-run_screenfadebobs_intro:
-    jsr screenfadebobs_build_charset
-    jsr screenfadebobs_init
-    ldx #SCREENFADEBOBS_FRAMES
-screenfadebobs_intro_loop:
+run_ship_transition_intro:
+    jsr shiptransition_build_assets
+    jsr shiptransition_init
+    lda #SHIP_TRANSITION_FRAMES
+    sta intro_frame_counter
+ship_transition_intro_loop:
     jsr wait_frame
-    jsr screenfadebobs_update
-    dex
-    bne screenfadebobs_intro_loop
+    jsr shiptransition_update
+    dec intro_frame_counter
+    bne ship_transition_intro_loop
+    jsr shiptransition_hide
     rts
 
 music_irq:
     asl $d019                   ; acknowledge the raster interrupt
     jsr galway_play
     jmp $ea81                   ; restore registers and rti
+
+; Reveal the prepared bitmap from the centre out.  In hires bitmap mode each
+; screen byte supplies the two colours for one 8x8 cell, so a zero byte masks
+; the bitmap without touching its pixels.  Restoring two columns per step
+; reveals the live scroller while its bitmap plotter and music keep running.
+opening_transition_init:
+    lda #$00
+    sta transition_step
+    sta transition_delay
+    sta $d021
+    ldx #$00
+opening_transition_hide_colors:
+    sta SCREEN+$000,x
+    sta SCREEN+$100,x
+    sta SCREEN+$200,x
+    sta SCREEN+$300,x
+    inx
+    bne opening_transition_hide_colors
+    rts
+
+opening_transition_update:
+    lda transition_step
+    cmp #20
+    bcs opening_transition_done
+    inc transition_delay
+    lda transition_delay
+    and #$01
+    bne opening_transition_done
+    lda #$00
+    sta transition_delay
+    ldx transition_step
+    lda reveal_left_columns,x
+    jsr opening_transition_restore_column
+    ldx transition_step
+    lda reveal_right_columns,x
+    jsr opening_transition_restore_column
+    inc transition_step
+opening_transition_done:
+    rts
+
+opening_transition_restore_column:
+    sta transition_col
+    lda #<logo_colors
+    sta logo_src
+    lda #>logo_colors
+    sta logo_src+1
+    lda #<SCREEN
+    sta logo_dst
+    lda #>SCREEN
+    sta logo_dst+1
+    ldx #$00
+opening_transition_restore_logo:
+    ldy transition_col
+    lda (logo_src),y
+    sta (logo_dst),y
+    lda logo_src
+    clc
+    adc #40
+    sta logo_src
+    bcc opening_transition_logo_src_ready
+    inc logo_src+1
+opening_transition_logo_src_ready:
+    lda logo_dst
+    clc
+    adc #40
+    sta logo_dst
+    bcc opening_transition_logo_dst_ready
+    inc logo_dst+1
+opening_transition_logo_dst_ready:
+    inx
+    cpx #10
+    bne opening_transition_restore_logo
+opening_transition_restore_crawl:
+    ldy transition_col
+    lda screen_row_colors,x
+    sta (logo_dst),y
+    lda logo_dst
+    clc
+    adc #40
+    sta logo_dst
+    bcc opening_transition_crawl_dst_ready
+    inc logo_dst+1
+opening_transition_crawl_dst_ready:
+    inx
+    cpx #25
+    bne opening_transition_restore_crawl
+    rts
+
+; Centre-out order used by the transition browser's reflector reveal.
+reveal_left_columns:
+!byte 19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0
+reveal_right_columns:
+!byte 20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39
 
 ; advance the crawl one source row and stream the next row of text into
 ; the cyclic column buffers, just below the visible window
@@ -359,7 +456,7 @@ update_done:
 * = $9000
 !source "src/generated/galway_nights.inc"
 !source "src/music/galway_player.inc"
-!source "src/screenfadebobs.inc"
+!source "src/shiptransition.inc"
 !source "src/generated/logo.inc"
 
 !if * > $c000 {

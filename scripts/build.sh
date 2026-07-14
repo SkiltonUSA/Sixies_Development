@@ -22,6 +22,7 @@ python3 scripts/generate_sid_frequency_table.py
 python3 scripts/generate_midi_markov_sid.py
 python3 scripts/generate_galway_sid.py
 python3 scripts/generate_logo.py
+python3 scripts/generate_transition_sprites.py
 acme src/main.a
 acme -DSPARKLE_PAYLOAD=1 src/main.a
 acme src/starwars_loader.a

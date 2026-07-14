@@ -21,9 +21,12 @@ interrupt so the tune keeps 50 Hz timing while the plotter runs longer than
 a frame. `scripts/generate_logo.py` converts `src/assets/deathstar_logo.png`
 into hires bitmap data that is AND-merged over the starfield in the 80-pixel
 banner area above the crawl, with per-cell C64 ink colours chosen from the
-source image. The native PRG now also runs a short `screenfadebobs` character-
-mode pre-roll before bitmap mode starts; integration details live in
-[`docs/screenfadebobs-integration.md`](docs/screenfadebobs-integration.md).
+source image. The native PRG opens with one source-derived 48x42 TIE fighter
+assembled from four synchronized sprite bobs. Each quadrant overlays dark and
+light gray hires layers with carved negative space, and all four quadrants move
+from one parent coordinate over a sparse multicolor starfield. After the flyby, the bitmap is prepared and
+revealed from the centre out. Integration details live in
+[`docs/ship-transition.md`](docs/ship-transition.md).
 
 `build/StarwarsScrollerDemo-loader.prg` is an
 alternative path that loads the vendored, original Nobounds-generated part
