@@ -1,3 +1,5 @@
+![StarwarsScrollerDemo running in VICE](docs/StarwarsScrollerDemo.png)
+
 # Starwars Demo
 
 Standalone C64 Starwars Demo scroller intro inspired by Raistlin's write-up and
@@ -32,6 +34,14 @@ Build:
 ./scripts/build.sh
 ```
 
+Toolchain:
+
+- ACME assembler
+- Python 3
+- VICE `c1541`, optional for D64 packaging
+- Exomizer 3.1.2, optional for `build/StarwarsScrollerDemo-sfx.prg` (`/opt/homebrew/bin/exomizer` when installed through Homebrew)
+- Mono or Wine, optional for running Sparkle2 locally
+
 Build a Sparkle2 packaging script and, when Mono or Wine is available, a
 Sparkle-linked D64:
 
@@ -61,6 +71,7 @@ Output:
 - `build/galway-nights.sid` -- original Martin Galway style 107 BPM PAL PSID
 - `build/galway-nights.prg` -- standalone runnable driver for the same tune
 - `build/StarwarsScrollerDemo.prg` -- native bitmap perspective scroller (default run target)
+- `build/StarwarsScrollerDemo-sfx.prg` -- Exomizer-crunched single-file build, when Exomizer is available
 - `build/StarwarsScrollerDemo-sparkle-part.prg` -- Sparkle2 payload, assembled at `$080d`
 - `build/StarwarsScrollerDemo-loader.prg` -- D64 loader for the original Nobounds part
 - `build/StarwarsScrollerDemo-direct.prg` -- monitor-preload runner for the original part
@@ -98,12 +109,16 @@ addresses are `$1000` and `$1080`.
 
 Sparkle2 support:
 
-- `scripts/ensure_sparkle2.sh` clones or updates `https://github.com/SkiltonUSA/Sparkle2.git` under `.context/Sparkle2`.
+- Sparkle2 reference: `https://github.com/spartaomg/Sparkle2`.
+- `scripts/ensure_sparkle2.sh` clones or updates `https://github.com/SkiltonUSA/Sparkle2.git` under `.context/Sparkle2` by default; override with `SPARKLE2_REPO` to test another fork.
 - `scripts/generate_sparkle_sls.py` writes a Sparkle Loader Script for `build/StarwarsScrollerDemo-sparkle-part.prg`.
 - `scripts/build_sparkle.sh` runs the normal build, prepares `build/StarwarsScrollerDemo.sls`, and invokes Sparkle2 through `mono` or `wine` when either is installed.
 - Mono is the preferred non-Windows runner. Wine on macOS can launch Sparkle2 but may exit without writing a D64; in that case use the generated `build/StarwarsScrollerDemo.sls` with Sparkle2 on Windows.
 
 Vendored Nobounds assets:
+
+The original Starwars assets come from a fork of Robert Troughton's
+`C64Demo-PublicReleases:main`: `https://github.com/SkiltonUSA/C64Demo-PublicReleases`.
 
 - `src/assets/starwars/swcode.prg`
 - `src/assets/starwars/font.bin`

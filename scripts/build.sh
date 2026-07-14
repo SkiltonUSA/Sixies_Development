@@ -34,6 +34,13 @@ echo "Built build/StarwarsScrollerDemo-sparkle-part.prg ($(stat -f%z build/Starw
 echo "Built build/StarwarsScrollerDemo-loader.prg ($(stat -f%z build/StarwarsScrollerDemo-loader.prg) bytes)"
 echo "Built build/StarwarsScrollerDemo-direct.prg ($(stat -f%z build/StarwarsScrollerDemo-direct.prg) bytes)"
 
+if command -v exomizer >/dev/null 2>&1; then
+  exomizer sfx sys build/StarwarsScrollerDemo.prg -o build/StarwarsScrollerDemo-sfx.prg >/dev/null
+  echo "Crunched build/StarwarsScrollerDemo-sfx.prg ($(stat -f%z build/StarwarsScrollerDemo-sfx.prg) bytes)"
+else
+  echo "exomizer not found; skipping crunched build (brew install exomizer)"
+fi
+
 cp src/assets/starwars/swcode.prg build/SWCODE.PRG
 cp src/assets/starwars/basecode.prg build/SWBASE.PRG
 cp src/assets/starwars/music.prg build/SWMUSIC.PRG
