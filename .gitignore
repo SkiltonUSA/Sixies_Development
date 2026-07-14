@@ -1,5 +1,6 @@
 build/
 src/generated/
 scripts/__pycache__/
+.context/
 
 *.log
