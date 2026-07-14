@@ -359,10 +359,12 @@ def main():
         if remaining:
             raise SystemExit("could not place requested stars")
 
-    add_stars(36, 0, 320, 0, 80)       # behind and around the banner
+    top_star_count = 36
+    add_stars(top_star_count, 0, 320, 0, 80)  # behind and around the banner
     add_stars(20, 0, 54, 0, 200)       # left of the crawl trapezoid
     add_stars(20, 266, 320, 0, 200)    # right of the crawl trapezoid
     add_stars(72, 0, 320, 176, 200)    # extended bottom field
+    data.append(f"TOP_STAR_COUNT = {top_star_count}")
     data.append(f"STAR_COUNT = {len(stars)}")
     data.append("star_lo:")
     data.extend(fmt_bytes([off & 0xFF for off, _ in stars]))

@@ -13,9 +13,8 @@
 
 SCREEN = $c000                  ; VIC bank 3, screen offset $0000
 BITMAP = $e000                  ; VIC bank 3, bitmap offset $2000
-SHIP_TRANSITION_CHARSET = $c800 ; blank character for the sprite backdrop
-SHIP_TRANSITION_SPRITES = $c400 ; eight layers forming four TIE quadrants
-SHIP_TRANSITION_FRAMES = 90     ; 1.8-second PAL flyby before bitmap setup
+SHIP_TRANSITION_SPRITES = $c400 ; TIE and X-wing layered sprite definitions
+SHIP_TRANSITION_FRAMES = 90     ; 1.8-second PAL opposing flyby
 SCROLL_DATA = $7800             ; 16 pages, CPU-only (VIC never reads these)
 LOGO_BYTES = 3200               ; 320x80 hires bitmap bytes
 LOGO_COLOR_BYTES = 400          ; 40x10 screen colour bytes
@@ -34,11 +33,12 @@ intro_frame_counter = $0c
 ; The ship transition shares VIC bank 3 with the bitmap part, but uses hardware
 ; sprites so every ship can move independently without touching screen cells.
 shiptransition_screen_base = SCREEN
-shiptransition_charset_base = SHIP_TRANSITION_CHARSET
 shiptransition_sprite_base = SHIP_TRANSITION_SPRITES
 shiptransition_vic_bank_base = $c000
 shiptransition_detail_color = $0b
 shiptransition_hull_color = $0f
+shiptransition_xwing_detail_color = $08
+shiptransition_xwing_hull_color = $0f
 
 !ifndef SPARKLE_PAYLOAD {
     * = $0801
@@ -67,8 +67,6 @@ entry:
     lda $dd00
     and #$fc                    ; VIC bank 3 ($c000-$ffff)
     sta $dd00
-    ; Run the hardware-sprite flyby before enabling bitmap mode or music IRQ.
-    jsr run_ship_transition_intro
     lda #$2b                    ; bitmap mode on, display hidden during setup
     sta $d011
     lda #$08
@@ -78,63 +76,13 @@ entry:
     lda #$00
     sta $d015
     sta $d020
+    jsr prepare_starfield
+    jsr prepare_transition_lower_stars
 
-; bitmap: fill $e000-$ffff with $ff (all background)
-    lda #<BITMAP
-    sta text_ptr
-    lda #>BITMAP
-    sta text_ptr+1
-    ldx #$20
-    lda #$ff
-    ldy #$00
-clear_bitmap_page:
-    sta (text_ptr),y
-    iny
-    bne clear_bitmap_page
-    inc text_ptr+1
-    dex
-    bne clear_bitmap_page
-
-; screen RAM: one colour byte per char row
-    lda #<SCREEN
-    sta text_ptr
-    lda #>SCREEN
-    sta text_ptr+1
-    ldx #$00
-screen_row_loop:
-    lda screen_row_colors,x
-    ldy #39
-screen_col_loop:
-    sta (text_ptr),y
-    dey
-    bpl screen_col_loop
-    lda text_ptr
-    clc
-    adc #40
-    sta text_ptr
-    bcc screen_row_next
-    inc text_ptr+1
-screen_row_next:
-    inx
-    cpx #25
-    bne screen_row_loop
-
-; punch the starfield into the bitmap (0-bit = white pixel)
-    ldx #$00
-star_loop:
-    lda star_lo,x
-    clc
-    adc #<BITMAP
-    sta text_ptr
-    lda star_hi,x
-    adc #>BITMAP
-    sta text_ptr+1
-    ldy #$00
-    lda star_val,x
-    sta (text_ptr),y
-    inx
-    cpx #STAR_COUNT
-    bne star_loop
+    ; Run the hardware-sprite flyby over the same bitmap stars as the demo.
+    jsr run_ship_transition_intro
+    lda #$2b                    ; hide the display while adding the live part
+    sta $d011
 
 ; AND-merge the Death Star banner above the crawl.  Logo ink is 0-bits so
 ; stars around the image survive.
@@ -263,12 +211,116 @@ wf1:
     beq wf1
     rts
 
+; Prepare the exact bitmap and screen colors shared by the TIE flyby and crawl.
+prepare_starfield:
+    lda #<BITMAP
+    sta text_ptr
+    lda #>BITMAP
+    sta text_ptr+1
+    ldx #$20
+    lda #$ff
+    ldy #$00
+clear_bitmap_page:
+    sta (text_ptr),y
+    iny
+    bne clear_bitmap_page
+    inc text_ptr+1
+    dex
+    bne clear_bitmap_page
+
+; screen RAM: one colour byte per char row
+    lda #<SCREEN
+    sta text_ptr
+    lda #>SCREEN
+    sta text_ptr+1
+    ldx #$00
+screen_row_loop:
+    lda screen_row_colors,x
+    ldy #39
+screen_col_loop:
+    sta (text_ptr),y
+    dey
+    bpl screen_col_loop
+    lda text_ptr
+    clc
+    adc #40
+    sta text_ptr
+    bcc screen_row_next
+    inc text_ptr+1
+screen_row_next:
+    inx
+    cpx #25
+    bne screen_row_loop
+
+; punch the starfield into the bitmap (0-bit = white pixel)
+    ldx #$00
+star_loop:
+    lda star_lo,x
+    clc
+    adc #<BITMAP
+    sta text_ptr
+    lda star_hi,x
+    adc #>BITMAP
+    sta text_ptr+1
+    ldy #$00
+    lda star_val,x
+    sta (text_ptr),y
+    inx
+    cpx #STAR_COUNT
+    bne star_loop
+    rts
+
+; Repeat the banner's stars lower down for the X-wing pass. The crawl plotter
+; replaces pixels in its own area before the center-out reveal reaches them.
+prepare_transition_lower_stars:
+    lda #<(SCREEN + 12 * 40)
+    sta text_ptr
+    lda #>(SCREEN + 12 * 40)
+    sta text_ptr+1
+    ldx #10
+    lda #$01                    ; black background, white stars as at the top
+prepare_transition_color_row:
+    ldy #39
+prepare_transition_color_column:
+    sta (text_ptr),y
+    dey
+    bpl prepare_transition_color_column
+    pha
+    lda text_ptr
+    clc
+    adc #40
+    sta text_ptr
+    bcc prepare_transition_next_color_row
+    inc text_ptr+1
+prepare_transition_next_color_row:
+    pla
+    dex
+    bne prepare_transition_color_row
+
+    ldx #$00
+prepare_transition_star_loop:
+    lda star_lo,x
+    clc
+    adc #<(BITMAP + 12 * 320)
+    sta text_ptr
+    lda star_hi,x
+    adc #>(BITMAP + 12 * 320)
+    sta text_ptr+1
+    ldy #$00
+    lda star_val,x
+    sta (text_ptr),y
+    inx
+    cpx #TOP_STAR_COUNT
+    bne prepare_transition_star_loop
+    rts
+
 run_ship_transition_intro:
     jsr shiptransition_build_assets
     jsr shiptransition_init
     lda #SHIP_TRANSITION_FRAMES
     sta intro_frame_counter
 ship_transition_intro_loop:
+    jsr shiptransition_show_xwing
     jsr wait_frame
     jsr shiptransition_update
     dec intro_frame_counter

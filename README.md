@@ -21,11 +21,12 @@ interrupt so the tune keeps 50 Hz timing while the plotter runs longer than
 a frame. `scripts/generate_logo.py` converts `src/assets/deathstar_logo.png`
 into hires bitmap data that is AND-merged over the starfield in the 80-pixel
 banner area above the crawl, with per-cell C64 ink colours chosen from the
-source image. The native PRG opens with one source-derived 48x42 TIE fighter
-assembled from four synchronized sprite bobs. Each quadrant overlays dark and
-light gray hires layers with carved negative space, and all four quadrants move
-from one parent coordinate over a sparse multicolor starfield. After the flyby, the bitmap is prepared and
-revealed from the centre out. Integration details live in
+source image. The native PRG opens with source-derived 48x42 TIE fighter and
+X-wing composites crossing in opposite directions. Each ship uses four
+synchronized sprite bobs with layered hires detail and carved negative space;
+a raster split reuses all eight sprites for the lower X-wing. Both cross the
+same hires starfield used by the main part, with the upper star pattern repeated
+behind the X-wing. After the flyby, the completed bitmap is revealed from the centre out. Integration details live in
 [`docs/ship-transition.md`](docs/ship-transition.md).
 
 `build/StarwarsScrollerDemo-loader.prg` is an
