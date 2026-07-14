@@ -29,7 +29,7 @@ ensure_mono_visualbasic() {
   fi
 
   local dll
-  dll="$(find_mono_visualbasic)"
+  dll="$(find_mono_visualbasic || true)"
 
   if [[ -z "$dll" && -d "$ROOT_DIR/.context" && -x "$(command -v brew || true)" ]]; then
     brew fetch --cask mono-mdk >/dev/null || true
