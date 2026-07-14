@@ -16,10 +16,10 @@ skipping more source rows per screen line near the horizon. Background is
 1-bits and ink is 0-bits, so overlapping glyph halves combine with `AND`.
 The intro plays the "Galway Nights" soundtrack (see below) from a raster
 interrupt so the tune keeps 50 Hz timing while the plotter runs longer than
-a frame. `scripts/generate_logo.py` converts `src/assets/retrodna_logo.png`
-into hires bitmap data that is AND-merged over the starfield in the top
-four char rows, with per-row ink colours matching the logo's white-to-green
-gradient.
+a frame. `scripts/generate_logo.py` converts `src/assets/deathstar_logo.png`
+into hires bitmap data that is AND-merged over the starfield in the 80-pixel
+banner area above the crawl, with per-cell C64 ink colours chosen from the
+source image.
 
 `build/bangalore-loader.prg` (written to the D64 as `BANGALORE`) is an
 alternative path that loads the vendored, original Nobounds-generated part

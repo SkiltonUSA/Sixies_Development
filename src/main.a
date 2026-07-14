@@ -13,12 +13,16 @@
 
 SCREEN = $c000                  ; VIC bank 3, screen offset $0000
 BITMAP = $e000                  ; VIC bank 3, bitmap offset $2000
-SCROLL_DATA = $7000             ; 16 pages, CPU-only (VIC never reads these)
+SCROLL_DATA = $7800             ; 16 pages, CPU-only (VIC never reads these)
+LOGO_BYTES = 3200               ; 320x80 hires bitmap bytes
+LOGO_COLOR_BYTES = 400          ; 40x10 screen colour bytes
 
 text_ptr = $fb
 row_counter = $02
 col_save = $03
 tmp = $04
+logo_src = $05
+logo_dst = $07
 
 !ifndef SPARKLE_PAYLOAD {
     * = $0801
@@ -114,41 +118,66 @@ star_loop:
     cpx #STAR_COUNT
     bne star_loop
 
-; AND-merge the RetroDNA logo into the top four char rows (1280 bytes);
-; logo ink is 0-bits so stars around the lettering survive
-    ldx #$00
-logo_loop:
-    lda logo_bitmap,x
-    and BITMAP,x
-    sta BITMAP,x
-    lda logo_bitmap+$100,x
-    and BITMAP+$100,x
-    sta BITMAP+$100,x
-    lda logo_bitmap+$200,x
-    and BITMAP+$200,x
-    sta BITMAP+$200,x
-    lda logo_bitmap+$300,x
-    and BITMAP+$300,x
-    sta BITMAP+$300,x
-    lda logo_bitmap+$400,x
-    and BITMAP+$400,x
-    sta BITMAP+$400,x
-    inx
-    bne logo_loop
-
-; per-row logo colours over the 26 columns the lettering spans
-    ldx #25
-logo_color_loop:
-    lda logo_colors+0
-    sta SCREEN+0*40+7,x
-    lda logo_colors+1
-    sta SCREEN+1*40+7,x
-    lda logo_colors+2
-    sta SCREEN+2*40+7,x
-    lda logo_colors+3
-    sta SCREEN+3*40+7,x
+; AND-merge the Death Star banner above the crawl.  Logo ink is 0-bits so
+; stars around the image survive.
+    lda #<logo_bitmap
+    sta logo_src
+    lda #>logo_bitmap
+    sta logo_src+1
+    lda #<BITMAP
+    sta logo_dst
+    lda #>BITMAP
+    sta logo_dst+1
+    ldx #>LOGO_BYTES
+    ldy #$00
+logo_page_loop:
+    lda (logo_src),y
+    and (logo_dst),y
+    sta (logo_dst),y
+    iny
+    bne logo_page_loop
+    inc logo_src+1
+    inc logo_dst+1
     dex
-    bpl logo_color_loop
+    bne logo_page_loop
+!if <LOGO_BYTES != 0 {
+logo_tail_loop:
+    lda (logo_src),y
+    and (logo_dst),y
+    sta (logo_dst),y
+    iny
+    cpy #<LOGO_BYTES
+    bne logo_tail_loop
+}
+
+; Per-cell foreground colours for the 320x80 banner.
+    lda #<logo_colors
+    sta logo_src
+    lda #>logo_colors
+    sta logo_src+1
+    lda #<SCREEN
+    sta logo_dst
+    lda #>SCREEN
+    sta logo_dst+1
+    ldx #>LOGO_COLOR_BYTES
+    ldy #$00
+logo_color_page_loop:
+    lda (logo_src),y
+    sta (logo_dst),y
+    iny
+    bne logo_color_page_loop
+    inc logo_src+1
+    inc logo_dst+1
+    dex
+    bne logo_color_page_loop
+!if <LOGO_COLOR_BYTES != 0 {
+logo_color_tail_loop:
+    lda (logo_src),y
+    sta (logo_dst),y
+    iny
+    cpy #<LOGO_COLOR_BYTES
+    bne logo_color_tail_loop
+}
 
 ; scroll buffers: index 0 = blank font row
     lda #<SCROLL_DATA
@@ -296,7 +325,7 @@ update_done:
 }
 
 ; Soundtrack and logo live above the scroll buffers, below the VIC bank.
-* = $8000
+* = $9000
 !source "src/generated/galway_nights.inc"
 !source "src/music/galway_player.inc"
 !source "src/generated/logo.inc"
