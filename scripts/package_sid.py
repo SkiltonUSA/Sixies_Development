@@ -1,13 +1,28 @@
 #!/usr/bin/env python3
-"""Wrap the assembled 40-second C64 tune in a PSID v2 header."""
+"""Wrap the assembled music drivers in PSID v2 headers."""
 
 from pathlib import Path
 import struct
 
 
 ROOT = Path(__file__).resolve().parent.parent
-PRG_PATH = ROOT / "build" / "star-wars-40s.prg"
-SID_PATH = ROOT / "build" / "star-wars-40s.sid"
+
+TUNES = [
+    {
+        "prg": "better-off-alone-markov.prg",
+        "sid": "better-off-alone-markov.sid",
+        "name": "Better Off Alone - Markov Loop",
+        "author": "MP3 to MIDI to SID",
+        "released": "137 BPM PAL loop",
+    },
+    {
+        "prg": "galway-nights.prg",
+        "sid": "galway-nights.sid",
+        "name": "Galway Nights",
+        "author": "Claude (Martin Galway style)",
+        "released": "2026 original, 107 BPM PAL loop",
+    },
+]
 
 
 def psid_text(value: str) -> bytes:
@@ -15,10 +30,12 @@ def psid_text(value: str) -> bytes:
     return encoded + bytes(32 - len(encoded))
 
 
-def main() -> None:
-    prg = PRG_PATH.read_bytes()
+def package(tune: dict) -> None:
+    prg_path = ROOT / "build" / tune["prg"]
+    sid_path = ROOT / "build" / tune["sid"]
+    prg = prg_path.read_bytes()
     if prg[:2] != b"\x01\x08":
-        raise SystemExit(f"unexpected load address in {PRG_PATH}")
+        raise SystemExit(f"unexpected load address in {prg_path}")
 
     header = bytearray()
     header += b"PSID"
@@ -33,16 +50,21 @@ def main() -> None:
         1,       # start song
         0,       # vertical-blank timing
     )
-    header += psid_text("Star Wars - C64 Soundtrack 40s")
-    header += psid_text("John Williams / C64 arrangement")
-    header += psid_text("Original SID arrangement 2026")
+    header += psid_text(tune["name"])
+    header += psid_text(tune["author"])
+    header += psid_text(tune["released"])
     header += struct.pack(">HBBBB", 0x0014, 0, 0, 0, 0)  # PAL, MOS6581
 
     if len(header) != 0x7C:
         raise AssertionError(f"invalid PSID header size: {len(header)}")
 
-    SID_PATH.write_bytes(header + prg)
-    print(f"Built {SID_PATH.relative_to(ROOT)} ({SID_PATH.stat().st_size} bytes)")
+    sid_path.write_bytes(header + prg)
+    print(f"Built {sid_path.relative_to(ROOT)} ({sid_path.stat().st_size} bytes)")
+
+
+def main() -> None:
+    for tune in TUNES:
+        package(tune)
 
 
 if __name__ == "__main__":

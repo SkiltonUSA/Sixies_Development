@@ -32,6 +32,8 @@ entry:
     sei
     ldx #$ff
     txs
+    lda #$35                    ; ROMs out, I/O in: init reads RAM at $e000
+    sta $01
     lda #$7f
     sta $dc0d
     sta $dd0d
@@ -112,6 +114,42 @@ star_loop:
     cpx #STAR_COUNT
     bne star_loop
 
+; AND-merge the RetroDNA logo into the top four char rows (1280 bytes);
+; logo ink is 0-bits so stars around the lettering survive
+    ldx #$00
+logo_loop:
+    lda logo_bitmap,x
+    and BITMAP,x
+    sta BITMAP,x
+    lda logo_bitmap+$100,x
+    and BITMAP+$100,x
+    sta BITMAP+$100,x
+    lda logo_bitmap+$200,x
+    and BITMAP+$200,x
+    sta BITMAP+$200,x
+    lda logo_bitmap+$300,x
+    and BITMAP+$300,x
+    sta BITMAP+$300,x
+    lda logo_bitmap+$400,x
+    and BITMAP+$400,x
+    sta BITMAP+$400,x
+    inx
+    bne logo_loop
+
+; per-row logo colours over the 26 columns the lettering spans
+    ldx #25
+logo_color_loop:
+    lda logo_colors+0
+    sta SCREEN+0*40+7,x
+    lda logo_colors+1
+    sta SCREEN+1*40+7,x
+    lda logo_colors+2
+    sta SCREEN+2*40+7,x
+    lda logo_colors+3
+    sta SCREEN+3*40+7,x
+    dex
+    bpl logo_color_loop
+
 ; scroll buffers: index 0 = blank font row
     lda #<SCROLL_DATA
     sta text_ptr
@@ -135,6 +173,28 @@ clear_scroll_page:
     lda #>scroll_text
     sta text_ptr+1
 
+; Galway Nights soundtrack: the unrolled plotter takes more than one
+; frame, so the player is clocked from a raster IRQ instead of the main
+; loop. KERNAL is banked in for the $0314 vector; the bitmap at $e000
+; is write-only from the CPU so the ROM overlay is harmless.
+    lda #$36
+    sta $01
+    jsr galway_init
+    lda #<music_irq
+    sta $0314
+    lda #>music_irq
+    sta $0315
+    lda #$10                    ; fire well away from the $f8 frame wait
+    sta $d012
+    lda $d011
+    and #$7f
+    sta $d011
+    lda #$01
+    sta $d01a
+    lda #$ff
+    sta $d019
+    cli
+
 main_loop:
     jsr wait_frame
     jsr plotter
@@ -151,6 +211,11 @@ wf1:
     cmp #$f8
     beq wf1
     rts
+
+music_irq:
+    asl $d019                   ; acknowledge the raster interrupt
+    jsr galway_play
+    jmp $ea81                   ; restore registers and rti
 
 ; advance the crawl one source row and stream the next row of text into
 ; the cyclic column buffers, just below the visible window
@@ -228,4 +293,14 @@ update_done:
 
 !if * > SCROLL_DATA {
     !error "program overlaps the scroll buffers at SCROLL_DATA"
+}
+
+; Soundtrack and logo live above the scroll buffers, below the VIC bank.
+* = $8000
+!source "src/generated/galway_nights.inc"
+!source "src/music/galway_player.inc"
+!source "src/generated/logo.inc"
+
+!if * > $c000 {
+    !error "music and logo overlap the VIC bank at $c000"
 }

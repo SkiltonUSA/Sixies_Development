@@ -1,19 +1,25 @@
-; Three-voice SID arrangement based on the first 40 seconds of the supplied MP3.
-; The frame data is hand-arranged by scripts/generate_starwars_sid_frames.py.
-; No NoBounds music data is used here.
-; The playback engine renders it as an original mid-1980s C64 soundtrack
-; arrangement with PWM, bends, arpeggios, noise percussion, and filter sweeps.
+; Looping three-voice SID arrangement derived from a MIDI transcription.
+; scripts/generate_midi_markov_sid.py supplies a closed order-2 Markov phrase.
+; Voice 1: PWM lead. Voice 2: filtered arpeggio.
+; Voice 3: triangle bass/kick switching to pitched-noise snare.
 
-!to "build/star-wars-40s.prg", cbm
+!to "build/better-off-alone-markov.prg", cbm
 
-PAL_FRAMES = 2000
+!source "src/generated/better_off_alone.inc"
+
+TIMBRE_FRAMES = 200
+SNARE_PITCH = 125
+IMPACT_PITCH = 126
 
 frame_lo = $f7
 frame_hi = $f8
 event_byte = $f9
-stopped = $fa
-arp_pitch = $fb
-lead_bend = $fc
+
+lead_attack = $13f0
+lead_freq_lo = $13f1
+lead_freq_hi = $13f2
+impact_age = $13f3
+loop_frame = $13f4
 
 * = $0801
 !byte $0c,$08,$0a,$00,$9e
@@ -23,7 +29,7 @@ lead_bend = $fc
 * = $080d
 standalone_entry:
     sei
-    jsr sid40_init
+    jsr remains_init
 
 standalone_wait:
     lda $d012
@@ -33,16 +39,19 @@ standalone_wait_end:
     lda $d012
     cmp #$f8
     beq standalone_wait_end
-    jsr sid40_play
+    jsr remains_play
     jmp standalone_wait
 
 * = $1000
-sid40_init:
+remains_init:
     lda #$00
     sta frame_lo
     sta frame_hi
-    sta stopped
-    sta lead_bend
+    sta lead_attack
+    sta lead_freq_lo
+    sta lead_freq_hi
+    sta impact_age
+    sta loop_frame
 
     ldx #$18
 clear_sid:
@@ -50,6 +59,8 @@ clear_sid:
     dex
     bpl clear_sid
 
+    ; Pulse widths start near 50 percent.  Voice 1 is modulated every frame;
+    ; voice 2 uses a pure saw and voice 3 a pure triangle/noise waveform.
     lda #$00
     sta $d402
     sta $d409
@@ -59,41 +70,40 @@ clear_sid:
     sta $d40a
     sta $d411
 
-    lda #$09                    ; hard lead attack, ringing decay
+    lda #$08                    ; immediate attack, broad cinematic decay
     sta $d405
-    lda #$b6                    ; bright sustain, audible release
+    lda #$a7
     sta $d406
-    lda #$06
+    lda #$03                    ; crisp arpeggio envelope
     sta $d40c
-    lda #$74
+    lda #$53
     sta $d40d
-    lda #$02
+    lda #$03                    ; weighty triangle bass
     sta $d413
-    lda #$92
+    lda #$83
     sta $d414
 
-    lda #$46                    ; resonance 4, route voices 2 and 3 to filter
+    lda #$42                    ; resonance 4, only voice 2 through filter
     sta $d417
-    lda #$1f                    ; low-pass filter, maximum volume
+    lda #$1f                    ; low-pass enabled, full master volume
     sta $d418
     rts
 
 * = $1080
-sid40_play:
-    lda stopped
-    bne play_done
+remains_play:
     lda frame_hi
-    cmp #>PAL_FRAMES
+    cmp #>BETTER_LOOP_FRAMES
     bcc render_frame
-    bne stop_music
+    bne restart_sequence
     lda frame_lo
-    cmp #<PAL_FRAMES
+    cmp #<BETTER_LOOP_FRAMES
     bcc render_frame
 
-stop_music:
-    jsr silence_voices
-    lda #$01
-    sta stopped
+restart_sequence:
+    lda #$00
+    sta frame_lo
+    sta frame_hi
+    jmp render_frame
 play_done:
     rts
 
@@ -111,14 +121,14 @@ lead_read:
 
     lda frame_lo
     clc
-    adc #<harmony_frames
-    sta harmony_read+1
+    adc #<arp_frames
+    sta arp_read+1
     lda frame_hi
-    adc #>harmony_frames
-    sta harmony_read+2
-harmony_read:
-    lda harmony_frames
-    jsr update_harmony
+    adc #>arp_frames
+    sta arp_read+2
+arp_read:
+    lda arp_frames
+    jsr update_arp
 
     lda frame_lo
     clc
@@ -132,6 +142,13 @@ bass_read:
     jsr update_bass
     jsr update_timbre
 
+    inc loop_frame
+    lda loop_frame
+    cmp #TIMBRE_FRAMES
+    bcc increment_song_frame
+    lda #$00
+    sta loop_frame
+increment_song_frame:
     inc frame_lo
     bne play_done
     inc frame_hi
@@ -142,195 +159,248 @@ update_lead:
     sta event_byte
     beq lead_off
     bpl lead_frequency
-    lda #$40                    ; pulse wave, gate off for retrigger
+    lda #$40                    ; gate off for a complete hard-restart frame
     sta $d404
-    lda #$06
-    sta lead_bend
+    lda #$01
+    sta lead_attack
 lead_frequency:
     lda event_byte
     and #$7f
     tay
     lda sid_freq_lo,y
+    sta lead_freq_lo
     sta $d400
     lda sid_freq_hi,y
+    sta lead_freq_hi
     sta $d401
 
-    ldx lead_bend
-    beq lead_bend_done
-    lda $d400
-    sec
-    sbc bend_delta_lo,x
-    sta $d400
-    lda $d401
-    sbc bend_delta_hi,x
-    sta $d401
-    dec lead_bend
-lead_bend_done:
-
-    ldx frame_lo
-    txa
-    and #$07
-    tax
-    lda vibrato_delta,x
-    bmi lead_vibrato_down
-    clc
-    adc $d400
-    sta $d400
-    bcc lead_vibrato_done
-    inc $d401
-    jmp lead_vibrato_done
-lead_vibrato_down:
-    clc
-    adc $d400
-    sta $d400
-    lda $d401
-    adc #$ff
-    sta $d401
-lead_vibrato_done:
-    lda #$41                    ; pulse wave + gate
+    lda event_byte
+    bmi lead_done
+    lda lead_attack
+    beq lead_pulse
+    dec lead_attack
+    lda #$23                    ; one-frame oscillator-synced saw transient
     sta $d404
+    rts
+lead_pulse:
+    lda #$41                    ; PWM pulse lead
+    sta $d404
+lead_done:
     rts
 lead_off:
     lda #$40
     sta $d404
+    lda #$00
+    sta lead_attack
     rts
 
-update_harmony:
+update_arp:
     sta event_byte
-    beq harmony_off
-    bpl harmony_frequency
-    lda #$60                    ; saw/pulse wave, gate off for retrigger
+    beq arp_off
+    bpl arp_frequency
+    lda #$20                    ; hard restart, pure saw waveform
     sta $d40b
-harmony_frequency:
+arp_frequency:
     lda event_byte
     and #$7f
-    sta arp_pitch
-    lda frame_lo
-    lsr
-    and #$07
-    tax
-    lda arp_offsets,x
-    clc
-    adc arp_pitch
     tay
     lda sid_freq_lo,y
     sta $d407
     lda sid_freq_hi,y
     sta $d408
-    lda #$61                    ; saw/pulse wave + gate
+    lda event_byte
+    bmi arp_done
+    lda #$21
     sta $d40b
+arp_done:
     rts
-harmony_off:
-    lda #$60
+arp_off:
+    lda #$20
     sta $d40b
     rts
 
 update_bass:
     sta event_byte
-    beq bass_off
+    bne bass_has_event
+    jmp bass_off
+bass_has_event:
+    lda event_byte
+    and #$7f
+    cmp #SNARE_PITCH
+    beq bass_snare
+    cmp #IMPACT_PITCH
+    beq bass_impact
+    lda event_byte
     bpl bass_frequency
-    lda #$00                    ; hard restart before a noise percussion hit
+    lda #$10                    ; triangle gate off for hard restart
     sta $d412
-    sta $d40e
-    lda #$20
-    sta $d40f
-    lda #$81                    ; one PAL frame of noise percussion
-    sta $d412
-    rts
+    lda #$03
+    sta $d413
+    lda #$83
+    sta $d414
+    lda #$00
+    sta impact_age
 bass_frequency:
     lda event_byte
     and #$7f
-    sta arp_pitch
-    lda frame_lo
-    lsr
-    lsr
-    and #$03
-    tax
-    lda bass_offsets,x
-    clc
-    adc arp_pitch
     tay
     lda sid_freq_lo,y
     sta $d40e
     lda sid_freq_hi,y
     sta $d40f
-    lda #$51                    ; triangle/pulse wave + gate
+    lda event_byte
+    bmi bass_done
+    lda #$11                    ; clean, solid triangle bass
+    sta $d412
+bass_done:
+    rts
+
+bass_snare:
+    lda event_byte
+    bpl snare_frequency
+    lda #$80                    ; noise gate off for hard restart
+    sta $d412
+    lda #$08                    ; longer decay than the cinematic impact
+    sta $d413
+    lda #$82
+    sta $d414
+snare_frequency:
+    lda #$00
+    sta $d40e
+    lda #$38                    ; bright, pitched SID noise
+    sta $d40f
+    lda event_byte
+    bmi bass_done
+    lda #$81
     sta $d412
     rts
+
+bass_impact:
+    lda event_byte
+    bpl impact_frequency
+    lda #$80                    ; noise gate off before the impact
+    sta $d412
+    lda #$00
+    sta $d413
+    lda #$f2                    ; full-level sustain for a forceful short hit
+    sta $d414
+    lda #$08
+    sta impact_age
+impact_frequency:
+    ldx impact_age
+    lda impact_freq_lo,x
+    sta $d40e
+    lda impact_freq_hi,x
+    sta $d40f
+    lda event_byte
+    bmi bass_done
+    lda #$81
+    sta $d412
+    lda impact_age
+    beq bass_done
+    dec impact_age
+    rts
+
 bass_off:
-    lda #$50
+    lda #$10
     sta $d412
     rts
 
 update_timbre:
-    lda frame_lo
+    ; Slow PWM and a four-second filter cycle add movement without changing
+    ; the Markov-generated pitches or note timing.
+    lda loop_frame
     lsr
     lsr
-    lsr
-    and #$0f
+    and #$1f
     tax
     lda pulse_lo,x
     sta $d402
     lda pulse_hi,x
     sta $d403
 
-    lda frame_lo
+    lda loop_frame
     lsr
     lsr
     lsr
-    lsr
-    and #$0f
     tax
     lda filter_cutoff,x
     sta $d416
-    lda frame_lo
+    lda loop_frame
     and #$07
     sta $d415
+
+    ; An eight-frame signed vibrato animates the lead frequency.  The base
+    ; note is retained separately so the modulation never accumulates.
+    lda $d404
+    and #$01
+    beq timbre_done
+    lda loop_frame
+    and #$07
+    tax
+    lda vibrato_offset,x
+    bpl vibrato_positive
+    clc
+    adc lead_freq_lo
+    sta $d400
+    lda lead_freq_hi
+    adc #$ff
+    sta $d401
+    rts
+vibrato_positive:
+    clc
+    adc lead_freq_lo
+    sta $d400
+    lda lead_freq_hi
+    adc #$00
+    sta $d401
+timbre_done:
     rts
 
-silence_voices:
-    lda #$00
-    sta $d404
-    sta $d40b
-    sta $d412
-    sta $d418
-    rts
-
-arp_offsets:
-    !byte 0,7,12,19,12,7,0,12
-bass_offsets:
-    !byte 0,0,12,0
-vibrato_delta:
-    !byte 0,3,5,3,0,$fd,$fb,$fd
-bend_delta_lo:
-    !byte $00,$0a,$12,$1c,$28,$36,$46
-bend_delta_hi:
-    !byte $00,$00,$00,$00,$00,$00,$00
 pulse_lo:
-    !byte $20,$80,$e0,$40,$a0,$00,$60,$c0,$20,$c0,$60,$00,$a0,$40,$e0,$80
+    !byte $00,$40,$80,$c0,$00,$40,$80,$c0
+    !byte $00,$40,$80,$c0,$00,$40,$80,$c0
+    !byte $00,$c0,$80,$40,$00,$c0,$80,$40
+    !byte $00,$c0,$80,$40,$00,$c0,$80,$40
 pulse_hi:
-    !byte $04,$04,$04,$05,$05,$06,$06,$06,$07,$06,$06,$06,$05,$05,$04,$04
+    !byte $05,$05,$05,$05,$06,$06,$06,$06
+    !byte $07,$07,$07,$07,$08,$08,$08,$08
+    !byte $09,$09,$09,$09,$08,$08,$08,$08
+    !byte $07,$07,$07,$07,$06,$06,$06,$06
+
+vibrato_offset:
+    !byte $00,$03,$06,$03,$00,$fd,$fa,$fd
+
+; 25 entries: loop_frame / 8 ranges from 0 through 24.
 filter_cutoff:
-    !byte $14,$1c,$28,$38,$50,$68,$82,$9c,$b4,$9c,$82,$68,$50,$38,$28,$1c
+    !byte $18,$1c,$22,$2a,$34,$40,$4e,$5e,$70,$82
+    !byte $94,$a6,$b8,$c8,$d4,$dc,$c8,$ae,$92,$76
+    !byte $5e,$48,$38,$2a,$20
+
+; Index 8 starts high and descends as impact_age counts down.
+impact_freq_lo:
+    !byte $00,$20,$40,$60,$80,$a0,$c0,$e0,$00
+impact_freq_hi:
+    !byte $10,$14,$18,$1e,$26,$30,$3c,$4a,$58
 
 * = $1400
 !source "src/generated/sid_pal_freq.inc"
 
 * = $1800
 lead_frames:
-!bin "src/music/starwars_3voice_frames.bin", PAL_FRAMES, 0
+!bin "src/music/better_off_alone_frames.bin", BETTER_LOOP_FRAMES, 0
 
-* = $2000
-harmony_frames:
-!bin "src/music/starwars_3voice_frames.bin", PAL_FRAMES, PAL_FRAMES
+* = $1980
+arp_frames:
+!bin "src/music/better_off_alone_frames.bin", BETTER_LOOP_FRAMES, BETTER_LOOP_FRAMES
 
-* = $2800
+* = $1b00
 bass_frames:
-!bin "src/music/starwars_3voice_frames.bin", PAL_FRAMES, PAL_FRAMES * 2
+!bin "src/music/better_off_alone_frames.bin", BETTER_LOOP_FRAMES, BETTER_LOOP_FRAMES * 2
 
-!if sid40_init != $1000 {
+!if remains_init != $1000 {
     !error "PSID init address changed; update scripts/package_sid.py"
 }
-!if sid40_play != $1080 {
+!if remains_play != $1080 {
     !error "PSID play address changed; update scripts/package_sid.py"
 }

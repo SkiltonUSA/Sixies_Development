@@ -1,0 +1,46 @@
+; "Galway Nights" -- standalone PRG / PSID wrapper around the shared
+; player core in src/music/galway_player.inc. The same core is included
+; by src/main.a as the demo soundtrack.
+
+!to "build/galway-nights.prg", cbm
+
+!source "src/generated/galway_nights.inc"
+
+* = $0801
+!byte $0c,$08,$0a,$00,$9e
+!text "2061"
+!byte $00,$00,$00
+
+* = $080d
+standalone_entry:
+    sei
+    jsr psid_init
+
+standalone_wait:
+    lda $d012
+    cmp #$f8
+    bne standalone_wait
+standalone_wait_end:
+    lda $d012
+    cmp #$f8
+    beq standalone_wait_end
+    jsr psid_play
+    jmp standalone_wait
+
+* = $1000
+psid_init:
+    jmp galway_init
+
+* = $1080
+psid_play:
+    jmp galway_play
+
+* = $1100
+!source "src/music/galway_player.inc"
+
+!if psid_init != $1000 {
+    !error "PSID init address changed; update scripts/package_sid.py"
+}
+!if psid_play != $1080 {
+    !error "PSID play address changed; update scripts/package_sid.py"
+}
