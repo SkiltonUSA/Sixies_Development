@@ -1,10 +1,10 @@
-# Starwar Demo
+# Starwars Demo
 
-Standalone C64 Starwar Demo scroller intro inspired by Raistlin's write-up and
-the Nobounds / Genesis Project StarWars part.
+Standalone C64 Starwars Demo scroller intro inspired by Raistlin's write-up and
+the Nobounds / Genesis Project Starwars part.
 
-The primary `build/bangalore.prg` target is a native ACME port of the
-technique from the NoBounds StarWars part (`StarWars.cpp` in the public
+The primary `build/StarwarsScrollerDemo.prg` target is a native ACME port of the
+technique from the NoBounds Starwars part (`Starwars.cpp` in the public
 release): a hires-bitmap crawl with real pixel-level perspective.
 `scripts/generate_tables.py` builds a 16x16 font from a small set of unique
 16px row segments, precomputes bit-picked FontData tables for every
@@ -21,10 +21,10 @@ into hires bitmap data that is AND-merged over the starfield in the 80-pixel
 banner area above the crawl, with per-cell C64 ink colours chosen from the
 source image.
 
-`build/bangalore-loader.prg` (written to the D64 as `BANGALORE`) is an
+`build/StarwarsScrollerDemo-loader.prg` is an
 alternative path that loads the vendored, original Nobounds-generated part
 from disk, phase-locks CIA2 Timer B for its stable raster code, and jumps
-into the original StarWars entry point at `$9fcc`.
+into the original Starwars entry point at `$9fcc`.
 
 Build:
 
@@ -45,7 +45,7 @@ Run in VICE, when installed:
 ./scripts/run.sh
 ```
 
-The default run path autostarts `build/bangalore.prg`, the self-contained
+The default run path autostarts `build/StarwarsScrollerDemo.prg`, the self-contained
 native bitmap scroller.
 
 To test the packaged D64 loader for the original Nobounds-generated part:
@@ -60,13 +60,13 @@ Output:
 - `build/better-off-alone-markov.prg` -- assembled C64 music driver used by the PSID
 - `build/galway-nights.sid` -- original Martin Galway style 107 BPM PAL PSID
 - `build/galway-nights.prg` -- standalone runnable driver for the same tune
-- `build/bangalore.prg` -- native bitmap perspective scroller (default run target)
-- `build/bangalore-sparkle-part.prg` -- Sparkle2 payload, assembled at `$080d`
-- `build/bangalore-loader.prg` -- D64 loader for the original Nobounds part
-- `build/bangalore-direct.prg` -- monitor-preload runner for the original part
-- `build/bangalore.d64`
-- `build/bangalore.sls` -- Sparkle2 loader script
-- `build/bangalore-sparkle.d64` -- Sparkle2 disk, when Sparkle2 can run locally
+- `build/StarwarsScrollerDemo.prg` -- native bitmap perspective scroller (default run target)
+- `build/StarwarsScrollerDemo-sparkle-part.prg` -- Sparkle2 payload, assembled at `$080d`
+- `build/StarwarsScrollerDemo-loader.prg` -- D64 loader for the original Nobounds part
+- `build/StarwarsScrollerDemo-direct.prg` -- monitor-preload runner for the original part
+- `build/StarwarsScrollerDemo.d64`
+- `build/StarwarsScrollerDemo.sls` -- Sparkle2 loader script
+- `build/StarwarsScrollerDemo-sparkle.d64` -- Sparkle2 disk, when Sparkle2 can run locally
 
 The looping SID is built by `scripts/generate_midi_markov_sid.py` from the
 supplied 20-second MP3 reference. The first stage detects 137 BPM, transcribes
@@ -99,9 +99,9 @@ addresses are `$1000` and `$1080`.
 Sparkle2 support:
 
 - `scripts/ensure_sparkle2.sh` clones or updates `https://github.com/SkiltonUSA/Sparkle2.git` under `.context/Sparkle2`.
-- `scripts/generate_sparkle_sls.py` writes a Sparkle Loader Script for `build/bangalore-sparkle-part.prg`.
-- `scripts/build_sparkle.sh` runs the normal build, prepares `build/bangalore.sls`, and invokes Sparkle2 through `mono` or `wine` when either is installed.
-- Mono is the preferred non-Windows runner. Wine on macOS can launch Sparkle2 but may exit without writing a D64; in that case use the generated `build/bangalore.sls` with Sparkle2 on Windows.
+- `scripts/generate_sparkle_sls.py` writes a Sparkle Loader Script for `build/StarwarsScrollerDemo-sparkle-part.prg`.
+- `scripts/build_sparkle.sh` runs the normal build, prepares `build/StarwarsScrollerDemo.sls`, and invokes Sparkle2 through `mono` or `wine` when either is installed.
+- Mono is the preferred non-Windows runner. Wine on macOS can launch Sparkle2 but may exit without writing a D64; in that case use the generated `build/StarwarsScrollerDemo.sls` with Sparkle2 on Windows.
 
 Vendored Nobounds assets:
 

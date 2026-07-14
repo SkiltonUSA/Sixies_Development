@@ -2,7 +2,7 @@
 """Generate perspective scroller data + unrolled plotter for src/main.a.
 
 Port of the NoBounds/Rivalry Star Wars scroller technique described at
-https://c64demo.com/star-wars-scrollers/ (StarWars.cpp in the NoBounds
+https://c64demo.com/star-wars-scrollers/ (Starwars.cpp in the NoBounds
 public release):
 
 - the crawl lives in a hires bitmap; background is 1-bits, ink is 0-bits,
@@ -208,7 +208,7 @@ def line_width(y: int) -> int:
 
 def screen_to_source(y: int) -> list[int]:
     """For screen line y, map each of the 256 screen pixels to a source pixel
-    (or -1 outside the trapezoid). Same maths as StarWars.cpp."""
+    (or -1 outside the trapezoid). Same maths as Starwars.cpp."""
     lookup = [-1] * MAX_WIDTH
     half = line_width(y) / 2
     mid = MAX_WIDTH // 2

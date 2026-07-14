@@ -2,7 +2,7 @@
 ; The run script preloads all companion PRGs through the VICE monitor, then
 ; jumps here. This avoids slow or fragile KERNAL runtime loads.
 
-!to "build/bangalore-direct.prg", cbm
+!to "build/StarwarsScrollerDemo-direct.prg", cbm
 
 STARWARS_GO = $9fcc
 
@@ -14,7 +14,7 @@ entry:
     sta $d015
 
     ; The KERNAL leaves CIA1 Timer A enabled for its jiffy-clock IRQ. Once the
-    ; StarWars part installs its own hardware IRQ vector, an unacknowledged CIA
+    ; Starwars part installs its own hardware IRQ vector, an unacknowledged CIA
     ; IRQ would enter that raster handler immediately (rather than at line 50)
     ; and prevent the raster chain from ever reaching the music/frame update.
     lda #$7f
@@ -26,7 +26,7 @@ entry:
     lda #$00
     sta $fe
     sta $ff
-    sta $088f       ; PartDone from DISK-StarWars.prg
+    sta $088f       ; PartDone from DISK-Starwars.prg
     sta $08ff       ; standalone marker: clear means loop forever
     jsr $0900       ; SID init
     lda $dd00

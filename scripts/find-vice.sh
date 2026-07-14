@@ -15,5 +15,5 @@ do
   fi
 done
 
-echo "VICE x64sc was not found. Install VICE or open build/bangalore.prg in your emulator." >&2
+echo "VICE x64sc was not found. Install VICE or open build/StarwarsScrollerDemo.prg in your emulator." >&2
 exit 1

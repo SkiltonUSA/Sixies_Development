@@ -1,8 +1,8 @@
-; Standalone loader for the generated Nobounds / Genesis Project StarWars part.
+; Standalone loader for the generated Nobounds / Genesis Project Starwars part.
 ; It vendors the generated binary part files into a D64 and starts the real
 ; pixel-level perspective scroller at $9fcc.
 
-!to "build/bangalore-loader.prg", cbm
+!to "build/StarwarsScrollerDemo-loader.prg", cbm
 
 KERNAL_SETLFS = $ffba
 KERNAL_SETNAM = $ffbd
@@ -144,7 +144,7 @@ entry:
     lda #$00
     sta $fe
     sta $ff
-    sta $088f       ; PartDone from DISK-StarWars.prg
+    sta $088f       ; PartDone from DISK-Starwars.prg
     sta $08ff       ; standalone marker: clear means loop forever
     jsr $0900       ; SID init
     lda $dd00
@@ -294,7 +294,7 @@ load_step:
     !byte $00
 
 status_title:
-!scr "starwar demo loader"
+!scr "starwars demo loader"
 !byte $00
 status_step:
 !scr "load  0/9"

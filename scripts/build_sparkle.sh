@@ -8,11 +8,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 SPARKLE_DIR="$("$ROOT_DIR/scripts/ensure_sparkle2.sh")"
 SPARKLE_EXE="$SPARKLE_DIR/bin/Sparkle2.exe"
-SLS_PATH="$ROOT_DIR/build/bangalore.sls"
+SLS_PATH="$ROOT_DIR/build/StarwarsScrollerDemo.sls"
 SPARKLE_TIMEOUT_SECONDS="${SPARKLE_TIMEOUT_SECONDS:-90}"
 HEADLESS_EXE="$ROOT_DIR/.context/sparkle_headless/SparkleHeadless.exe"
 
-rm -f "$ROOT_DIR/build/bangalore-sparkle.d64"
+rm -f "$ROOT_DIR/build/StarwarsScrollerDemo-sparkle.d64"
 
 find_mono_visualbasic() {
   find \
@@ -48,22 +48,22 @@ ensure_mono_visualbasic() {
   fi
 
   echo "Mono is missing the Microsoft.VisualBasic runtime assembly required by Sparkle2." >&2
-  echo "Install the Mono MDK package, or run the generated build/bangalore.sls with Sparkle2 on Windows." >&2
+  echo "Install the Mono MDK package, or run the generated build/StarwarsScrollerDemo.sls with Sparkle2 on Windows." >&2
   return 1
 }
 
 build_mono_sls() {
   mkdir -p "$ROOT_DIR/.context/sparkle_headless"
-  cat > "$ROOT_DIR/.context/sparkle_headless/bangalore-mono.sls" <<EOF
+  cat > "$ROOT_DIR/.context/sparkle_headless/StarwarsScrollerDemo-mono.sls" <<EOF
 [Sparkle Loader Script]
-Path:	$ROOT_DIR/build/bangalore-sparkle.d64
-Header:	starwar demo
+Path:	$ROOT_DIR/build/StarwarsScrollerDemo-sparkle.d64
+Header:	starwars demo
 ID:	c64u
-Name:	Starwar Demo
+Name:	Starwars Demo
 Start:	080d
-File:	$ROOT_DIR/build/bangalore-sparkle-part.prg
+File:	$ROOT_DIR/build/StarwarsScrollerDemo-sparkle-part.prg
 EOF
-  echo "$ROOT_DIR/.context/sparkle_headless/bangalore-mono.sls"
+  echo "$ROOT_DIR/.context/sparkle_headless/StarwarsScrollerDemo-mono.sls"
 }
 
 run_sparkle() {
@@ -100,19 +100,19 @@ elif command -v wine >/dev/null 2>&1; then
     run_sparkle env MVK_CONFIG_LOG_LEVEL=0 WINEDEBUG=-all wine "$SPARKLE_EXE" "$SLS_PATH" || sparkle_status=$?
   fi
 else
-  echo "Sparkle2 script prepared at build/bangalore.sls"
+  echo "Sparkle2 script prepared at build/StarwarsScrollerDemo.sls"
   echo "Skipping Sparkle2 disk build: install mono or wine, or run Sparkle2.exe on Windows with that .sls file."
   exit 0
 fi
 
-if [[ -f "$ROOT_DIR/build/bangalore-sparkle.d64" ]]; then
-  echo "Built build/bangalore-sparkle.d64"
+if [[ -f "$ROOT_DIR/build/StarwarsScrollerDemo-sparkle.d64" ]]; then
+  echo "Built build/StarwarsScrollerDemo-sparkle.d64"
 else
   if [[ "$sparkle_status" -eq 124 ]]; then
-    echo "Sparkle2 did not finish before the timeout and build/bangalore-sparkle.d64 was not created." >&2
+    echo "Sparkle2 did not finish before the timeout and build/StarwarsScrollerDemo-sparkle.d64 was not created." >&2
   else
-    echo "Sparkle2 exited with status $sparkle_status but build/bangalore-sparkle.d64 was not created." >&2
+    echo "Sparkle2 exited with status $sparkle_status but build/StarwarsScrollerDemo-sparkle.d64 was not created." >&2
   fi
-  echo "If this used Wine on macOS, run the generated build/bangalore.sls with Sparkle2 on Windows or install Mono and rerun make sparkle." >&2
+  echo "If this used Wine on macOS, run the generated build/StarwarsScrollerDemo.sls with Sparkle2 on Windows or install Mono and rerun make sparkle." >&2
   exit 1
 fi

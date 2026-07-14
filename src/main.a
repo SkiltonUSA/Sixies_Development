@@ -1,14 +1,14 @@
-; Starwar Demo -- bitmap perspective scroller intro.
-; Technique ported from the NoBounds public release (StarWars.cpp/.asm)
+; Starwars Demo -- bitmap perspective scroller intro.
+; Technique ported from the NoBounds public release (Starwars.cpp/.asm)
 ; and https://c64demo.com/star-wars-scrollers/:
 ;   - hires bitmap, background = 1-bits, ink = 0-bits (glyphs AND together)
 ;   - 16 cyclic 256-byte column buffers of font-row indices
 ;   - generated unrolled plotter with perspective bit-picked FontData
 
 !ifdef SPARKLE_PAYLOAD {
-    !to "build/bangalore-sparkle-part.prg", cbm
+    !to "build/StarwarsScrollerDemo-sparkle-part.prg", cbm
 } else {
-    !to "build/bangalore.prg", cbm
+    !to "build/StarwarsScrollerDemo.prg", cbm
 }
 
 SCREEN = $c000                  ; VIC bank 3, screen offset $0000

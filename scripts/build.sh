@@ -29,10 +29,10 @@ acme src/starwars_direct.a
 acme src/music/starwars_40s.a
 acme src/music/galway_nights.a
 python3 scripts/package_sid.py
-echo "Built build/bangalore.prg ($(stat -f%z build/bangalore.prg) bytes)"
-echo "Built build/bangalore-sparkle-part.prg ($(stat -f%z build/bangalore-sparkle-part.prg) bytes)"
-echo "Built build/bangalore-loader.prg ($(stat -f%z build/bangalore-loader.prg) bytes)"
-echo "Built build/bangalore-direct.prg ($(stat -f%z build/bangalore-direct.prg) bytes)"
+echo "Built build/StarwarsScrollerDemo.prg ($(stat -f%z build/StarwarsScrollerDemo.prg) bytes)"
+echo "Built build/StarwarsScrollerDemo-sparkle-part.prg ($(stat -f%z build/StarwarsScrollerDemo-sparkle-part.prg) bytes)"
+echo "Built build/StarwarsScrollerDemo-loader.prg ($(stat -f%z build/StarwarsScrollerDemo-loader.prg) bytes)"
+echo "Built build/StarwarsScrollerDemo-direct.prg ($(stat -f%z build/StarwarsScrollerDemo-direct.prg) bytes)"
 
 cp src/assets/starwars/swcode.prg build/SWCODE.PRG
 cp src/assets/starwars/basecode.prg build/SWBASE.PRG
@@ -69,9 +69,9 @@ if [[ -z "$C1541_BIN" && -x /Applications/vice-arm64-sdl2-3.9/VICE.app/Contents/
 fi
 
 if [[ -n "$C1541_BIN" ]]; then
-  rm -f build/bangalore.d64
-  "$C1541_BIN" -format "starwar demo,01" d64 build/bangalore.d64 \
-    -write build/bangalore-loader.prg BANGALORE \
+  rm -f build/StarwarsScrollerDemo.d64
+  "$C1541_BIN" -format "starwars demo,01" d64 build/StarwarsScrollerDemo.d64 \
+    -write build/StarwarsScrollerDemo-loader.prg STARWARSSCROLLERDEMO \
     -write build/SWCODE.PRG SWCODE.PRG \
     -write build/SWSCREEN.PRG SWSCREEN.PRG \
     -write build/SWFONT.PRG SWFONT.PRG \
@@ -80,7 +80,7 @@ if [[ -n "$C1541_BIN" ]]; then
     -write build/SWBASE.PRG SWBASE.PRG \
     -write build/SWMUSIC.PRG SWMUSIC.PRG \
     -write build/SWDISK.PRG SWDISK.PRG >/dev/null
-  echo "Built build/bangalore.d64"
+  echo "Built build/StarwarsScrollerDemo.d64"
 else
   echo "c1541 not found; skipping D64 build"
 fi

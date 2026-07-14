@@ -7,24 +7,24 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build"
-OUT = BUILD / "bangalore.sls"
+OUT = BUILD / "StarwarsScrollerDemo.sls"
 
 
 def main() -> None:
     BUILD.mkdir(exist_ok=True)
-    prg = BUILD / "bangalore-sparkle-part.prg"
+    prg = BUILD / "StarwarsScrollerDemo-sparkle-part.prg"
 
     if not prg.exists():
-        raise SystemExit("build/bangalore-sparkle-part.prg is missing; run scripts/build.sh first")
+        raise SystemExit("build/StarwarsScrollerDemo-sparkle-part.prg is missing; run scripts/build.sh first")
 
     lines = [
         "[Sparkle Loader Script]",
-        "Path:\tbangalore-sparkle.d64",
-        "Header:\tstarwar demo",
+        "Path:\tStarwarsScrollerDemo-sparkle.d64",
+        "Header:\tstarwars demo",
         "ID:\tc64u",
-        "Name:\tStarwar Demo",
+        "Name:\tStarwars Demo",
         "Start:\t080d",
-        "File:\tbangalore-sparkle-part.prg",
+        "File:\tStarwarsScrollerDemo-sparkle-part.prg",
     ]
     OUT.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Built {OUT}")
