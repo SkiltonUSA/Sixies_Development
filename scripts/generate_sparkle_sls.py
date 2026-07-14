@@ -20,9 +20,9 @@ def main() -> None:
     lines = [
         "[Sparkle Loader Script]",
         "Path:\tbangalore-sparkle.d64",
-        "Header:\tbangalore",
+        "Header:\tstarwar demo",
         "ID:\tc64u",
-        "Name:\tbangalore starwars",
+        "Name:\tStarwar Demo",
         "Start:\t080d",
         "File:\tbangalore-sparkle-part.prg",
     ]

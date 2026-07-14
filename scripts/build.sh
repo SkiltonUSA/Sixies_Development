@@ -71,7 +71,7 @@ fi
 
 if [[ -n "$C1541_BIN" ]]; then
   rm -f build/bangalore.d64
-  "$C1541_BIN" -format "bangalore,01" d64 build/bangalore.d64 \
+  "$C1541_BIN" -format "starwar demo,01" d64 build/bangalore.d64 \
     -write build/bangalore-loader.prg BANGALORE \
     -write build/SWCODE.PRG SWCODE.PRG \
     -write build/SWSCREEN.PRG SWSCREEN.PRG \

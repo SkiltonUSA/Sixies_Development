@@ -333,16 +333,36 @@ def main():
     data.extend(fmt_bytes(row_colors))
     data.append("")
 
-    # starfield: deterministic pseudo-random 0-bit pixels outside the crawl
+    # Starfield: deterministic pseudo-random 0-bit pixels.  Keep the crawl
+    # area clean, but fill the lower screen so the scene does not go empty
+    # underneath the perspective scroller.
     rng = random.Random(1977)
     stars = []
-    while len(stars) < 48:
-        x = rng.randrange(320)
-        yy = rng.randrange(200)
-        if Y_START <= yy < Y_START + HEIGHT:
-            continue
-        off = (yy // 8) * 320 + (x // 8) * 8 + (yy & 7)
-        stars.append((off, 0xFF ^ (0x80 >> (x & 7))))
+    used_star_pixels = set()
+
+    def add_stars(count: int, x_min: int, x_max: int, y_min: int, y_max: int) -> None:
+        remaining = count
+        attempts = 0
+        while remaining and attempts < count * 500:
+            attempts += 1
+            x = rng.randrange(x_min, x_max)
+            yy = rng.randrange(y_min, y_max)
+            if Y_START <= yy < Y_START + HEIGHT:
+                continue
+            key = (x, yy)
+            if key in used_star_pixels:
+                continue
+            used_star_pixels.add(key)
+            off = (yy // 8) * 320 + (x // 8) * 8 + (yy & 7)
+            stars.append((off, 0xFF ^ (0x80 >> (x & 7))))
+            remaining -= 1
+        if remaining:
+            raise SystemExit("could not place requested stars")
+
+    add_stars(36, 0, 320, 0, 80)       # behind and around the banner
+    add_stars(20, 0, 54, 0, 200)       # left of the crawl trapezoid
+    add_stars(20, 266, 320, 0, 200)    # right of the crawl trapezoid
+    add_stars(72, 0, 320, 176, 200)    # extended bottom field
     data.append(f"STAR_COUNT = {len(stars)}")
     data.append("star_lo:")
     data.extend(fmt_bytes([off & 0xFF for off, _ in stars]))

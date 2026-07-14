@@ -57,9 +57,9 @@ build_mono_sls() {
   cat > "$ROOT_DIR/.context/sparkle_headless/bangalore-mono.sls" <<EOF
 [Sparkle Loader Script]
 Path:	$ROOT_DIR/build/bangalore-sparkle.d64
-Header:	bangalore
+Header:	starwar demo
 ID:	c64u
-Name:	bangalore starwars
+Name:	Starwar Demo
 Start:	080d
 File:	$ROOT_DIR/build/bangalore-sparkle-part.prg
 EOF

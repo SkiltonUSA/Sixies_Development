@@ -1,6 +1,6 @@
-# Bangalore Star Wars Scroller Intro
+# Starwar Demo
 
-Standalone C64 Star Wars scroller intro inspired by Raistlin's write-up and
+Standalone C64 Starwar Demo scroller intro inspired by Raistlin's write-up and
 the Nobounds / Genesis Project StarWars part.
 
 The primary `build/bangalore.prg` target is a native ACME port of the

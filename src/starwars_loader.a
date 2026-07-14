@@ -294,7 +294,7 @@ load_step:
     !byte $00
 
 status_title:
-!scr "bangalore starwars loader"
+!scr "starwar demo loader"
 !byte $00
 status_step:
 !scr "load  0/9"

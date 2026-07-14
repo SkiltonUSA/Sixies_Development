@@ -1,4 +1,4 @@
-; Bangalore Star Wars scroller intro -- bitmap perspective version.
+; Starwar Demo -- bitmap perspective scroller intro.
 ; Technique ported from the NoBounds public release (StarWars.cpp/.asm)
 ; and https://c64demo.com/star-wars-scrollers/:
 ;   - hires bitmap, background = 1-bits, ink = 0-bits (glyphs AND together)
