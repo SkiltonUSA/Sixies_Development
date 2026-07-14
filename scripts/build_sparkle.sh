@@ -34,7 +34,7 @@ ensure_mono_visualbasic() {
   if [[ -z "$dll" && -d "$ROOT_DIR/.context" && -x "$(command -v brew || true)" ]]; then
     brew fetch --cask mono-mdk >/dev/null || true
     local pkg
-    pkg="$(find "$HOME/Library/Caches/Homebrew/downloads" -iname "*MonoFramework-MDK*.pkg" -print 2>/dev/null | head -n 1)"
+    pkg="$(find "$HOME/Library/Caches/Homebrew/downloads" -iname "*MonoFramework-MDK*.pkg" -print 2>/dev/null | head -n 1 || true)"
     if [[ -n "$pkg" ]]; then
       rm -rf "$ROOT_DIR/.context/mono-mdk-expanded"
       pkgutil --expand-full "$pkg" "$ROOT_DIR/.context/mono-mdk-expanded" >/dev/null
