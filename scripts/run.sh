@@ -15,4 +15,14 @@ if [[ "${RUN_D64:-0}" == "1" && -f "$BUILD_DIR/StarwarsScrollerDemo.d64" ]]; the
     -autostart "$BUILD_DIR/StarwarsScrollerDemo.d64"
 fi
 
-exec "$VICE_BIN" -autostart "$BUILD_DIR/StarwarsScrollerDemo.prg"
+RUN_PRG="$BUILD_DIR/StarwarsScrollerDemo-sfx.prg"
+if [[ ! -f "$RUN_PRG" ]]; then
+  RUN_PRG="$BUILD_DIR/StarwarsScrollerDemo.prg"
+fi
+
+# The native image contains data beneath C64 I/O and ROM. Inject mode avoids
+# VICE preferences that otherwise mount a PRG as a temporary, slow disk image;
+# the SFX build then decrunches the complete memory layout itself.
+exec "$VICE_BIN" \
+  -autostartprgmode 1 \
+  -autostart "$RUN_PRG"

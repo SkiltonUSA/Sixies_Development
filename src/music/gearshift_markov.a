@@ -1,0 +1,463 @@
+; "Gearshift" -- original punchy motif-Markov C64 game cue.
+; scripts/generate_gearshift_markov_sid.py supplies the looping note streams.
+; Voice 1: hard-restarted saw attack, bright pulse body, fast PWM, vibrato.
+; Voice 2: clipped one-frame-gapped pulse arpeggios.
+; Voice 3: octave pulse bass time-shared with pitch-drop kick and noise snare.
+
+!ifndef GEARSHIFT_EMBEDDED {
+    !to "build/gearshift-markov.prg", cbm
+}
+
+!source "src/generated/gearshift_markov.inc"
+
+GEAR_SNARE_PITCH = 125
+GEAR_KICK_PITCH = 126
+GEAR_LEAD_AGE_MAX = $1f
+
+gear_frame_lo = $f7
+gear_frame_hi = $f8
+gear_event = $f9
+gear_vib_index = $fa
+
+!ifndef GEARSHIFT_EMBEDDED {
+    * = $0801
+    !byte $0c,$08,$0a,$00,$9e
+    !text "2061"
+    !byte $00,$00,$00
+
+    * = $080d
+standalone_entry:
+    sei
+    jsr psid_init
+
+standalone_wait:
+    lda $d012
+    cmp #$f8
+    bne standalone_wait
+standalone_wait_end:
+    lda $d012
+    cmp #$f8
+    beq standalone_wait_end
+    jsr psid_play
+    jmp standalone_wait
+
+    * = $1000
+psid_init:
+    jmp gear_init
+
+    * = $1080
+psid_play:
+    jmp gear_play
+
+    * = $1100
+}
+gear_init:
+    lda #$00
+    sta gear_frame_lo
+    sta gear_frame_hi
+    sta gear_lead_age
+    sta gear_lead_freq_lo
+    sta gear_lead_freq_hi
+    sta gear_kick_age
+    sta gear_pw_dir
+
+    ldx #$18
+gear_clear_sid:
+    sta $d400,x
+    dex
+    bpl gear_clear_sid
+
+    lda #$40
+    sta gear_lead_gate
+    lda #$41
+    sta gear_bass_wave
+
+    ; Lead starts in the middle of a fast, wide PWM sweep. The arpeggio and
+    ; bass use narrow fixed pulses so their short notes cut through cleanly.
+    lda #$00
+    sta gear_pw_lo
+    sta $d402
+    sta $d409
+    sta $d410
+    lda #$08
+    sta gear_pw_hi
+    sta $d403
+    lda #$03
+    sta $d40a
+    lda #$06
+    sta $d411
+
+    lda #$02                    ; lead: instant attack, very short decay
+    sta $d405
+    lda #$b4
+    sta $d406
+    lda #$02                    ; arpeggio: clipped but harmonically present
+    sta $d40c
+    lda #$68
+    sta $d40d
+    lda #$02                    ; tight pulse bass
+    sta $d413
+    lda #$84
+    sta $d414
+
+    lda #$84                    ; moderate resonance, voice 3 through filter
+    sta $d417
+    lda #$1f                    ; low-pass, full master volume
+    sta $d418
+    rts
+
+gear_play:
+    lda gear_frame_hi
+    cmp #>GEARSHIFT_LOOP_FRAMES
+    bcc gear_render_frame
+    bne gear_restart_sequence
+    lda gear_frame_lo
+    cmp #<GEARSHIFT_LOOP_FRAMES
+    bcc gear_render_frame
+
+gear_restart_sequence:
+    lda #$00
+    sta gear_frame_lo
+    sta gear_frame_hi
+    jmp gear_render_frame
+gear_play_done:
+    rts
+
+gear_render_frame:
+    lda gear_frame_lo
+    clc
+    adc #<gear_lead_frames
+    sta gear_lead_read+1
+    lda gear_frame_hi
+    adc #>gear_lead_frames
+    sta gear_lead_read+2
+gear_lead_read:
+    lda gear_lead_frames
+    jsr gear_update_lead
+
+    lda gear_frame_lo
+    clc
+    adc #<gear_arp_frames
+    sta gear_arp_read+1
+    lda gear_frame_hi
+    adc #>gear_arp_frames
+    sta gear_arp_read+2
+gear_arp_read:
+    lda gear_arp_frames
+    jsr gear_update_arp
+
+    lda gear_frame_lo
+    clc
+    adc #<gear_bass_frames
+    sta gear_bass_read+1
+    lda gear_frame_hi
+    adc #>gear_bass_frames
+    sta gear_bass_read+2
+gear_bass_read:
+    lda gear_bass_frames
+    jsr gear_update_bass
+    jsr gear_update_effects
+
+    inc gear_frame_lo
+    bne gear_play_done
+    inc gear_frame_hi
+    rts
+
+gear_update_lead:
+    sta gear_event
+    bne gear_lead_has_event
+    lda #$40
+    sta $d404
+    sta gear_lead_gate
+    rts
+gear_lead_has_event:
+    and #$7f
+    tay
+    lda sid_freq_lo,y
+    sta gear_lead_freq_lo
+    lda sid_freq_hi,y
+    sta gear_lead_freq_hi
+    lda gear_event
+    bmi gear_lead_restart
+    lda gear_lead_gate
+    and #$01
+    bne gear_lead_hold
+    lda #$21                    ; saw attack for the first two frames
+    sta $d404
+    sta gear_lead_gate
+    lda #$00
+    sta gear_lead_age
+    rts
+gear_lead_hold:
+    inc gear_lead_age
+    lda gear_lead_age
+    cmp #$02
+    bne gear_lead_age_limit
+    lda #$41                    ; switch immediately to the pulse body
+    sta $d404
+    sta gear_lead_gate
+gear_lead_age_limit:
+    lda gear_lead_age
+    cmp #GEAR_LEAD_AGE_MAX
+    bcc gear_lead_done
+    lda #GEAR_LEAD_AGE_MAX
+    sta gear_lead_age
+gear_lead_done:
+    rts
+gear_lead_restart:
+    lda #$40
+    sta $d404
+    sta gear_lead_gate
+    lda #$00
+    sta gear_lead_age
+    rts
+
+gear_update_arp:
+    sta gear_event
+    bne gear_arp_has_event
+    lda #$40
+    sta $d40b
+    rts
+gear_arp_has_event:
+    and #$7f
+    tay
+    lda sid_freq_lo,y
+    sta $d407
+    lda sid_freq_hi,y
+    sta $d408
+    lda gear_event
+    bmi gear_arp_restart
+    lda #$41
+    sta $d40b
+    rts
+gear_arp_restart:
+    lda #$40
+    sta $d40b
+    rts
+
+gear_update_bass:
+    sta gear_event
+    bne gear_bass_has_event
+    lda gear_bass_wave
+    and #$fe
+    sta $d412
+    rts
+gear_bass_has_event:
+    and #$7f
+    cmp #GEAR_SNARE_PITCH
+    beq gear_bass_snare
+    cmp #GEAR_KICK_PITCH
+    beq gear_bass_kick
+    tay
+    lda sid_freq_lo,y
+    sta $d40e
+    lda sid_freq_hi,y
+    sta $d40f
+    lda gear_event
+    bmi gear_bass_restart
+    lda #$41                    ; narrow pulse bass
+    sta $d412
+    sta gear_bass_wave
+    rts
+gear_bass_restart:
+    lda #$40
+    sta $d412
+    sta gear_bass_wave
+    lda #$02                    ; restore the bass envelope after drums
+    sta $d413
+    lda #$84
+    sta $d414
+    lda #$00
+    sta gear_kick_age
+    rts
+
+gear_bass_snare:
+    lda gear_event
+    bmi gear_snare_restart
+    lda #$81
+    sta $d412
+    sta gear_bass_wave
+    rts
+gear_snare_restart:
+    lda #$80
+    sta $d412
+    sta gear_bass_wave
+    lda #$04                    ; short, gated noise crack
+    sta $d413
+    lda #$05
+    sta $d414
+    lda #$00
+    sta $d40e
+    sta gear_kick_age
+    lda #$48                    ; bright, compact SID noise
+    sta $d40f
+    rts
+
+gear_bass_kick:
+    lda gear_event
+    bmi gear_kick_restart
+    lda #$11                    ; triangle body while the pitch falls
+    sta $d412
+    sta gear_bass_wave
+    rts
+gear_kick_restart:
+    lda #$10
+    sta $d412
+    sta gear_bass_wave
+    lda #$09
+    sta $d413
+    lda #$00
+    sta $d414
+    lda #$04
+    sta gear_kick_age
+    rts
+
+gear_update_effects:
+    ; Fast, wide lead pulse sweep between $0300 and $0d00.
+    lda gear_pw_dir
+    bne gear_pw_down
+    lda gear_pw_lo
+    clc
+    adc #$60
+    sta gear_pw_lo
+    lda gear_pw_hi
+    adc #$00
+    sta gear_pw_hi
+    cmp #$0d
+    bcc gear_pw_write
+    lda #$01
+    sta gear_pw_dir
+    bne gear_pw_write
+gear_pw_down:
+    lda gear_pw_lo
+    sec
+    sbc #$60
+    sta gear_pw_lo
+    lda gear_pw_hi
+    sbc #$00
+    sta gear_pw_hi
+    cmp #$03
+    bcs gear_pw_write
+    lda #$00
+    sta gear_pw_dir
+gear_pw_write:
+    lda gear_pw_lo
+    sta $d402
+    lda gear_pw_hi
+    sta $d403
+
+    ; Kick drum: the triangle pitch falls sharply over four frames.
+    lda gear_kick_age
+    beq gear_kick_done
+    tax
+    lda gear_kick_freq_lo,x
+    sta $d40e
+    lda gear_kick_freq_hi,x
+    sta $d40f
+    dec gear_kick_age
+gear_kick_done:
+
+    ; Brisk low-pass movement keeps the bass percussive instead of woolly.
+    lda gear_frame_lo
+    lsr
+    lsr
+    and #$1f
+    tax
+    lda gear_filter_cutoff,x
+    sta $d416
+
+    ; Short delayed vibrato: eight flat frames, then a restrained 6.25 Hz
+    ; wobble so held notes sing without softening the staccato hook.
+    lda gear_lead_gate
+    and #$01
+    beq gear_effects_done
+    ldx gear_lead_age
+    lda gear_vib_depth,x
+    sta gear_vib_index
+    lda gear_frame_lo
+    asl
+    and #$0f
+    ora gear_vib_index
+    tay
+    lda gear_vib_wave,y
+    bmi gear_vib_negative
+    clc
+    adc gear_lead_freq_lo
+    sta $d400
+    lda gear_lead_freq_hi
+    adc #$00
+    sta $d401
+    rts
+gear_vib_negative:
+    clc
+    adc gear_lead_freq_lo
+    sta $d400
+    lda gear_lead_freq_hi
+    adc #$ff
+    sta $d401
+gear_effects_done:
+    rts
+
+; Depth row (x16) by note age: eight frames flat, then two shallow stages.
+gear_vib_depth:
+    !byte $00,$00,$00,$00,$00,$00,$00,$00
+    !byte $10,$10,$10,$10,$10,$10,$10,$10
+    !byte $20,$20,$20,$20,$20,$20,$20,$20
+    !byte $20,$20,$20,$20,$20,$20,$20,$20
+
+; Four 16-entry signed sine rows at increasing depth.
+gear_vib_wave:
+    !byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    !byte 0,15,28,37,40,37,28,15,0,-15,-28,-37,-40,-37,-28,-15
+    !byte 0,31,57,74,80,74,57,31,0,-31,-57,-74,-80,-74,-57,-31
+    !byte 0,49,90,117,127,117,90,49,0,-49,-90,-117,-127,-117,-90,-49
+
+; 32-entry bright triangle sweep for the rhythm voice cutoff.
+gear_filter_cutoff:
+    !byte $38,$40,$48,$50,$58,$60,$68,$70,$78,$80,$88,$90,$98,$a0,$a8,$b0
+    !byte $b8,$b0,$a8,$a0,$98,$90,$88,$80,$78,$70,$68,$60,$58,$50,$48,$40
+
+; Kick pitch drop indexed by kick_age (4 down to 1).
+gear_kick_freq_lo:
+    !byte $80,$00,$c0,$00,$00
+gear_kick_freq_hi:
+    !byte $01,$02,$02,$04,$07
+
+gear_lead_age:
+    !byte 0
+gear_lead_freq_lo:
+    !byte 0
+gear_lead_freq_hi:
+    !byte 0
+gear_lead_gate:
+    !byte 0
+gear_bass_wave:
+    !byte 0
+gear_kick_age:
+    !byte 0
+gear_pw_lo:
+    !byte 0
+gear_pw_hi:
+    !byte 0
+gear_pw_dir:
+    !byte 0
+
+!source "src/generated/sid_pal_freq.inc"
+
+gear_lead_frames:
+!bin "src/music/gearshift_markov_frames.bin", GEARSHIFT_LOOP_FRAMES, 0
+
+gear_arp_frames:
+!bin "src/music/gearshift_markov_frames.bin", GEARSHIFT_LOOP_FRAMES, GEARSHIFT_LOOP_FRAMES
+
+gear_bass_frames:
+!bin "src/music/gearshift_markov_frames.bin", GEARSHIFT_LOOP_FRAMES, GEARSHIFT_LOOP_FRAMES * 2
+
+!ifndef GEARSHIFT_EMBEDDED {
+    !if psid_init != $1000 {
+        !error "PSID init address changed; update scripts/package_sid.py"
+    }
+    !if psid_play != $1080 {
+        !error "PSID play address changed; update scripts/package_sid.py"
+    }
+}

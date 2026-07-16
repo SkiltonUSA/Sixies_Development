@@ -14,10 +14,18 @@
 SCREEN = $c000                  ; VIC bank 3, screen offset $0000
 BITMAP = $e000                  ; VIC bank 3, bitmap offset $2000
 SHIP_TRANSITION_SPRITES = $c400 ; TIE and X-wing layered sprite definitions
+INTRO_LOGO_EXO_SHADOW = $0400   ; preserves $c400 while plasma uses sprite RAM
 SHIP_TRANSITION_FRAMES = 90     ; 1.8-second PAL opposing flyby
 SCROLL_DATA = $7800             ; 16 pages, CPU-only (VIC never reads these)
 LOGO_BYTES = 3200               ; 320x80 hires bitmap bytes
 LOGO_COLOR_BYTES = 400          ; 40x10 screen colour bytes
+BANNER_HOLD_FRAMES = 500        ; ten seconds at 50 Hz PAL
+INTRO_LOGO_HOLD_FRAMES = 150    ; three seconds at 50 Hz PAL
+INTRO_LOGO_DEST = BITMAP+$0f00  ; rows 12-23, directly below the banner
+INTRO_LOGO_PAGES = 15           ; 320x96 hires bitmap
+GALWAY_OVERLAY_INIT = $9000
+GALWAY_OVERLAY_PLAY = $9003
+GALWAY_OVERLAY_STAGING = $d000  ; compressed runtime soundtrack beneath I/O
 
 text_ptr = $fb
 row_counter = $02
@@ -64,6 +72,9 @@ entry:
     lda #$ff
     sta $d019
 
+    lda $dd02
+    ora #$03                    ; CIA2 PA0-1 must drive the VIC bank pins
+    sta $dd02
     lda $dd00
     and #$fc                    ; VIC bank 3 ($c000-$ffff)
     sta $dd00
@@ -76,11 +87,29 @@ entry:
     lda #$00
     sta $d015
     sta $d020
+    jsr preserve_pilot_screen
+    jsr unpack_prelude_colors
+    jsr unpack_prelude_bitmap
+    jsr gear_init
+    jsr opening_music_irq_enable
+    jsr run_prelude_image
+    jsr opening_music_irq_disable
+    jsr restore_pilot_screen
+    jsr unpack_pilot_hires
+    jsr unpack_ripple_field
+    jsr preserve_intro_logo_exo
+    jsr opening_music_irq_enable
+    jsr run_razor_plasma_intro
+    jsr opening_music_irq_disable
+    jsr unpack_intro_logo
     jsr prepare_starfield
     jsr prepare_transition_lower_stars
 
     ; Run the hardware-sprite flyby over the same bitmap stars as the demo.
+    jsr opening_music_irq_enable
     jsr run_ship_transition_intro
+    jsr opening_music_irq_disable
+    jsr unpack_galway_overlay
     lda #$2b                    ; hide the display while adding the live part
     sta $d011
 
@@ -145,29 +174,10 @@ logo_color_tail_loop:
     bne logo_color_tail_loop
 }
 
-; scroll buffers: index 0 = blank font row
-    lda #<SCROLL_DATA
-    sta text_ptr
-    lda #>SCROLL_DATA
-    sta text_ptr+1
-    ldx #$10
-    lda #$00
-    tay
-clear_scroll_page:
-    sta (text_ptr),y
-    iny
-    bne clear_scroll_page
-    inc text_ptr+1
-    dex
-    bne clear_scroll_page
-
-    lda #$00
-    sta row_counter
-    lda #<scroll_text
-    sta text_ptr
-    lda #>scroll_text
-    sta text_ptr+1
+    ; The temporary title occupies the scroll buffers until its fade ends.
+    jsr prepare_intro_logo
     jsr opening_transition_init
+    ; jsr starwars_title_init     ; optional five-sprite STARWARS title
     lda #$3b                    ; show the black mask; reveal starts in main loop
     sta $d011
 
@@ -177,7 +187,7 @@ clear_scroll_page:
 ; is write-only from the CPU so the ROM overlay is harmless.
     lda #$36
     sta $01
-    jsr galway_init
+    jsr GALWAY_OVERLAY_INIT
     lda #<music_irq
     sta $0314
     lda #>music_irq
@@ -195,9 +205,16 @@ clear_scroll_page:
 
 main_loop:
     jsr wait_frame
+    jsr opening_transition_update
+    jsr intro_logo_update
+    lda intro_logo_state
+    cmp #$03
+    bne main_loop_skip_scroller
     jsr plotter
     jsr update_scroll
-    jsr opening_transition_update
+    ; jsr starwars_title_update   ; optional five-sprite STARWARS title
+main_loop_skip_scroller:
+    jsr banner_transition_update
     jmp main_loop
 
 wait_frame:
@@ -210,6 +227,252 @@ wf1:
     cmp #$f8
     beq wf1
     rts
+
+run_razor_plasma_intro:
+    lda #$00
+    sta ripple_phase_a
+    sta ripple_phase_b
+    sta plasma_speed_counter
+    sta ripple_speed_b
+    sta plasma_title_timer
+    sta plasma_title_state
+    sta plasma_title_index
+    sta plasma_title_word
+    sta plasma_title_frame_length
+    sta plasma_tie_orbit_index
+    sta plasma_tie_spin_index
+    sta plasma_tie_move_delay
+    sta intro_frame_counter      ; reused as the squadron fade timer
+    sta $d015
+    sta $d020
+    sta $d021
+    jsr update_razor_plasma
+    jsr plasma_tie_init
+    lda #$3b
+    sta $d011
+    lda #$ff                    ; CIA1 port A selects keyboard matrix rows
+    sta $dc02
+    lda #$00
+    sta $dc03                   ; CIA1 port B reads keyboard columns
+    lda #$08                    ; true hires bitmap for Vader and plasma
+    sta $d016
+razor_plasma_intro_loop:
+    jsr wait_frame
+    jsr razor_plasma_update_frame
+    lda #$7f                    ; row 7, column 4 is the C64 space key
+    sta $dc00
+    lda $dc01
+    and #$10
+    bne razor_plasma_intro_loop
+    lda #$ff                    ; leave no keyboard row selected
+    sta $dc00
+    lda #$00
+    sta $d015                   ; hide the orbiting TIE before the flyby
+    lda #$2b
+    sta $d011
+    lda #$08                    ; later stages use the original hires bitmap
+    sta $d016
+    rts
+
+razor_plasma_update_frame:
+    jsr plasma_tie_update
+    jsr update_plasma_message
+    inc plasma_speed_counter
+    lda plasma_speed_counter
+    cmp #$02                    ; target 25 ripple steps per PAL second
+    bne razor_plasma_skip_update
+    lda #$00
+    sta plasma_speed_counter
+    jsr advance_water_ripples
+    jsr update_razor_plasma
+razor_plasma_skip_update:
+    rts
+
+; Restore the scroller soundtrack over the opening-only Gearshift player.
+; The compact Exomizer stream lives in RAM beneath I/O during the opening.
+unpack_galway_overlay:
+    lda #<galway_overlay_exo_end
+    sta exod_byte_lo
+    lda #>galway_overlay_exo_end
+    sta exod_byte_hi
+    lda #$34
+    sta $01
+    jsr exod_decrunch
+    lda #$35
+    sta $01
+    rts
+
+; Both circular wavefronts expand. The second source advances at half speed,
+; allowing the rings to cross and form natural-looking interference bands.
+advance_water_ripples:
+    dec ripple_phase_a
+    inc ripple_speed_b
+    lda ripple_speed_b
+    and #$01
+    bne water_ripples_advanced
+    dec ripple_phase_b
+water_ripples_advanced:
+    rts
+
+; Build a packed-distance-to-color table once per step. Hires mode ignores
+; color RAM, so its first page can safely serve as the temporary lookup table.
+build_water_ripple_lut:
+    lda #<$d800
+    sta logo_dst
+    lda #>$d800
+    sta logo_dst+1
+    lda #$00
+    sta transition_col
+water_ripple_lut_high:
+    lda transition_col
+    clc
+    adc ripple_phase_b
+    and #$0f
+    tax
+    lda water_ripple_curve,x
+    sta tmp
+    ldy #$00
+water_ripple_lut_low:
+    tya
+    clc
+    adc ripple_phase_a
+    and #$0f
+    tax
+    lda water_ripple_curve,x
+    sta col_save                ; ripple A amplitude
+    clc
+    adc tmp
+    tax
+    lda col_save
+    cmp tmp
+    bcc water_ripple_use_second_palette
+    lda water_ripple_color_a,x
+    jmp water_ripple_store_color
+water_ripple_use_second_palette:
+    lda water_ripple_color_b,x
+water_ripple_store_color:
+    sta (logo_dst),y
+    iny
+    cpy #$10
+    bne water_ripple_lut_low
+    lda logo_dst
+    clc
+    adc #$10
+    sta logo_dst
+    bcc water_ripple_lut_pointer_ready
+    inc logo_dst+1
+water_ripple_lut_pointer_ready:
+    inc transition_col
+    lda transition_col
+    cmp #$10
+    bne water_ripple_lut_high
+    rts
+
+; Walk every checkerboard circle. A $ff field entry marks a cell covered by
+; Vader or the plasma message, preserving its static hires palette.
+update_razor_plasma:
+    jsr build_water_ripple_lut
+    lda #<(SCREEN+38)
+    sta logo_src
+    lda #>(SCREEN+38)
+    sta logo_src+1
+    lda #<water_ripple_visible_field
+    sta text_ptr
+    lda #>water_ripple_visible_field
+    sta text_ptr+1
+    lda #$00
+    sta transition_col
+razor_plasma_color_row:
+    lda #20
+    sta tmp
+razor_plasma_color_column:
+    ldy #$00
+    lda (text_ptr),y
+    cmp #$ff
+    beq razor_plasma_preserve_vader
+    tax
+    lda $d800,x                ; temporary packed-distance color LUT
+    and #$0f                   ; color RAM returns undefined upper bits
+    asl
+    asl
+    asl
+    asl                        ; hires foreground occupies the high nibble
+    sta (logo_src),y
+razor_plasma_preserve_vader:
+    inc text_ptr
+    bne razor_plasma_field_pointer_ready
+    inc text_ptr+1
+razor_plasma_field_pointer_ready:
+    lda logo_src
+    sec
+    sbc #$02
+    sta logo_src
+    bcs razor_plasma_screen_pointer_ready
+    dec logo_src+1
+razor_plasma_screen_pointer_ready:
+    dec tmp
+    bne razor_plasma_color_column
+
+    lda transition_col
+    and #$01
+    beq razor_plasma_even_row_advance
+    lda #79                    ; odd row end to next even row column 38
+    bne razor_plasma_advance_screen_row
+razor_plasma_even_row_advance:
+    lda #81                    ; even row end to next odd row column 39
+razor_plasma_advance_screen_row:
+    clc
+    adc logo_src
+    sta logo_src
+    bcc razor_plasma_row_pointer_ready
+    inc logo_src+1
+razor_plasma_row_pointer_ready:
+    inc transition_col
+    lda transition_col
+    cmp #25
+    bne razor_plasma_color_row
+    rts
+
+ripple_phase_a:
+!byte $00
+ripple_phase_b:
+!byte $00
+plasma_speed_counter:
+!byte $00
+ripple_speed_b:
+!byte $00
+plasma_title_timer:
+!byte $00
+plasma_title_state:
+!byte $00
+plasma_title_index:
+!byte $00
+plasma_message_cell_index:
+!byte $00
+plasma_tie_x_msb:
+!byte $00
+plasma_title_word:
+!byte $00
+plasma_title_frame_data:
+!word $0000
+plasma_title_frame_length:
+!byte $00
+plasma_tie_orbit_index:
+!byte $00
+plasma_tie_spin_index:
+!byte $00
+plasma_tie_move_delay:
+!byte $00
+opening_music_fade_volume:
+!byte $00
+opening_music_fade_delay:
+!byte $00
+opening_music_fade_active:
+!byte $00
+opening_irq_saved_lo:
+!byte $00
+opening_irq_saved_hi:
+!byte $00
 
 ; Prepare the exact bitmap and screen colors shared by the TIE flyby and crawl.
 prepare_starfield:
@@ -253,6 +516,7 @@ screen_row_next:
     bne screen_row_loop
 
 ; punch the starfield into the bitmap (0-bit = white pixel)
+punch_starfield:
     ldx #$00
 star_loop:
     lda star_lo,x
@@ -317,6 +581,12 @@ prepare_transition_star_loop:
 run_ship_transition_intro:
     jsr shiptransition_build_assets
     jsr shiptransition_init
+    lda #$0f
+    sta opening_music_fade_volume
+    lda #$03
+    sta opening_music_fade_delay
+    lda #$01
+    sta opening_music_fade_active
     lda #SHIP_TRANSITION_FRAMES
     sta intro_frame_counter
 ship_transition_intro_loop:
@@ -326,21 +596,122 @@ ship_transition_intro_loop:
     dec intro_frame_counter
     bne ship_transition_intro_loop
     jsr shiptransition_hide
+    lda #$00
+    sta $d404
+    sta $d40b
+    sta $d412
+    sta $d418
     rts
+
+; Gearshift writes full volume every play call. The opening raster IRQ
+; reapplies a descending master volume, dropping one step every three frames.
+opening_music_fade_tick:
+    dec opening_music_fade_delay
+    bne opening_music_apply_volume
+    lda #$03
+    sta opening_music_fade_delay
+    lda opening_music_fade_volume
+    beq opening_music_apply_volume
+    dec opening_music_fade_volume
+opening_music_apply_volume:
+    lda $d418
+    and #$f0
+    ora opening_music_fade_volume
+    sta $d418
+    rts
+
+; KERNAL is banked out during the opening, so the hardware IRQ vector occupies
+; the final two bitmap bytes. Preserve those pixels whenever the IRQ is active.
+opening_music_irq_enable:
+    sei
+    lda $fffe
+    sta opening_irq_saved_lo
+    lda $ffff
+    sta opening_irq_saved_hi
+    lda #<opening_music_irq
+    sta $fffe
+    lda #>opening_music_irq
+    sta $ffff
+    lda #$10
+    sta $d012
+    lda $d011
+    and #$7f
+    sta $d011
+    lda #$01
+    sta $d019
+    sta $d01a
+    cli
+    rts
+
+opening_music_irq_disable:
+    sei
+    lda #$00
+    sta $d01a
+    lda #$01
+    sta $d019
+    lda opening_irq_saved_lo
+    sta $fffe
+    lda opening_irq_saved_hi
+    sta $ffff
+    rts
+
+opening_music_irq:
+    pha
+    txa
+    pha
+    tya
+    pha
+    lda #$01
+    sta $d019
+    jsr gear_play
+    lda opening_music_fade_active
+    beq opening_music_irq_done
+    jsr opening_music_fade_tick
+opening_music_irq_done:
+    pla
+    tay
+    pla
+    tax
+    pla
+    rti
 
 music_irq:
     asl $d019                   ; acknowledge the raster interrupt
-    jsr galway_play
+    jsr GALWAY_OVERLAY_PLAY
+    jsr banner_clock_tick
     jmp $ea81                   ; restore registers and rti
 
-; Reveal the prepared bitmap from the centre out.  In hires bitmap mode each
+banner_clock_tick:
+    lda banner_transition_state
+    cmp #$01                    ; Death Star hold
+    beq banner_clock_advance
+    cmp #$04                    ; RetroDNA hold
+    bne banner_clock_done
+banner_clock_advance:
+    inc banner_hold_lo
+    bne banner_clock_done
+    inc banner_hold_hi
+banner_clock_done:
+    rts
+
+; Reveal the prepared bitmap from the centre out. In hires bitmap mode each
 ; screen byte supplies the two colours for one 8x8 cell, so a zero byte masks
-; the bitmap without touching its pixels.  Restoring two columns per step
-; reveals the live scroller while its bitmap plotter and music keep running.
+; the bitmap without touching its pixels. The crawl starts after the temporary
+; title has been held and faded.
 opening_transition_init:
     lda #$00
     sta transition_step
     sta transition_delay
+    sta intro_logo_state
+    sta intro_logo_hold_counter
+    sta intro_logo_phase
+    sta intro_logo_delay
+    sta banner_transition_state
+    sta banner_transition_phase
+    sta banner_drop_row
+    sta banner_work_row
+    sta banner_hold_lo
+    sta banner_hold_hi
     sta $d021
     ldx #$00
 opening_transition_hide_colors:
@@ -371,6 +742,681 @@ opening_transition_update:
     inc transition_step
 opening_transition_done:
     rts
+
+; Copy the generated 320x96 hires title from the temporary scroll-buffer
+; segment into bitmap rows 12-23. Both addresses are page aligned.
+prepare_intro_logo:
+    lda #<intro_logo_bitmap
+    sta logo_src
+    lda #>intro_logo_bitmap
+    sta logo_src+1
+    lda #<INTRO_LOGO_DEST
+    sta logo_dst
+    lda #>INTRO_LOGO_DEST
+    sta logo_dst+1
+    ldx #INTRO_LOGO_PAGES
+    ldy #$00
+intro_logo_copy_page:
+    lda (logo_src),y
+    sta (logo_dst),y
+    iny
+    bne intro_logo_copy_page
+    inc logo_src+1
+    inc logo_dst+1
+    dex
+    bne intro_logo_copy_page
+    rts
+
+intro_logo_update:
+    lda intro_logo_state
+    beq intro_logo_wait_for_reveal
+    cmp #$01
+    beq intro_logo_hold
+    cmp #$02
+    beq intro_logo_fade
+    rts
+
+intro_logo_wait_for_reveal:
+    lda transition_step
+    cmp #20
+    bcc intro_logo_done
+    lda #$01
+    sta intro_logo_state
+    lda #$00
+    sta intro_logo_hold_counter
+    rts
+
+intro_logo_hold:
+    inc intro_logo_hold_counter
+    lda intro_logo_hold_counter
+    cmp #INTRO_LOGO_HOLD_FRAMES
+    bcc intro_logo_done
+    lda #$00
+    sta intro_logo_phase
+    sta intro_logo_delay
+    lda #$02
+    sta intro_logo_state
+intro_logo_done:
+    rts
+
+intro_logo_fade:
+    inc intro_logo_delay
+    lda intro_logo_delay
+    and #$03
+    bne intro_logo_done
+    jsr intro_logo_apply_fade
+    inc intro_logo_phase
+    lda intro_logo_phase
+    cmp #$04
+    bcc intro_logo_done
+    jmp intro_logo_start_scroller
+
+; Apply the same cumulative four-phase Bayer fade used by the banner cycle.
+intro_logo_apply_fade:
+    lda intro_logo_phase
+    asl
+    asl
+    tax
+    lda banner_fade_masks,x
+    sta intro_logo_mask0+1
+    inx
+    lda banner_fade_masks,x
+    sta intro_logo_mask1+1
+    inx
+    lda banner_fade_masks,x
+    sta intro_logo_mask2+1
+    inx
+    lda banner_fade_masks,x
+    sta intro_logo_mask3+1
+
+    lda #>intro_logo_bitmap
+    sta intro_logo_load0+2
+    sta intro_logo_load1+2
+    sta intro_logo_load2+2
+    sta intro_logo_load3+2
+    lda #>INTRO_LOGO_DEST
+    sta intro_logo_store0+2
+    sta intro_logo_store1+2
+    sta intro_logo_store2+2
+    sta intro_logo_store3+2
+    lda #INTRO_LOGO_PAGES
+    sta intro_logo_pages
+    ldx #$00
+intro_logo_fade_page:
+intro_logo_load0:
+    lda intro_logo_bitmap,x
+intro_logo_mask0:
+    ora #$00
+intro_logo_store0:
+    sta INTRO_LOGO_DEST,x
+    inx
+intro_logo_load1:
+    lda intro_logo_bitmap,x
+intro_logo_mask1:
+    ora #$00
+intro_logo_store1:
+    sta INTRO_LOGO_DEST,x
+    inx
+intro_logo_load2:
+    lda intro_logo_bitmap,x
+intro_logo_mask2:
+    ora #$00
+intro_logo_store2:
+    sta INTRO_LOGO_DEST,x
+    inx
+intro_logo_load3:
+    lda intro_logo_bitmap,x
+intro_logo_mask3:
+    ora #$00
+intro_logo_store3:
+    sta INTRO_LOGO_DEST,x
+    inx
+    bne intro_logo_fade_page
+    inc intro_logo_load0+2
+    inc intro_logo_load1+2
+    inc intro_logo_load2+2
+    inc intro_logo_load3+2
+    inc intro_logo_store0+2
+    inc intro_logo_store1+2
+    inc intro_logo_store2+2
+    inc intro_logo_store3+2
+    dec intro_logo_pages
+    bne intro_logo_fade_page
+    rts
+
+; Restore the crawl palette, reclaim the temporary image as 16 cyclic buffer
+; pages, and initialize text streaming after the title has disappeared.
+intro_logo_start_scroller:
+    lda #<INTRO_LOGO_DEST
+    sta logo_dst
+    lda #>INTRO_LOGO_DEST
+    sta logo_dst+1
+    ldx #INTRO_LOGO_PAGES
+    lda #$ff
+    ldy #$00
+intro_logo_clear_canvas_page:
+    sta (logo_dst),y
+    iny
+    bne intro_logo_clear_canvas_page
+    inc logo_dst+1
+    dex
+    bne intro_logo_clear_canvas_page
+
+    lda #<(SCREEN+10*40)
+    sta logo_dst
+    lda #>(SCREEN+10*40)
+    sta logo_dst+1
+    ldx #10
+intro_logo_restore_color_row:
+    lda screen_row_colors,x
+    ldy #39
+intro_logo_restore_color_col:
+    sta (logo_dst),y
+    dey
+    bpl intro_logo_restore_color_col
+    lda logo_dst
+    clc
+    adc #40
+    sta logo_dst
+    bcc intro_logo_restore_color_next
+    inc logo_dst+1
+intro_logo_restore_color_next:
+    inx
+    cpx #25
+    bne intro_logo_restore_color_row
+
+    jsr punch_starfield
+    lda #<SCROLL_DATA
+    sta text_ptr
+    lda #>SCROLL_DATA
+    sta text_ptr+1
+    ldx #$10
+    lda #$00
+    tay
+intro_logo_clear_scroll_page:
+    sta (text_ptr),y
+    iny
+    bne intro_logo_clear_scroll_page
+    inc text_ptr+1
+    dex
+    bne intro_logo_clear_scroll_page
+
+    lda #$00
+    sta row_counter
+    sta plot_base+1
+    lda #<scroll_text
+    sta text_ptr
+    lda #>scroll_text
+    sta text_ptr+1
+    lda #$03
+    sta intro_logo_state
+    rts
+
+; Hold each completed banner for ten seconds. The handoffs use four cumulative
+; Bayer masks followed by a fast top-to-bottom character-row drop.
+banner_transition_update:
+    lda banner_transition_state
+    beq banner_transition_wait_for_reveal
+    cmp #$01
+    beq banner_transition_hold_deathstar
+    cmp #$02
+    beq banner_transition_fade_deathstar
+    cmp #$03
+    beq banner_transition_drop_retrodna
+    cmp #$04
+    beq banner_transition_hold_retrodna
+    cmp #$05
+    beq banner_transition_fade_retrodna
+    jmp banner_transition_drop_deathstar
+
+banner_transition_wait_for_reveal:
+    lda transition_step
+    cmp #20
+    bcs banner_transition_reveal_ready
+    rts
+banner_transition_reveal_ready:
+    jsr banner_clock_reset
+    lda #$01
+    sta banner_transition_state
+    rts
+
+banner_transition_hold_deathstar:
+    jsr banner_clock_complete
+    bcs banner_transition_deathstar_expired
+    rts
+banner_transition_deathstar_expired:
+    lda #$00
+    sta banner_transition_phase
+    lda #$02
+    sta banner_transition_state
+    rts
+
+banner_transition_fade_deathstar:
+    jsr banner_fade_logo
+    jsr banner_repunch_stars
+    inc banner_transition_phase
+    lda banner_transition_phase
+    cmp #$04
+    bcs banner_transition_deathstar_faded
+    rts
+banner_transition_deathstar_faded:
+    lda #$00
+    sta banner_transition_phase
+    sta banner_drop_row
+    jsr banner_prepare_retrodna_palette
+    lda #$03
+    sta banner_transition_state
+    rts
+
+banner_transition_drop_retrodna:
+    jsr banner_drop_retrodna_row
+    jsr banner_repunch_stars
+    inc banner_drop_row
+    lda banner_drop_row
+    cmp #$08
+    bcs banner_transition_retrodna_dropped
+    rts
+banner_transition_retrodna_dropped:
+    jsr banner_clock_reset
+    lda #$04
+    sta banner_transition_state
+    rts
+
+banner_transition_hold_retrodna:
+    jsr banner_clock_complete
+    bcs banner_transition_retrodna_expired
+    rts
+banner_transition_retrodna_expired:
+    lda #$00
+    sta banner_transition_phase
+    lda #$05
+    sta banner_transition_state
+    rts
+
+banner_transition_fade_retrodna:
+    jsr banner_fade_retrodna_logo
+    jsr banner_repunch_stars
+    inc banner_transition_phase
+    lda banner_transition_phase
+    cmp #$04
+    bcs banner_transition_retrodna_faded
+    rts
+banner_transition_retrodna_faded:
+    lda #$00
+    sta banner_transition_phase
+    sta banner_drop_row
+    jsr banner_prepare_deathstar_palette
+    lda #$06
+    sta banner_transition_state
+    rts
+
+banner_transition_drop_deathstar:
+    jsr banner_drop_deathstar_row
+    jsr banner_repunch_stars
+    inc banner_drop_row
+    lda banner_drop_row
+    cmp #10
+    bcs banner_transition_deathstar_dropped
+    rts
+banner_transition_deathstar_dropped:
+    jsr banner_clock_reset
+    lda #$01
+    sta banner_transition_state
+banner_transition_done:
+    rts
+
+banner_clock_reset:
+    lda #$00
+    sta banner_hold_lo
+    sta banner_hold_hi
+    rts
+
+banner_clock_complete:
+    lda banner_hold_hi
+    cmp #>BANNER_HOLD_FRAMES
+    bcc banner_clock_incomplete
+    bne banner_clock_is_complete
+    lda banner_hold_lo
+    cmp #<BANNER_HOLD_FRAMES
+    rts
+banner_clock_incomplete:
+    clc
+    rts
+banner_clock_is_complete:
+    sec
+    rts
+
+; Apply one cumulative 4x4 Bayer threshold to the Death Star source. Four
+; adjacent bytes are handled per iteration so each phase remains quick.
+banner_fade_logo:
+    lda banner_transition_phase
+    asl
+    asl
+    tax
+    lda banner_fade_masks,x
+    sta banner_fade_mask0+1
+    sta banner_fade_tail_mask0+1
+    inx
+    lda banner_fade_masks,x
+    sta banner_fade_mask1+1
+    sta banner_fade_tail_mask1+1
+    inx
+    lda banner_fade_masks,x
+    sta banner_fade_mask2+1
+    sta banner_fade_tail_mask2+1
+    inx
+    lda banner_fade_masks,x
+    sta banner_fade_mask3+1
+    sta banner_fade_tail_mask3+1
+
+    lda #>logo_bitmap
+    sta banner_fade_load0+2
+    sta banner_fade_load1+2
+    sta banner_fade_load2+2
+    sta banner_fade_load3+2
+    lda #>BITMAP
+    sta banner_fade_store0+2
+    sta banner_fade_store1+2
+    sta banner_fade_store2+2
+    sta banner_fade_store3+2
+    lda #12
+    sta banner_fade_pages
+banner_fade_page:
+    ldx #$00
+banner_fade_page_loop:
+banner_fade_load0:
+    lda logo_bitmap,x
+banner_fade_mask0:
+    ora #$00
+banner_fade_store0:
+    sta BITMAP,x
+    inx
+banner_fade_load1:
+    lda logo_bitmap,x
+banner_fade_mask1:
+    ora #$00
+banner_fade_store1:
+    sta BITMAP,x
+    inx
+banner_fade_load2:
+    lda logo_bitmap,x
+banner_fade_mask2:
+    ora #$00
+banner_fade_store2:
+    sta BITMAP,x
+    inx
+banner_fade_load3:
+    lda logo_bitmap,x
+banner_fade_mask3:
+    ora #$00
+banner_fade_store3:
+    sta BITMAP,x
+    inx
+    bne banner_fade_page_loop
+    inc banner_fade_load0+2
+    inc banner_fade_store0+2
+    inc banner_fade_load1+2
+    inc banner_fade_store1+2
+    inc banner_fade_load2+2
+    inc banner_fade_store2+2
+    inc banner_fade_load3+2
+    inc banner_fade_store3+2
+    dec banner_fade_pages
+    bne banner_fade_page
+
+    ldx #$00                    ; final half-page: $ec00-$ec7f
+banner_fade_tail_loop:
+    lda logo_bitmap+$c00,x
+banner_fade_tail_mask0:
+    ora #$00
+    sta BITMAP+$c00,x
+    inx
+    lda logo_bitmap+$c00,x
+banner_fade_tail_mask1:
+    ora #$00
+    sta BITMAP+$c00,x
+    inx
+    lda logo_bitmap+$c00,x
+banner_fade_tail_mask2:
+    ora #$00
+    sta BITMAP+$c00,x
+    inx
+    lda logo_bitmap+$c00,x
+banner_fade_tail_mask3:
+    ora #$00
+    sta BITMAP+$c00,x
+    inx
+    cpx #$80
+    bne banner_fade_tail_loop
+    rts
+
+; The RetroDNA source is split across two safe memory gaps. Fade its eight
+; active rows directly so no read from bitmap RAM is needed under KERNAL ROM.
+banner_fade_retrodna_logo:
+    lda banner_transition_phase
+    asl
+    asl
+    tax
+    lda banner_fade_masks,x
+    sta banner_retro_mask0+1
+    sta banner_retro_tail_mask0+1
+    inx
+    lda banner_fade_masks,x
+    sta banner_retro_mask1+1
+    sta banner_retro_tail_mask1+1
+    inx
+    lda banner_fade_masks,x
+    sta banner_retro_mask2+1
+    sta banner_retro_tail_mask2+1
+    inx
+    lda banner_fade_masks,x
+    sta banner_retro_mask3+1
+    sta banner_retro_tail_mask3+1
+    lda #$00
+    sta banner_work_row
+banner_retro_fade_row:
+    ldx banner_work_row
+    jsr banner_select_retrodna_row
+    ldy #$00
+banner_retro_fade_page:
+    lda (logo_src),y
+banner_retro_mask0:
+    ora #$00
+    sta (logo_dst),y
+    iny
+    lda (logo_src),y
+banner_retro_mask1:
+    ora #$00
+    sta (logo_dst),y
+    iny
+    lda (logo_src),y
+banner_retro_mask2:
+    ora #$00
+    sta (logo_dst),y
+    iny
+    lda (logo_src),y
+banner_retro_mask3:
+    ora #$00
+    sta (logo_dst),y
+    iny
+    bne banner_retro_fade_page
+    inc logo_src+1
+    inc logo_dst+1
+    ldy #$00
+banner_retro_fade_tail:
+    lda (logo_src),y
+banner_retro_tail_mask0:
+    ora #$00
+    sta (logo_dst),y
+    iny
+    lda (logo_src),y
+banner_retro_tail_mask1:
+    ora #$00
+    sta (logo_dst),y
+    iny
+    lda (logo_src),y
+banner_retro_tail_mask2:
+    ora #$00
+    sta (logo_dst),y
+    iny
+    lda (logo_src),y
+banner_retro_tail_mask3:
+    ora #$00
+    sta (logo_dst),y
+    iny
+    cpy #64
+    bne banner_retro_fade_tail
+    inc banner_work_row
+    lda banner_work_row
+    cmp #$08
+    bne banner_retro_fade_row
+    rts
+
+banner_drop_retrodna_row:
+    ldx banner_drop_row
+    jsr banner_select_retrodna_row
+    jmp banner_copy_logo_row
+
+banner_select_retrodna_row:
+    lda retrodna_source_lo,x
+    sta logo_src
+    lda retrodna_source_hi,x
+    sta logo_src+1
+    lda retrodna_destination_lo,x
+    sta logo_dst
+    lda retrodna_destination_hi,x
+    sta logo_dst+1
+    rts
+
+banner_drop_deathstar_row:
+    ldx banner_drop_row
+    lda deathstar_source_lo,x
+    sta logo_src
+    lda deathstar_source_hi,x
+    sta logo_src+1
+    lda deathstar_destination_lo,x
+    sta logo_dst
+    lda deathstar_destination_hi,x
+    sta logo_dst+1
+
+banner_copy_logo_row:
+    ldy #$00
+banner_drop_page_loop:
+    lda (logo_src),y
+    sta (logo_dst),y
+    iny
+    bne banner_drop_page_loop
+    inc logo_src+1
+    inc logo_dst+1
+    ldy #$00
+banner_drop_tail_loop:
+    lda (logo_src),y
+    sta (logo_dst),y
+    iny
+    cpy #64
+    bne banner_drop_tail_loop
+    rts
+
+; Restore the source-driven seven-color map. Dark/light blue and purple cells
+; are confined to shadows while white and three grays describe lit panels.
+banner_prepare_retrodna_palette:
+    ldx #$00
+banner_retro_palette_page:
+    lda retrodna_logo_colors,x
+    sta SCREEN,x
+    inx
+    bne banner_retro_palette_page
+    ldx #$00
+banner_retro_palette_tail:
+    lda retrodna_logo_colors+$100,x
+    sta SCREEN+$100,x
+    inx
+    cpx #144
+    bne banner_retro_palette_tail
+    rts
+
+banner_prepare_deathstar_palette:
+    ldx #$00
+banner_deathstar_palette_page:
+    lda logo_colors,x
+    sta SCREEN,x
+    inx
+    bne banner_deathstar_palette_page
+    ldx #$00
+banner_deathstar_palette_tail:
+    lda logo_colors+$100,x
+    sta SCREEN+$100,x
+    inx
+    cpx #144
+    bne banner_deathstar_palette_tail
+    rts
+
+banner_repunch_stars:
+    lda text_ptr
+    pha
+    lda text_ptr+1
+    pha
+    jsr punch_starfield
+    pla
+    sta text_ptr+1
+    pla
+    sta text_ptr
+    rts
+
+banner_fade_masks:
+!byte $aa,$00,$aa,$00
+!byte $aa,$55,$aa,$55
+!byte $ff,$55,$ff,$55
+!byte $ff,$ff,$ff,$ff
+
+retrodna_source_lo:
+!byte <(retrodna_bitmap_part1+0*320),<(retrodna_bitmap_part1+1*320)
+!byte <(retrodna_bitmap_part1+2*320),<(retrodna_bitmap_part1+3*320)
+!byte <(retrodna_bitmap_part1+4*320),<(retrodna_bitmap_part1+5*320)
+!byte <(retrodna_bitmap_part2+0*320),<(retrodna_bitmap_part2+1*320)
+retrodna_source_hi:
+!byte >(retrodna_bitmap_part1+0*320),>(retrodna_bitmap_part1+1*320)
+!byte >(retrodna_bitmap_part1+2*320),>(retrodna_bitmap_part1+3*320)
+!byte >(retrodna_bitmap_part1+4*320),>(retrodna_bitmap_part1+5*320)
+!byte >(retrodna_bitmap_part2+0*320),>(retrodna_bitmap_part2+1*320)
+retrodna_destination_lo:
+!for row, 1, 8 { !byte <(BITMAP + row * 320) }
+retrodna_destination_hi:
+!for row, 1, 8 { !byte >(BITMAP + row * 320) }
+
+deathstar_source_lo:
+!for row, 0, 9 { !byte <(logo_bitmap + row * 320) }
+deathstar_source_hi:
+!for row, 0, 9 { !byte >(logo_bitmap + row * 320) }
+deathstar_destination_lo:
+!for row, 0, 9 { !byte <(BITMAP + row * 320) }
+deathstar_destination_hi:
+!for row, 0, 9 { !byte >(BITMAP + row * 320) }
+
+banner_transition_state:
+!byte $00
+banner_transition_phase:
+!byte $00
+banner_drop_row:
+!byte $00
+banner_work_row:
+!byte $00
+banner_fade_pages:
+!byte $00
+banner_hold_lo:
+!byte $00
+banner_hold_hi:
+!byte $00
+intro_logo_state:
+!byte $00
+intro_logo_hold_counter:
+!byte $00
+intro_logo_phase:
+!byte $00
+intro_logo_delay:
+!byte $00
+intro_logo_pages:
+!byte $00
 
 opening_transition_restore_column:
     sta transition_col
@@ -406,7 +1452,15 @@ opening_transition_logo_dst_ready:
     bne opening_transition_restore_logo
 opening_transition_restore_crawl:
     ldy transition_col
+    cpx #12
+    bcc opening_transition_restore_normal
+    cpx #24
+    bcs opening_transition_restore_normal
+    lda #$07                    ; yellow title ink on black
+    bne opening_transition_store_crawl
+opening_transition_restore_normal:
     lda screen_row_colors,x
+opening_transition_store_crawl:
     sta (logo_dst),y
     lda logo_dst
     clc
@@ -504,13 +1558,900 @@ update_done:
     !error "program overlaps the scroll buffers at SCROLL_DATA"
 }
 
+; The pilot scene is decrunched directly to bitmap RAM at startup. After Space,
+; the compressed title at $c400 replaces this temporary stream at $7800.
+intro_logo_bitmap = SCROLL_DATA
+* = SCROLL_DATA
+pilot_hires_exo:
+!bin "src/generated/pilot_hires_bitmap.exo"
+pilot_hires_exo_end:
+pilot_ripple_field_exo:
+!bin "src/generated/pilot_ripple_field.exo"
+pilot_ripple_field_exo_end:
+!if * > $8100 {
+    !error "compressed pilot streams overlap the plasma-message workspace"
+}
+
+; This routine and its generated restore tables are needed only during the
+; opening. The title decrunch overwrites them after the user presses Space.
+* = $8100
+PLASMA_MESSAGE_BITMAP_BACKUP = SCROLL_DATA
+PLASMA_MESSAGE_SCREEN_BACKUP = $7cd8 ; 155 cells * 8 bitmap bytes
+PLASMA_MESSAGE_FIELD_BACKUP = $7d73  ; 155 saved screen bytes follow
+
+; Five seconds of clear plasma, then RETRODNA / PRESENTS / STARWARS. Each title
+; assembles in the same shuffled red-dot order used by its dissolve, holds for
+; three seconds, and leaves two seconds of clear plasma before the next word.
+update_plasma_message:
+    lda plasma_title_state
+    beq plasma_title_initial_pause
+    cmp #$01
+    bne plasma_title_check_hold
+    jmp plasma_title_assembling
+plasma_title_check_hold:
+    cmp #$02
+    bne plasma_title_check_dissolve
+    jmp plasma_title_holding
+plasma_title_check_dissolve:
+    cmp #$03
+    bne plasma_title_check_gap
+    jmp plasma_title_dissolving
+plasma_title_check_gap:
+    cmp #$04
+    bne plasma_message_update_done
+    jmp plasma_title_gap
+plasma_message_update_done:
+    rts
+
+plasma_title_initial_pause:
+    inc plasma_title_timer
+    lda plasma_title_timer
+    cmp #125                    ; five seconds in the plasma loop
+    bne plasma_message_update_done
+    lda #$00
+    sta plasma_title_timer
+    sta plasma_title_word
+    jsr start_plasma_title_entrance
+    rts
+
+plasma_title_assembling:
+    jsr draw_next_plasma_title_cell
+    jsr draw_next_plasma_title_cell
+    jsr draw_next_plasma_title_cell
+    jsr draw_next_plasma_title_cell
+    jsr draw_next_plasma_title_cell
+    jsr draw_next_plasma_title_cell
+    jsr draw_next_plasma_title_cell
+    jsr draw_next_plasma_title_cell
+    lda plasma_title_index
+    cmp plasma_title_frame_length
+    bcc plasma_message_update_done
+    lda #$00
+    sta plasma_title_timer
+    lda #$02
+    sta plasma_title_state
+    rts
+
+plasma_title_holding:
+    inc plasma_title_timer
+    lda plasma_title_timer
+    cmp #75                     ; three-second title hold
+    bne plasma_message_update_done
+    lda #$00
+    sta plasma_title_timer
+    sta plasma_title_index
+    lda #$03
+    sta plasma_title_state
+    rts
+
+plasma_title_dissolving:
+    jsr restore_next_plasma_title_cell
+    jsr restore_next_plasma_title_cell
+    jsr restore_next_plasma_title_cell
+    jsr restore_next_plasma_title_cell
+    jsr restore_next_plasma_title_cell
+    jsr restore_next_plasma_title_cell
+    jsr restore_next_plasma_title_cell
+    jsr restore_next_plasma_title_cell
+    lda plasma_title_index
+    cmp plasma_title_frame_length
+    bcc plasma_message_update_done
+    lda plasma_title_word
+    cmp #$02
+    beq plasma_title_sequence_complete
+    inc plasma_title_word
+    lda #$00
+    sta plasma_title_timer
+    lda #$04
+    sta plasma_title_state
+    rts
+plasma_title_sequence_complete:
+    lda #$05
+    sta plasma_title_state
+    rts
+
+plasma_title_gap:
+    inc plasma_title_timer
+    lda plasma_title_timer
+    cmp #50                     ; two seconds of clear plasma
+    beq plasma_title_gap_complete
+    rts
+plasma_title_gap_complete:
+    lda #$00
+    sta plasma_title_timer
+    jsr start_plasma_title_entrance
+    rts
+
+start_plasma_title_entrance:
+    lda #$00
+    sta plasma_title_index
+    jsr select_current_plasma_title_frame
+    lda #$01
+    sta plasma_title_state
+    rts
+
+select_current_plasma_title_frame:
+    ldx plasma_title_word
+    lda plasma_title_frame_lo,x
+    sta plasma_title_frame_data
+    lda plasma_title_frame_hi,x
+    sta plasma_title_frame_data+1
+    lda plasma_title_frame_lengths,x
+    sta plasma_title_frame_length
+    rts
+
+draw_next_plasma_title_cell:
+    jsr load_plasma_title_frame_pointer
+    lda plasma_title_index
+    cmp plasma_title_frame_length
+    bcs plasma_title_next_draw_done
+    tax
+    jsr draw_plasma_message_cell
+    inc plasma_title_index
+plasma_title_next_draw_done:
+    rts
+
+restore_next_plasma_title_cell:
+    jsr load_plasma_title_frame_pointer
+    lda plasma_title_index
+    cmp plasma_title_frame_length
+    bcs plasma_title_next_cell_done
+    tax
+    jsr restore_plasma_message_cell
+    inc plasma_title_index
+plasma_title_next_cell_done:
+    rts
+
+load_plasma_title_frame_pointer:
+    lda plasma_title_frame_data
+    sta logo_src
+    lda plasma_title_frame_data+1
+    sta logo_src+1
+    rts
+
+restore_plasma_message_cell:
+    jsr load_plasma_message_coordinates
+    jsr set_plasma_message_bitmap_pointer
+    jsr set_plasma_message_backup_pointer
+    ldy #$00
+plasma_message_restore_bitmap:
+    lda (text_ptr),y
+    sta (logo_dst),y
+    iny
+    cpy #$08
+    bne plasma_message_restore_bitmap
+
+    jsr set_plasma_message_screen_pointer
+    ldy plasma_message_cell_index
+    lda PLASMA_MESSAGE_SCREEN_BACKUP,y
+    ldy #$00
+    sta (logo_dst),y
+
+    lda transition_col
+    eor tmp
+    and #$01
+    bne plasma_message_cell_restored
+    jsr set_plasma_message_field_pointer
+    ldy plasma_message_cell_index
+    lda PLASMA_MESSAGE_FIELD_BACKUP,y
+    ldy #$00
+    sta (logo_dst),y
+plasma_message_cell_restored:
+    rts
+
+draw_plasma_message_cell:
+    jsr load_plasma_message_coordinates
+    jsr set_plasma_message_bitmap_pointer
+    jsr set_plasma_message_backup_pointer
+    ldy #$00
+plasma_message_draw_bitmap:
+    lda (logo_dst),y
+    sta (text_ptr),y
+    lda plasma_message_circle,y
+    sta (logo_dst),y
+    iny
+    cpy #$08
+    bne plasma_message_draw_bitmap
+
+    jsr set_plasma_message_screen_pointer
+    ldy #$00
+    lda (logo_dst),y
+    ldy plasma_message_cell_index
+    sta PLASMA_MESSAGE_SCREEN_BACKUP,y
+    lda #$20                    ; C64 red foreground on black
+    ldy #$00
+    sta (logo_dst),y
+
+    lda transition_col
+    eor tmp
+    and #$01
+    bne plasma_message_draw_done
+    jsr set_plasma_message_field_pointer
+    ldy #$00
+    lda (logo_dst),y
+    ldy plasma_message_cell_index
+    sta PLASMA_MESSAGE_FIELD_BACKUP,y
+    lda #$ff
+    ldy #$00
+    sta (logo_dst),y
+plasma_message_draw_done:
+    rts
+
+load_plasma_message_coordinates:
+    txa
+    tay
+    lda (logo_src),y
+    sta plasma_message_cell_index
+    ldy #PLASMA_TITLE_TOP
+plasma_title_decode_row:
+    cmp #PLASMA_TITLE_WIDTH
+    bcc plasma_title_decode_column
+    sec
+    sbc #PLASMA_TITLE_WIDTH
+    iny
+    bne plasma_title_decode_row
+plasma_title_decode_column:
+    sty transition_col
+    clc
+    adc #PLASMA_TITLE_LEFT
+    sta tmp
+    rts
+
+set_plasma_message_bitmap_pointer:
+    ldy transition_col
+    lda plasma_bitmap_row_lo,y
+    sta logo_dst
+    lda plasma_bitmap_row_hi,y
+    sta logo_dst+1
+    lda tmp
+    and #$20
+    beq plasma_message_bitmap_column_high_ready
+    inc logo_dst+1
+plasma_message_bitmap_column_high_ready:
+    lda tmp
+    asl
+    asl
+    asl
+    clc
+    adc logo_dst
+    sta logo_dst
+    bcc plasma_message_bitmap_pointer_ready
+    inc logo_dst+1
+plasma_message_bitmap_pointer_ready:
+    rts
+
+set_plasma_message_backup_pointer:
+    lda plasma_message_cell_index
+    sta text_ptr
+    lda #$00
+    sta text_ptr+1
+    asl text_ptr
+    rol text_ptr+1
+    asl text_ptr
+    rol text_ptr+1
+    asl text_ptr
+    rol text_ptr+1
+    lda text_ptr+1
+    clc
+    adc #>PLASMA_MESSAGE_BITMAP_BACKUP
+    sta text_ptr+1
+    rts
+
+set_plasma_message_screen_pointer:
+    ldy transition_col
+    lda plasma_screen_row_lo,y
+    sta logo_dst
+    lda plasma_screen_row_hi,y
+    sta logo_dst+1
+    lda logo_dst
+    clc
+    adc tmp
+    sta logo_dst
+    bcc plasma_message_screen_pointer_ready
+    inc logo_dst+1
+plasma_message_screen_pointer_ready:
+    rts
+
+set_plasma_message_field_pointer:
+    ldy transition_col
+    lda plasma_field_row_lo,y
+    sta logo_dst
+    lda plasma_field_row_hi,y
+    sta logo_dst+1
+    tya
+    and #$01
+    clc
+    adc #38
+    sec
+    sbc tmp
+    lsr
+    clc
+    adc logo_dst
+    sta logo_dst
+    bcc plasma_message_field_pointer_ready
+    inc logo_dst+1
+plasma_message_field_pointer_ready:
+    rts
+
+!source "src/generated/plasma_message.inc"
+
+; Preserve the compressed intro logo before its $c400 workspace becomes the
+; four-frame plasma TIE sprite bank. These opening-only routines share the
+; temporary workspace that the intro-logo decrunch overwrites after Space.
+preserve_intro_logo_exo:
+    ldx #$00
+preserve_intro_logo_exo_loop:
+    lda SHIP_TRANSITION_SPRITES+$000,x
+    sta INTRO_LOGO_EXO_SHADOW+$000,x
+    lda SHIP_TRANSITION_SPRITES+$100,x
+    sta INTRO_LOGO_EXO_SHADOW+$100,x
+    lda SHIP_TRANSITION_SPRITES+$200,x
+    sta INTRO_LOGO_EXO_SHADOW+$200,x
+    lda SHIP_TRANSITION_SPRITES+$300,x
+    sta INTRO_LOGO_EXO_SHADOW+$300,x
+    inx
+    bne preserve_intro_logo_exo_loop
+    rts
+
+plasma_tie_init:
+    ldx #$00
+plasma_tie_copy_frames:
+    lda plasma_tie_sprite_data,x
+    sta SHIP_TRANSITION_SPRITES,x
+    inx
+    bne plasma_tie_copy_frames
+    ldx #$07
+    lda #$0f                    ; light gray hires TIE squadron
+plasma_tie_color_loop:
+    sta $d027,x
+    dex
+    bpl plasma_tie_color_loop
+    lda #$ff                    ; expand all eight over the large plasma dots
+    sta $d017
+    sta $d01d
+    lda #$00
+    sta $d01b                   ; sprite in front of the plasma bitmap
+    sta $d01c
+    jsr plasma_tie_update
+    rts
+
+plasma_tie_update:
+    lda intro_frame_counter
+    cmp #$7f                    ; four slow 32-update grayscale stages
+    bcs plasma_tie_fade_ready
+    inc intro_frame_counter
+plasma_tie_fade_ready:
+    lda intro_frame_counter
+    lsr
+    lsr
+    lsr
+    lsr
+    lsr
+    tax
+    lda plasma_tie_fade_colors,x
+    sta $d027
+    sta $d028
+    sta $d029
+    sta $d02a
+    sta $d02b
+    sta $d02c
+    sta $d02d
+    sta $d02e
+
+    inc plasma_tie_spin_index
+    inc plasma_tie_move_delay
+    lda plasma_tie_move_delay
+    and #$01                    ; one 64-step orbit in roughly five seconds
+    bne plasma_tie_position
+    inc plasma_tie_orbit_index
+    lda plasma_tie_orbit_index
+    and #(PLASMA_TIE_PATH_STEPS - 1)
+    sta plasma_tie_orbit_index
+plasma_tie_position:
+    lda #$00
+    sta plasma_tie_x_msb
+    sta row_counter             ; bitmap-priority bits over the Vader region
+    sta plasma_message_cell_index ; visible sprite bits outside deep occlusion
+    ldx #$00
+plasma_tie_position_loop:
+    stx transition_col
+    txa
+    asl
+    asl
+    asl                         ; eight path steps between each fighter
+    clc
+    adc plasma_tie_orbit_index
+    and #(PLASMA_TIE_PATH_STEPS - 1)
+    tay
+    lda plasma_tie_path_x_lo,y
+    sta tmp
+    lda plasma_tie_path_y,y
+    sta col_save
+    lda plasma_tie_path_x_hi,y
+    beq plasma_tie_x_low
+    lda plasma_tie_x_msb
+    ora shiptransition_sprite_bits,x
+    sta plasma_tie_x_msb
+    jmp plasma_tie_mark_visible
+plasma_tie_x_low:
+    lda tmp
+    cmp #160                    ; let Vader's bitmap occlude left-side ships
+    bcs plasma_tie_mark_visible
+    cmp #80                     ; completely hidden deep behind the portrait
+    bcc plasma_tie_priority_ready
+    lda row_counter
+    ora shiptransition_sprite_bits,x
+    sta row_counter
+plasma_tie_mark_visible:
+    lda plasma_message_cell_index
+    ora shiptransition_sprite_bits,x
+    sta plasma_message_cell_index
+plasma_tie_priority_ready:
+    txa
+    asl
+    tay
+    lda tmp
+    sta $d000,y
+    lda col_save
+    sta $d001,y
+
+    ; Stagger adjacent fighters by one of the four symmetric rotations.
+    lda plasma_tie_spin_index
+    lsr
+    lsr
+    lsr
+    clc
+    adc transition_col
+    and #(PLASMA_TIE_FRAME_COUNT - 1)
+    clc
+    adc #((SHIP_TRANSITION_SPRITES - $c000) / 64)
+    ldy transition_col
+    sta SCREEN+$3f8,y
+    ldx transition_col
+    inx
+    cpx #$08
+    bne plasma_tie_position_loop
+    lda plasma_tie_x_msb
+    sta $d010
+    lda row_counter
+    sta $d01b
+    lda plasma_message_cell_index
+    sta $d015
+    rts
+
+plasma_tie_fade_colors:
+!byte $00,$0b,$0c,$0f
+
+!if PLASMA_MESSAGE_FIELD_BACKUP + 155 > $8100 {
+    !error "plasma-message backups overlap the title workspace"
+}
+!if * > $8600 {
+    !error "plasma-message workspace overlaps the live ripple field"
+}
+
+; The pilot Exomizer stream also expands its 500-byte live ripple field here.
+water_ripple_visible_field = $8600
+
+; This opening-only code is overwritten by the live ripple field immediately
+; after the five-second prelude returns.
+* = water_ripple_visible_field
+
+unpack_prelude_colors:
+    lda #<prelude_color_exo_end
+    sta exod_byte_lo
+    lda #>prelude_color_exo_end
+    sta exod_byte_hi
+    jmp exod_decrunch
+
+unpack_prelude_bitmap:
+    lda #$34                    ; expose RAM under I/O for the $dffe prefix
+    sta $01
+    lda prelude_bitmap_exo_prefix
+    sta $dffe
+    lda prelude_bitmap_exo_prefix+1
+    sta $dfff
+    lda #<prelude_bitmap_exo_end
+    sta exod_byte_lo
+    lda #>prelude_bitmap_exo_end
+    sta exod_byte_hi
+    jsr exod_decrunch
+    lda #$35
+    sta $01
+    rts
+
+prelude_bitmap_exo_prefix:
+!bin "src/generated/prelude_hires_bitmap_prefix.bin"
+
+preserve_pilot_screen:
+    ldx #$00
+preserve_pilot_screen_loop:
+    lda SCREEN+$000,x
+    sta INTRO_LOGO_EXO_SHADOW+$000,x
+    lda SCREEN+$100,x
+    sta INTRO_LOGO_EXO_SHADOW+$100,x
+    lda SCREEN+$200,x
+    sta INTRO_LOGO_EXO_SHADOW+$200,x
+    lda SCREEN+$300,x
+    sta INTRO_LOGO_EXO_SHADOW+$300,x
+    inx
+    bne preserve_pilot_screen_loop
+    rts
+
+restore_pilot_screen:
+    ldx #$00
+restore_pilot_screen_loop:
+    lda INTRO_LOGO_EXO_SHADOW+$000,x
+    sta SCREEN+$000,x
+    lda INTRO_LOGO_EXO_SHADOW+$100,x
+    sta SCREEN+$100,x
+    lda INTRO_LOGO_EXO_SHADOW+$200,x
+    sta SCREEN+$200,x
+    lda INTRO_LOGO_EXO_SHADOW+$300,x
+    sta SCREEN+$300,x
+    inx
+    bne restore_pilot_screen_loop
+    rts
+
+; Fade in for 24 PAL frames, hold for 202, and fade out for 24: 250 frames,
+; keeping the complete prelude on screen for five seconds.
+run_prelude_image:
+    lda #$00
+    sta $d015
+    sta $d020
+    sta $d021
+    sta transition_step
+    jsr prelude_apply_fade
+    lda #$3b
+    sta $d011
+    lda #$08
+    sta $d016
+    sta $d018
+prelude_fade_in:
+    lda #$06
+    jsr prelude_wait_frames
+    inc transition_step
+    jsr prelude_apply_fade
+    lda transition_step
+    cmp #$04
+    bne prelude_fade_in
+
+    lda #202
+    jsr prelude_wait_frames
+prelude_fade_out:
+    lda #$06
+    jsr prelude_wait_frames
+    dec transition_step
+    jsr prelude_apply_fade
+    lda transition_step
+    bne prelude_fade_out
+    lda #$2b
+    sta $d011
+    rts
+
+prelude_wait_frames:
+    sta transition_delay
+prelude_wait_frame_loop:
+    jsr wait_frame
+    dec transition_delay
+    bne prelude_wait_frame_loop
+    rts
+
+; Color RAM retains the target ink nibble while this 2x2 ordered cell mask
+; exposes or hides the fixed hires bitmap in four cumulative phases.
+prelude_apply_fade:
+    lda #<SCREEN
+    sta logo_dst
+    lda #>SCREEN
+    sta logo_dst+1
+    lda #<$d800
+    sta logo_src
+    lda #>$d800
+    sta logo_src+1
+    lda #$00
+    sta row_counter
+prelude_fade_row:
+    lda row_counter
+    and #$01
+    asl
+    sta tmp
+    lda #40
+    sta transition_col
+prelude_fade_column:
+    lda transition_col
+    and #$01
+    ora tmp
+    tay
+    lda prelude_cell_bayer,y
+    cmp transition_step
+    bcs prelude_fade_black
+    ldy #$00
+    lda (logo_src),y
+    and #$0f
+    asl
+    asl
+    asl
+    asl
+    bne prelude_fade_write
+prelude_fade_black:
+    lda #$00
+prelude_fade_write:
+    ldy #$00
+    sta (logo_dst),y
+    inc logo_src
+    bne prelude_fade_source_ready
+    inc logo_src+1
+prelude_fade_source_ready:
+    inc logo_dst
+    bne prelude_fade_destination_ready
+    inc logo_dst+1
+prelude_fade_destination_ready:
+    dec transition_col
+    bne prelude_fade_column
+    inc row_counter
+    lda row_counter
+    cmp #25
+    bne prelude_fade_row
+    rts
+
+prelude_cell_bayer:
+!byte $00,$02,$03,$01
+
+!if * > $8800 {
+    !error "prelude fade code overlaps RetroDNA workspace"
+}
+
+; Six active RetroDNA rows fit between the scroll buffers and soundtrack.
+* = $8800
+retrodna_bitmap_part1:
+!bin "src/generated/retrodna_logo_part1.bin"
+!if * > $9000 {
+    !error "RetroDNA part 1 overlaps the soundtrack"
+}
+
 ; Soundtrack and logo live above the scroll buffers, below the VIC bank.
 * = $9000
-!source "src/generated/galway_nights.inc"
-!source "src/music/galway_player.inc"
+GEARSHIFT_EMBEDDED = 1
+!source "src/music/gearshift_markov.a"
+!if * > $ab00 {
+    !error "Gearshift opening soundtrack overlaps the ship transition"
+}
 !source "src/shiptransition.inc"
 !source "src/generated/logo.inc"
 
+; Hires ripple amplitude and foreground-color tables.
+water_ripple_curve:
+!byte 0,0,1,2,4,7,4,2,1,0,0,0,0,0,0,0
+; Ripple A remains blue/cyan; ripple B runs purple through red and orange.
+water_ripple_color_a:
+!byte $00,$06,$06,$06,$0e,$0e,$03,$03
+!byte $01,$03,$03,$0e,$0e,$06,$06,$00
+water_ripple_color_b:
+!byte $00,$04,$04,$04,$0a,$0a,$02,$02
+!byte $07,$08,$08,$0a,$0a,$04,$04,$00
+
 !if * > $c000 {
-    !error "music and logo overlap the VIC bank at $c000"
+    !error "music, logo, and plasma tables overlap the VIC bank at $c000"
+}
+
+; Load the opening scene's static Vader and initial plasma hires colors.
+* = SCREEN
+pilot_hires_screen:
+!bin "src/generated/pilot_hires_screen.bin"
+!if * > $c400 {
+    !error "pilot screen overlaps the compressed title workspace"
+}
+
+; This is expanded into $7800 immediately after Space and before ship sprites
+; overwrite the same $c400 workspace.
+* = SHIP_TRANSITION_SPRITES
+intro_logo_exo:
+!bin "src/generated/starwars_intro_logo.exo"
+intro_logo_exo_end:
+!if * > $c800 {
+    !error "compressed title exceeds the temporary sprite workspace"
+}
+
+; The final two rows remain below I/O space and outside the sprite definitions.
+* = $c800
+retrodna_bitmap_part2:
+!bin "src/generated/retrodna_logo_part2.bin"
+retrodna_logo_colors:
+!bin "src/generated/retrodna_logo_colors.bin"
+
+; The alternate-font title is the first visual row of the crawl. It reuses the
+; transition sprite RAM and moves from expanded bottom width to horizon width,
+; keeping its logo-only glyphs out of the normal crawl's FontData budget.
+!source "src/generated/starwars_title.inc"
+
+starwars_title_init:
+    ldx #$00
+starwars_title_copy_page:
+    lda starwars_title_sprite_data,x
+    sta SHIP_TRANSITION_SPRITES,x
+    inx
+    bne starwars_title_copy_page
+    ldx #$3f
+starwars_title_copy_tail:
+    lda starwars_title_sprite_data+$100,x
+    sta SHIP_TRANSITION_SPRITES+$100,x
+    dex
+    bpl starwars_title_copy_tail
+
+    lda #$1f                    ; expanded at the wide bottom of the crawl
+    sta $d017
+    sta $d01d
+    sta $d015
+    lda #$10                    ; fifth expanded sprite starts at x=256
+    sta $d010
+    lda #$00
+    sta $d01b
+    sta $d01c
+    lda #$01
+    sta starwars_title_active
+    sta starwars_title_expanded
+    lda #220
+    sta starwars_title_y
+    ldx #$00
+starwars_title_setup:
+    txa
+    clc
+    adc #((SHIP_TRANSITION_SPRITES - $c000) / 64)
+    sta SCREEN+$3f8,x
+    lda #$07                    ; C64 yellow
+    sta $d027,x
+    txa
+    asl
+    tay
+    lda starwars_title_wide_x,x
+    sta $d000,y
+    lda starwars_title_y
+    sta $d001,y
+    inx
+    cpx #$05
+    bne starwars_title_setup
+    rts
+
+starwars_title_update:
+    lda starwars_title_active
+    beq starwars_title_done
+    lda starwars_title_y
+    sec
+    sbc #$02
+    sta starwars_title_y
+    cmp #156
+    bcs starwars_title_write_y
+    lda starwars_title_expanded
+    beq starwars_title_check_horizon
+    lda #$00
+    sta starwars_title_expanded
+    sta $d017
+    sta $d01d
+    sta $d010
+    ldx #$00
+starwars_title_narrow_x:
+    txa
+    asl
+    tay
+    lda starwars_title_narrow_positions,x
+    sta $d000,y
+    inx
+    cpx #$05
+    bne starwars_title_narrow_x
+starwars_title_check_horizon:
+    lda starwars_title_y
+    cmp #84
+    bcs starwars_title_write_y
+    lda #$00
+    sta $d015
+    sta starwars_title_active
+starwars_title_done:
+    rts
+
+starwars_title_write_y:
+    ldx #$00
+starwars_title_write_y_loop:
+    txa
+    asl
+    tay
+    lda starwars_title_y
+    sta $d001,y
+    inx
+    cpx #$05
+    bne starwars_title_write_y_loop
+    rts
+
+starwars_title_wide_x:
+!byte 64,112,160,208,0
+starwars_title_narrow_positions:
+!byte 124,148,172,196,220
+starwars_title_y:
+!byte 220
+starwars_title_active:
+!byte 0
+starwars_title_expanded:
+!byte 0
+
+; Standard backwards Exomizer 3 memory decruncher. The pilot stream expands
+; directly to $e000; the title stream later expands over the spent pilot stream
+; at $7800. Both destinations are encoded by `exomizer mem`.
+unpack_pilot_hires:
+    lda #<pilot_hires_exo_end
+    sta exod_byte_lo
+    lda #>pilot_hires_exo_end
+    sta exod_byte_hi
+    jmp exod_decrunch
+
+unpack_intro_logo:
+    lda #<(INTRO_LOGO_EXO_SHADOW + (intro_logo_exo_end - intro_logo_exo))
+    sta exod_byte_lo
+    lda #>(INTRO_LOGO_EXO_SHADOW + (intro_logo_exo_end - intro_logo_exo))
+    sta exod_byte_hi
+    jmp exod_decrunch
+
+unpack_ripple_field:
+    lda #<pilot_ripple_field_exo_end
+    sta exod_byte_lo
+    lda #>pilot_ripple_field_exo_end
+    sta exod_byte_hi
+    jmp exod_decrunch
+
+exod_get_crunched_byte:
+    lda exod_byte_lo
+    bne exod_byte_pointer_ready
+    dec exod_byte_hi
+exod_byte_pointer_ready:
+    dec exod_byte_lo
+exod_byte_lo = * + 1
+exod_byte_hi = * + 2
+    lda $ffff
+    rts
+
+MAX_SEQUENCE_LENGTH_256 = 1
+!source "src/third_party/exomizer/exodecrunch.asm"
+
+!if * > $d000 {
+    !error "high-memory assets or Exomizer decruncher overlap I/O space"
+}
+
+; The post-transition Galway soundtrack is compressed beneath I/O while Dark
+; Gearshift occupies its runtime address during the vector and plasma scenes.
+* = GALWAY_OVERLAY_STAGING
+galway_overlay_exo:
+!bin "src/generated/galway_overlay.exo"
+galway_overlay_exo_end:
+!if galway_overlay_exo_end > $dc00 {
+    !error "compressed Galway overlay overlaps CIA I/O"
+}
+
+; Exomizer reports a two-byte safety offset. The prefix is copied to RAM under
+; I/O at $dffe; this tail completes the contiguous stream from $e000 upward.
+* = BITMAP
+prelude_bitmap_exo_tail:
+!bin "src/generated/prelude_hires_bitmap_tail.bin"
+prelude_bitmap_exo_end:
+prelude_color_exo:
+!bin "src/generated/prelude_hires_colors.exo"
+prelude_color_exo_end:
+!if * > $10000 {
+    !error "compressed prelude exceeds bitmap RAM"
 }

@@ -1,0 +1,467 @@
+; "Dark Armada" -- original motif-Markov military cue.
+; scripts/generate_imperial_markov_sid.py supplies the looping note streams.
+; Voice 1: brass lead with a saw attack, pulse body, PWM, and slow vibrato.
+; Voice 2: slow pulse stabs that develop into clipped modal arpeggios.
+; Voice 3: half-time backing beat that rises into triangle march bass,
+;          pitch-drop kick, and dark filtered noise snare.
+
+!ifndef IMPERIAL_EMBEDDED {
+    !to "build/dark-armada.prg", cbm
+}
+
+!source "src/generated/imperial_march.inc"
+
+IMP_SNARE_PITCH = 125
+IMP_KICK_PITCH = 126
+IMP_LEAD_AGE_MAX = $3f
+
+imp_frame_lo = $f7
+imp_frame_hi = $f8
+imp_event = $f9
+imp_vib_index = $fa
+
+!ifndef IMPERIAL_EMBEDDED {
+    * = $0801
+    !byte $0c,$08,$0a,$00,$9e
+    !text "2061"
+    !byte $00,$00,$00
+
+    * = $080d
+standalone_entry:
+    sei
+    jsr psid_init
+
+standalone_wait:
+    lda $d012
+    cmp #$f8
+    bne standalone_wait
+standalone_wait_end:
+    lda $d012
+    cmp #$f8
+    beq standalone_wait_end
+    jsr psid_play
+    jmp standalone_wait
+
+    * = $1000
+psid_init:
+    jmp imp_init
+
+    * = $1080
+psid_play:
+    jmp imp_play
+
+    * = $1100
+}
+imp_init:
+    lda #$00
+    sta imp_frame_lo
+    sta imp_frame_hi
+    sta imp_lead_age
+    sta imp_lead_freq_lo
+    sta imp_lead_freq_hi
+    sta imp_kick_age
+    sta imp_pw_dir
+
+    ldx #$18
+imp_clear_sid:
+    sta $d400,x
+    dex
+    bpl imp_clear_sid
+
+    lda #$40
+    sta imp_lead_gate
+    lda #$11
+    sta imp_bass_wave
+
+    ; Lead pulse starts near the hollow middle of its slow sweep; the
+    ; arpeggio voice uses a narrow fixed pulse for clipped articulation.
+    lda #$00
+    sta imp_pw_lo
+    sta $d402
+    sta $d409
+    sta $d410
+    lda #$08
+    sta imp_pw_hi
+    sta $d403
+    lda #$03
+    sta $d40a
+    lda #$04
+    sta $d411
+
+    lda #$19                    ; brass-like swell into a high sustain
+    sta $d405
+    lda #$b6
+    sta $d406
+    lda #$04                    ; arpeggio: immediate attack, short decay
+    sta $d40c
+    lda #$48
+    sta $d40d
+    lda #$06                    ; round triangle march bass
+    sta $d413
+    lda #$95
+    sta $d414
+
+    lda #$c4                    ; resonance 12, voice 3 through the filter
+    sta $d417
+    lda #$1f                    ; low-pass, full master volume
+    sta $d418
+    rts
+
+imp_play:
+    lda imp_frame_hi
+    cmp #>IMPERIAL_LOOP_FRAMES
+    bcc imp_render_frame
+    bne imp_restart_sequence
+    lda imp_frame_lo
+    cmp #<IMPERIAL_LOOP_FRAMES
+    bcc imp_render_frame
+
+imp_restart_sequence:
+    lda #$00
+    sta imp_frame_lo
+    sta imp_frame_hi
+    jmp imp_render_frame
+imp_play_done:
+    rts
+
+imp_render_frame:
+    lda imp_frame_lo
+    clc
+    adc #<imp_lead_frames
+    sta imp_lead_read+1
+    lda imp_frame_hi
+    adc #>imp_lead_frames
+    sta imp_lead_read+2
+imp_lead_read:
+    lda imp_lead_frames
+    jsr imp_update_lead
+
+    lda imp_frame_lo
+    clc
+    adc #<imp_arp_frames
+    sta imp_arp_read+1
+    lda imp_frame_hi
+    adc #>imp_arp_frames
+    sta imp_arp_read+2
+imp_arp_read:
+    lda imp_arp_frames
+    jsr imp_update_arp
+
+    lda imp_frame_lo
+    clc
+    adc #<imp_bass_frames
+    sta imp_bass_read+1
+    lda imp_frame_hi
+    adc #>imp_bass_frames
+    sta imp_bass_read+2
+imp_bass_read:
+    lda imp_bass_frames
+    jsr imp_update_bass
+    jsr imp_update_effects
+
+    inc imp_frame_lo
+    bne imp_play_done
+    inc imp_frame_hi
+    rts
+
+imp_update_lead:
+    sta imp_event
+    bne imp_lead_has_event
+    lda #$40
+    sta $d404
+    sta imp_lead_gate
+    rts
+imp_lead_has_event:
+    and #$7f
+    tay
+    lda sid_freq_lo,y
+    sta imp_lead_freq_lo
+    lda sid_freq_hi,y
+    sta imp_lead_freq_hi
+    lda imp_event
+    bmi imp_lead_restart
+    lda imp_lead_gate
+    and #$01
+    bne imp_lead_hold
+    lda #$21                    ; saw attack for the first two frames
+    sta $d404
+    sta imp_lead_gate
+    lda #$00
+    sta imp_lead_age
+    rts
+imp_lead_hold:
+    inc imp_lead_age
+    lda imp_lead_age
+    cmp #$02
+    bne imp_lead_age_limit
+    lda #$41                    ; switch immediately to the pulse body
+    sta $d404
+    sta imp_lead_gate
+imp_lead_age_limit:
+    lda imp_lead_age
+    cmp #IMP_LEAD_AGE_MAX
+    bcc imp_lead_done
+    lda #IMP_LEAD_AGE_MAX
+    sta imp_lead_age
+imp_lead_done:
+    rts
+imp_lead_restart:
+    lda #$40
+    sta $d404
+    sta imp_lead_gate
+    lda #$00
+    sta imp_lead_age
+    rts
+
+imp_update_arp:
+    sta imp_event
+    bne imp_arp_has_event
+    lda #$40
+    sta $d40b
+    rts
+imp_arp_has_event:
+    and #$7f
+    tay
+    lda sid_freq_lo,y
+    sta $d407
+    lda sid_freq_hi,y
+    sta $d408
+    lda imp_event
+    bmi imp_arp_restart
+    lda #$41
+    sta $d40b
+    rts
+imp_arp_restart:
+    lda #$40
+    sta $d40b
+    rts
+
+imp_update_bass:
+    sta imp_event
+    bne imp_bass_has_event
+    lda imp_bass_wave
+    and #$fe
+    sta $d412
+    rts
+imp_bass_has_event:
+    and #$7f
+    cmp #IMP_SNARE_PITCH
+    beq imp_bass_snare
+    cmp #IMP_KICK_PITCH
+    beq imp_bass_kick
+    tay
+    lda sid_freq_lo,y
+    sta $d40e
+    lda sid_freq_hi,y
+    sta $d40f
+    lda imp_event
+    bmi imp_bass_restart
+    lda #$11                    ; round triangle bass
+    sta $d412
+    sta imp_bass_wave
+    rts
+imp_bass_restart:
+    lda #$10
+    sta $d412
+    sta imp_bass_wave
+    lda #$06                    ; restore the bass envelope after drums
+    sta $d413
+    lda #$95
+    sta $d414
+    lda #$00
+    sta imp_kick_age
+    rts
+
+imp_bass_snare:
+    lda imp_event
+    bmi imp_snare_restart
+    lda #$81
+    sta $d412
+    sta imp_bass_wave
+    rts
+imp_snare_restart:
+    lda #$80
+    sta $d412
+    sta imp_bass_wave
+    lda #$07                    ; darker, longer military snare
+    sta $d413
+    lda #$07
+    sta $d414
+    lda #$00
+    sta $d40e
+    sta imp_kick_age
+    lda #$28                    ; lower-pitched SID noise
+    sta $d40f
+    rts
+
+imp_bass_kick:
+    lda imp_event
+    bmi imp_kick_restart
+    lda #$11
+    sta $d412
+    sta imp_bass_wave
+    rts
+imp_kick_restart:
+    lda #$10
+    sta $d412
+    sta imp_bass_wave
+    lda #$09
+    sta $d413
+    lda #$00
+    sta $d414
+    lda #$04
+    sta imp_kick_age
+    rts
+
+imp_update_effects:
+    ; Slow, wide pulse sweep between $0500 and $0b00 -- a brooding
+    ; two-second timbre cycle instead of the bright bakery shimmer.
+    lda imp_pw_dir
+    bne imp_pw_down
+    lda imp_pw_lo
+    clc
+    adc #$18
+    sta imp_pw_lo
+    lda imp_pw_hi
+    adc #$00
+    sta imp_pw_hi
+    cmp #$0b
+    bcc imp_pw_write
+    lda #$01
+    sta imp_pw_dir
+    bne imp_pw_write
+imp_pw_down:
+    lda imp_pw_lo
+    sec
+    sbc #$18
+    sta imp_pw_lo
+    lda imp_pw_hi
+    sbc #$00
+    sta imp_pw_hi
+    cmp #$05
+    bcs imp_pw_write
+    lda #$00
+    sta imp_pw_dir
+imp_pw_write:
+    lda imp_pw_lo
+    sta $d402
+    lda imp_pw_hi
+    sta $d403
+
+    ; Kick drum: the triangle pitch falls over four frames, deeper
+    ; than the bouncy variant -- landing near 22 Hz.
+    lda imp_kick_age
+    beq imp_kick_done
+    tax
+    lda imp_kick_freq_lo,x
+    sta $d40e
+    lda imp_kick_freq_hi,x
+    sta $d40f
+    dec imp_kick_age
+imp_kick_done:
+
+    ; Low, slow filter wah under the bass and drums (5.1 s cycle).
+    lda imp_frame_lo
+    lsr
+    lsr
+    lsr
+    and #$1f
+    tax
+    lda imp_filter_cutoff,x
+    sta $d416
+
+    ; Deep, slow vibrato: flat for a quarter second, then blooming to a
+    ; full wobble at a mournful 3.1 Hz (16-frame period, no doubling).
+    lda imp_lead_gate
+    and #$01
+    beq imp_effects_done
+    ldx imp_lead_age
+    lda imp_vib_depth,x
+    sta imp_vib_index
+    lda imp_frame_lo
+    and #$0f
+    ora imp_vib_index
+    tay
+    lda imp_vib_wave,y
+    bmi imp_vib_negative
+    clc
+    adc imp_lead_freq_lo
+    sta $d400
+    lda imp_lead_freq_hi
+    adc #$00
+    sta $d401
+    rts
+imp_vib_negative:
+    clc
+    adc imp_lead_freq_lo
+    sta $d400
+    lda imp_lead_freq_hi
+    adc #$ff
+    sta $d401
+imp_effects_done:
+    rts
+
+; Depth row (x16) by note age: a quarter second flat, then a slow bloom.
+imp_vib_depth:
+    !byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    !byte $10,$10,$10,$10,$10,$10,$10,$10
+    !byte $20,$20,$20,$20,$20,$20,$20,$20
+    !byte $30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30
+    !byte $30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30
+
+; Four 16-entry signed sine rows at increasing depth.
+imp_vib_wave:
+    !byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    !byte 0,15,28,37,40,37,28,15,0,-15,-28,-37,-40,-37,-28,-15
+    !byte 0,31,57,74,80,74,57,31,0,-31,-57,-74,-80,-74,-57,-31
+    !byte 0,49,90,117,127,117,90,49,0,-49,-90,-117,-127,-117,-90,-49
+
+; 32-entry triangle sweep for the low-pass cutoff, kept low and dark.
+imp_filter_cutoff:
+    !byte $18,$1c,$20,$24,$28,$2c,$30,$34,$38,$3c,$40,$44,$48,$4c,$50,$54
+    !byte $58,$54,$50,$4c,$48,$44,$40,$3c,$38,$34,$30,$2c,$28,$24,$20,$1c
+
+; Kick pitch drop indexed by kick_age (4 down to 1, landing near 22 Hz).
+imp_kick_freq_lo:
+    !byte $80,$00,$c0,$00,$00
+imp_kick_freq_hi:
+    !byte $01,$02,$02,$04,$07
+
+imp_lead_age:
+    !byte 0
+imp_lead_freq_lo:
+    !byte 0
+imp_lead_freq_hi:
+    !byte 0
+imp_lead_gate:
+    !byte 0
+imp_bass_wave:
+    !byte 0
+imp_kick_age:
+    !byte 0
+imp_pw_lo:
+    !byte 0
+imp_pw_hi:
+    !byte 0
+imp_pw_dir:
+    !byte 0
+
+!source "src/generated/sid_pal_freq.inc"
+
+imp_lead_frames:
+!bin "src/music/imperial_march_frames.bin", IMPERIAL_LOOP_FRAMES, 0
+
+imp_arp_frames:
+!bin "src/music/imperial_march_frames.bin", IMPERIAL_LOOP_FRAMES, IMPERIAL_LOOP_FRAMES
+
+imp_bass_frames:
+!bin "src/music/imperial_march_frames.bin", IMPERIAL_LOOP_FRAMES, IMPERIAL_LOOP_FRAMES * 2
+
+!ifndef IMPERIAL_EMBEDDED {
+    !if psid_init != $1000 {
+        !error "PSID init address changed; update scripts/package_sid.py"
+    }
+    !if psid_play != $1080 {
+        !error "PSID play address changed; update scripts/package_sid.py"
+    }
+}

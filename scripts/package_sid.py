@@ -22,6 +22,20 @@ TUNES = [
         "author": "Claude (Martin Galway style)",
         "released": "2026 original, 107 BPM PAL loop",
     },
+    {
+        "prg": "dark-armada.prg",
+        "sid": "dark-armada.sid",
+        "name": "Dark Armada",
+        "author": "SkiltonUSA / Markov generator",
+        "released": "2026 original motif-Markov march",
+    },
+    {
+        "prg": "gearshift-markov.prg",
+        "sid": "gearshift-markov.sid",
+        "name": "Gearshift",
+        "author": "SkiltonUSA / Markov generator",
+        "released": "2026 original punchy C64 game cue",
+    },
 ]
 
 

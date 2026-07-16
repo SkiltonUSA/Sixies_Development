@@ -207,3 +207,4 @@ shiptransition_x_msb:
 !byte $00
 
 !source "src/generated/transition_sprites.inc"
+!source "src/generated/plasma_tie_sprite.inc"

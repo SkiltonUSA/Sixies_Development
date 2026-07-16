@@ -1,0 +1,493 @@
+{
+ "seed": 871012,
+ "start_trim_frames": 400,
+ "start_trim_seconds": 8,
+ "order2": {
+  "answer|climb": [
+   "blade"
+  ],
+  "answer|iron": [
+   "fall"
+  ],
+  "answer|shadow": [
+   "signal"
+  ],
+  "answer|stomp": [
+   "signal"
+  ],
+  "blade|fall": [
+   "climb"
+  ],
+  "blade|iron": [
+   "shadow"
+  ],
+  "blade|shadow": [
+   "fall"
+  ],
+  "blade|signal": [
+   "answer"
+  ],
+  "climb|answer": [
+   "stomp"
+  ],
+  "climb|blade": [
+   "iron"
+  ],
+  "climb|stomp": [
+   "blade",
+   "iron"
+  ],
+  "fall|climb": [
+   "stomp"
+  ],
+  "fall|iron": [
+   "climb"
+  ],
+  "fall|shadow": [
+   "climb"
+  ],
+  "fall|stomp": [
+   "answer"
+  ],
+  "iron|answer": [
+   "shadow"
+  ],
+  "iron|climb": [
+   "answer"
+  ],
+  "iron|fall": [
+   "shadow"
+  ],
+  "iron|shadow": [
+   "signal"
+  ],
+  "shadow|climb": [
+   "stomp"
+  ],
+  "shadow|fall": [
+   "iron"
+  ],
+  "shadow|signal": [
+   "fall",
+   "blade"
+  ],
+  "signal|answer": [
+   "iron"
+  ],
+  "signal|blade": [
+   "fall",
+   "shadow"
+  ],
+  "signal|fall": [
+   "stomp"
+  ],
+  "stomp|answer": [
+   "climb"
+  ],
+  "stomp|blade": [
+   "signal"
+  ],
+  "stomp|iron": [
+   "answer"
+  ],
+  "stomp|signal": [
+   "blade"
+  ]
+ },
+ "order1": {
+  "answer": [
+   "climb",
+   "iron",
+   "shadow",
+   "stomp"
+  ],
+  "blade": [
+   "iron",
+   "signal",
+   "fall",
+   "shadow"
+  ],
+  "climb": [
+   "blade",
+   "stomp",
+   "stomp",
+   "answer"
+  ],
+  "fall": [
+   "stomp",
+   "shadow",
+   "climb",
+   "iron"
+  ],
+  "iron": [
+   "shadow",
+   "fall",
+   "answer",
+   "climb"
+  ],
+  "shadow": [
+   "signal",
+   "climb",
+   "signal",
+   "fall"
+  ],
+  "signal": [
+   "fall",
+   "answer",
+   "blade",
+   "blade"
+  ],
+  "stomp": [
+   "answer",
+   "blade",
+   "iron",
+   "signal"
+  ]
+ },
+ "motif_sequence": [
+  "iron",
+  "shadow",
+  "climb",
+  "stomp",
+  "blade",
+  "iron",
+  "shadow",
+  "signal",
+  "fall",
+  "climb",
+  "stomp",
+  "iron",
+  "answer",
+  "iron",
+  "fall",
+  "cadence"
+ ],
+ "bar_slot_frames": [
+  9,
+  9,
+  9,
+  8,
+  8,
+  8,
+  8,
+  7,
+  7,
+  7,
+  7,
+  7,
+  7,
+  7,
+  7,
+  7,
+  7,
+  7,
+  7
+ ],
+ "register_shifts": [
+  -12,
+  -12,
+  0,
+  0,
+  0,
+  0,
+  12,
+  0,
+  0,
+  -12,
+  0,
+  12,
+  0,
+  0,
+  12
+ ],
+ "motifs": {
+  "iron": [
+   [
+    0,
+    2
+   ],
+   [
+    7,
+    1
+   ],
+   [
+    3,
+    1
+   ],
+   [
+    2,
+    2
+   ],
+   [
+    -2,
+    2
+   ],
+   [
+    0,
+    4
+   ],
+   [
+    5,
+    2
+   ],
+   [
+    3,
+    2
+   ]
+  ],
+  "fall": [
+   [
+    7,
+    2
+   ],
+   [
+    5,
+    1
+   ],
+   [
+    3,
+    1
+   ],
+   [
+    2,
+    2
+   ],
+   [
+    0,
+    2
+   ],
+   [
+    -2,
+    2
+   ],
+   [
+    -4,
+    2
+   ],
+   [
+    -5,
+    2
+   ],
+   [
+    -7,
+    2
+   ]
+  ],
+  "signal": [
+   [
+    null,
+    2
+   ],
+   [
+    0,
+    2
+   ],
+   [
+    3,
+    1
+   ],
+   [
+    5,
+    1
+   ],
+   [
+    7,
+    2
+   ],
+   [
+    10,
+    2
+   ],
+   [
+    7,
+    2
+   ],
+   [
+    5,
+    2
+   ],
+   [
+    3,
+    2
+   ]
+  ],
+  "answer": [
+   [
+    3,
+    2
+   ],
+   [
+    2,
+    2
+   ],
+   [
+    0,
+    1
+   ],
+   [
+    -2,
+    1
+   ],
+   [
+    -4,
+    2
+   ],
+   [
+    0,
+    2
+   ],
+   [
+    2,
+    2
+   ],
+   [
+    3,
+    2
+   ],
+   [
+    7,
+    2
+   ]
+  ],
+  "climb": [
+   [
+    -7,
+    2
+   ],
+   [
+    -4,
+    2
+   ],
+   [
+    0,
+    2
+   ],
+   [
+    3,
+    2
+   ],
+   [
+    7,
+    2
+   ],
+   [
+    10,
+    2
+   ],
+   [
+    8,
+    2
+   ],
+   [
+    7,
+    2
+   ]
+  ],
+  "stomp": [
+   [
+    0,
+    3
+   ],
+   [
+    3,
+    1
+   ],
+   [
+    7,
+    2
+   ],
+   [
+    5,
+    2
+   ],
+   [
+    3,
+    3
+   ],
+   [
+    2,
+    1
+   ],
+   [
+    0,
+    4
+   ]
+  ],
+  "shadow": [
+   [
+    null,
+    2
+   ],
+   [
+    -5,
+    2
+   ],
+   [
+    0,
+    2
+   ],
+   [
+    -2,
+    1
+   ],
+   [
+    -4,
+    1
+   ],
+   [
+    -5,
+    4
+   ],
+   [
+    -2,
+    2
+   ],
+   [
+    0,
+    2
+   ]
+  ],
+  "blade": [
+   [
+    12,
+    1
+   ],
+   [
+    10,
+    1
+   ],
+   [
+    7,
+    2
+   ],
+   [
+    5,
+    1
+   ],
+   [
+    3,
+    1
+   ],
+   [
+    2,
+    2
+   ],
+   [
+    7,
+    2
+   ],
+   [
+    5,
+    2
+   ],
+   [
+    3,
+    2
+   ],
+   [
+    0,
+    2
+   ]
+  ]
+ }
+}

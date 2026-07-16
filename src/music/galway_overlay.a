@@ -1,0 +1,16 @@
+; Runtime Galway Nights overlay restored after the opening flyby.
+
+!to "build/galway-overlay.prg", cbm
+
+* = $9000
+galway_overlay_init:
+    jmp galway_init
+galway_overlay_play:
+    jmp galway_play
+
+!source "src/generated/galway_nights.inc"
+!source "src/music/galway_player.inc"
+
+!if * > $aa00 {
+    !error "Galway overlay exceeds its runtime music region"
+}

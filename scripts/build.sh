@@ -21,14 +21,48 @@ python3 scripts/generate_tables.py
 python3 scripts/generate_sid_frequency_table.py
 python3 scripts/generate_midi_markov_sid.py
 python3 scripts/generate_galway_sid.py
+python3 scripts/generate_imperial_markov_sid.py
+python3 scripts/generate_gearshift_markov_sid.py
 python3 scripts/generate_logo.py
+python3 scripts/generate_retrodna_logo.py
 python3 scripts/generate_transition_sprites.py
+python3 scripts/generate_starwars_title.py
+python3 scripts/generate_intro_logo.py
+python3 scripts/vectorize_star_retro_war.py
+python3 scripts/generate_prelude_image.py
+python3 scripts/generate_razor_plasma.py
+python3 scripts/generate_vader2.py
+python3 scripts/generate_pilot_hires.py
+
+if ! command -v exomizer >/dev/null 2>&1; then
+  echo "exomizer is required for the compressed hires intro assets." >&2
+  exit 1
+fi
+exomizer mem -q -M256 -l none src/generated/pilot_hires_bitmap.prg \
+  -o src/generated/pilot_hires_bitmap.exo
+exomizer mem -q -M256 -l none src/generated/pilot_ripple_field.prg \
+  -o src/generated/pilot_ripple_field.exo
+exomizer mem -q -M256 -l none src/generated/starwars_intro_logo.prg \
+  -o src/generated/starwars_intro_logo.exo
+exomizer mem -q -M256 -l none src/generated/prelude_hires_bitmap.prg \
+  -o src/generated/prelude_hires_bitmap.exo
+dd if=src/generated/prelude_hires_bitmap.exo \
+  of=src/generated/prelude_hires_bitmap_prefix.bin bs=1 count=2 2>/dev/null
+dd if=src/generated/prelude_hires_bitmap.exo \
+  of=src/generated/prelude_hires_bitmap_tail.bin bs=1 skip=2 2>/dev/null
+exomizer mem -q -M256 -l none src/generated/prelude_hires_colors.prg \
+  -o src/generated/prelude_hires_colors.exo
+acme src/music/galway_overlay.a
+exomizer mem -q -M256 -l none build/galway-overlay.prg \
+  -o src/generated/galway_overlay.exo
 acme src/main.a
 acme -DSPARKLE_PAYLOAD=1 src/main.a
 acme src/starwars_loader.a
 acme src/starwars_direct.a
 acme src/music/starwars_40s.a
 acme src/music/galway_nights.a
+acme src/music/imperial_march.a
+acme src/music/gearshift_markov.a
 python3 scripts/package_sid.py
 echo "Built build/StarwarsScrollerDemo.prg ($(stat -f%z build/StarwarsScrollerDemo.prg) bytes)"
 echo "Built build/StarwarsScrollerDemo-sparkle-part.prg ($(stat -f%z build/StarwarsScrollerDemo-sparkle-part.prg) bytes)"

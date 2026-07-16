@@ -22,8 +22,12 @@ from __future__ import annotations
 
 import os
 import random
+import re
 
 OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "src", "generated")
+CHARSET_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "src", "assets", "scroller_charset.a"
+)
 
 # --- geometry ---------------------------------------------------------------
 
@@ -56,7 +60,7 @@ FONT_5X7 = {
     "N": ("10001", "10001", "11001", "10101", "10011", "10001", "10001"),
     "O": ("01110", "10001", "10001", "10001", "10001", "10001", "01110"),
     "P": ("11110", "10001", "10001", "11110", "10000", "10000", "10000"),
-    "Q": ("01110", "10001", "10001", "10001", "10101", "10010", "01101"),
+    "Q": ("01110", "10001", "10001", "10001", "10101", "10010", "01111"),
     "R": ("11110", "10001", "10001", "11110", "10100", "10010", "10001"),
     "S": ("01111", "10000", "10000", "01110", "00001", "00001", "11110"),
     "T": ("11111", "00100", "00100", "00100", "00100", "00100", "00100"),
@@ -75,12 +79,19 @@ FONT_5X7 = {
     "-": ("00000", "00000", "00000", "01110", "00000", "00000", "00000"),
     "!": ("00100", "00100", "00100", "00100", "00100", "00000", "00100"),
     "?": ("01110", "10001", "00001", "00010", "00100", "00000", "00100"),
+    ":": ("00000", "00100", "00100", "00000", "00100", "00100", "00000"),
+    ";": ("00000", "00100", "00100", "00000", "00100", "00100", "01000"),
+    "/": ("00001", "00010", "00010", "00100", "01000", "01000", "10000"),
     " ": ("00000", "00000", "00000", "00000", "00000", "00000", "00000"),
 }
 
 SCROLL_LINES = [
+    "",
+    "",
+    "",
     "A LONG TIME AGO",
-    "....",
+    "IN A GALAXY....",
+    "",
     "",
     "WAIT DOES ANYONE",
     "UNDERSTAND HOW",
@@ -119,6 +130,13 @@ SCROLL_LINES = [
     "C64...",
     "",
     "",
+    "SID MUSIC",
+    "GENERATED USING",
+    "MARKOV CHAINS",
+    "ALGORITHM",
+    "VIA PYTHON",
+    "",
+    "",
     "YES THE INTRO",
     "IS LAME AND",
     "BORING, BUT",
@@ -145,13 +163,25 @@ SCROLL_LINES = [
     "HELLRAISERS,",
     "",
     "DREAM WARRIORS,",
-    "",
-    "",
-    "",
-    "",
     "PINK PANTHER.",
     "",
     "",
+    "",
+    "ANY ONE",
+    "INTERESTED IN",
+    "THE CODE CAN",
+    "ACCESS GITHUB",
+    "HERE;",
+    "HTTPS://GITHUB.",
+    "COM/SKILTONUSA/",
+    "STARWARSSCROLLER",
+    "DEMO.",
+    "",
+    "DEMO: TARQUIN",
+    "MUSIC: TARQUIN",
+    "GFX: TARQUIN",
+    "",
+    "....",
 ]
 
 
@@ -171,13 +201,60 @@ def expand_glyph(rows5: tuple[str, ...]) -> list[int]:
     return out
 
 
+def load_charset() -> dict[int, tuple[int, ...]]:
+    """Read the supplied 256-character, eight-byte C64 charset dump."""
+    glyphs = {}
+    line_pattern = re.compile(
+        r"\.byte ((?:\$[0-9a-fA-F]{2},?){8}) // ([0-9a-fA-F]{2})"
+    )
+    with open(CHARSET_PATH, encoding="ascii") as charset_file:
+        for line in charset_file:
+            match = line_pattern.fullmatch(line.strip())
+            if not match:
+                continue
+            code = int(match.group(2), 16)
+            rows = tuple(
+                int(value, 16)
+                for value in re.findall(r"\$([0-9a-fA-F]{2})", match.group(1))
+            )
+            glyphs[code] = rows
+    assert len(glyphs) == 256, f"expected 256 charset glyphs, got {len(glyphs)}"
+    return glyphs
+
+
+def expand_charset_glyph(rows8: tuple[int, ...]) -> list[int]:
+    """Reduce an 8x8 glyph to 5x8, then scale it into the 14x16 source cell.
+
+    The unrolled perspective plotter relies on a small set of wide source
+    columns. Retaining all eight source columns would more than quadruple its
+    FontData tables, so sample five columns while preserving all eight rows.
+    """
+    source_columns = (0, 2, 4, 5, 7)
+    bounds = [1 + (i * 14) // 5 for i in range(6)]
+    out = []
+    for row in rows8:
+        short = 0
+        for i, source_column in enumerate(source_columns):
+            if row & (0x80 >> source_column):
+                for px in range(bounds[i], bounds[i + 1]):
+                    short |= 1 << (15 - px)
+        out.extend((short, short))
+    return out
+
+
 def build_font_and_text():
     used = sorted({ch for line in SCROLL_LINES for ch in line.upper()} | {" "})
     for ch in used:
-        assert ch in FONT_5X7, f"no glyph for {ch!r}"
+        assert (
+            "A" <= ch <= "Z" or "0" <= ch <= "9" or ch in FONT_5X7
+        ), f"no glyph for {ch!r}"
     char_index = {ch: i for i, ch in enumerate(used)}
 
-    glyphs = [expand_glyph(FONT_5X7[ch]) for ch in used]
+    charset = load_charset()
+    glyphs = []
+    for ch in used:
+        code = ord(ch) - ord("A") + 1 if "A" <= ch <= "Z" else ord(ch)
+        glyphs.append(expand_charset_glyph(charset[code]))
 
     shorts = [0]  # index 0 must stay the blank row
     for g in glyphs:
