@@ -173,6 +173,122 @@ shiptransition_hide:
     sta $d015
     rts
 
+shiptransition_stamp_emblems:
+    lda #<(SCREEN + 6 * 40 + 3)
+    sta text_ptr
+    lda #>(SCREEN + 6 * 40 + 3)
+    sta text_ptr+1
+    jsr shiptransition_stamp_emblem_colors
+    lda #<(SCREEN + 16 * 40 + 34)
+    sta text_ptr
+    lda #>(SCREEN + 16 * 40 + 34)
+    sta text_ptr+1
+    jsr shiptransition_stamp_emblem_colors
+    ldx #$00
+shiptransition_tie_emblem_mask_loop:
+    lda transition_tie_emblem_row_addr_lo,x
+    sta text_ptr
+    lda transition_tie_emblem_row_addr_hi,x
+    sta text_ptr+1
+    stx tmp
+    txa
+    asl
+    asl
+    clc
+    adc tmp
+    tax
+    jsr shiptransition_stamp_emblem_mask_row
+    ldx tmp
+    inx
+    cpx #TRANSITION_TIE_EMBLEM_ROW_COUNT
+    bne shiptransition_tie_emblem_mask_loop
+
+    ldx #$00
+shiptransition_xwing_emblem_mask_loop:
+    lda transition_xwing_emblem_row_addr_lo,x
+    sta text_ptr
+    lda transition_xwing_emblem_row_addr_hi,x
+    sta text_ptr+1
+    stx tmp
+    txa
+    asl
+    asl
+    clc
+    adc tmp
+    tax
+    jsr shiptransition_stamp_xwing_emblem_mask_row
+    ldx tmp
+    inx
+    cpx #TRANSITION_XWING_EMBLEM_ROW_COUNT
+    bne shiptransition_xwing_emblem_mask_loop
+    rts
+
+shiptransition_stamp_emblem_colors:
+    ldx #$05
+shiptransition_stamp_emblem_color_row:
+    ldy #$04
+    lda #$01                    ; black background, white emblem pixels
+shiptransition_stamp_emblem_color_col:
+    sta (text_ptr),y
+    dey
+    bpl shiptransition_stamp_emblem_color_col
+    lda text_ptr
+    clc
+    adc #40
+    sta text_ptr
+    bcc shiptransition_stamp_emblem_color_next
+    inc text_ptr+1
+shiptransition_stamp_emblem_color_next:
+    dex
+    bne shiptransition_stamp_emblem_color_row
+    rts
+
+shiptransition_stamp_emblem_mask_row:
+    lda transition_tie_emblem_mask,x
+    ldy #$00
+    and (text_ptr),y
+    sta (text_ptr),y
+    lda transition_tie_emblem_mask+1,x
+    ldy #$08
+    and (text_ptr),y
+    sta (text_ptr),y
+    lda transition_tie_emblem_mask+2,x
+    ldy #$10
+    and (text_ptr),y
+    sta (text_ptr),y
+    lda transition_tie_emblem_mask+3,x
+    ldy #$18
+    and (text_ptr),y
+    sta (text_ptr),y
+    lda transition_tie_emblem_mask+4,x
+    ldy #$20
+    and (text_ptr),y
+    sta (text_ptr),y
+    rts
+
+shiptransition_stamp_xwing_emblem_mask_row:
+    lda transition_xwing_emblem_mask,x
+    ldy #$00
+    and (text_ptr),y
+    sta (text_ptr),y
+    lda transition_xwing_emblem_mask+1,x
+    ldy #$08
+    and (text_ptr),y
+    sta (text_ptr),y
+    lda transition_xwing_emblem_mask+2,x
+    ldy #$10
+    and (text_ptr),y
+    sta (text_ptr),y
+    lda transition_xwing_emblem_mask+3,x
+    ldy #$18
+    and (text_ptr),y
+    sta (text_ptr),y
+    lda transition_xwing_emblem_mask+4,x
+    ldy #$20
+    and (text_ptr),y
+    sta (text_ptr),y
+    rts
+
 ; Two sprite layers occupy each quadrant, so coordinates are repeated in pairs.
 shiptransition_quadrant_x:
 !byte 0,0,24,24,0,0,24,24
@@ -208,3 +324,4 @@ shiptransition_x_msb:
 
 !source "src/generated/transition_sprites.inc"
 !source "src/generated/plasma_tie_sprite.inc"
+!source "src/generated/transition_emblems.inc"

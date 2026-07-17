@@ -109,9 +109,10 @@ entry:
     jsr opening_music_irq_enable
     jsr run_ship_transition_intro
     jsr opening_music_irq_disable
-    jsr unpack_galway_overlay
     lda #$2b                    ; hide the display while adding the live part
     sta $d011
+    jsr prepare_starfield        ; remove transition-only lower stars/emblems
+    jsr unpack_galway_overlay
 
 ; AND-merge the Death Star banner above the crawl.  Logo ink is 0-bits so
 ; stars around the image survive.
@@ -259,11 +260,15 @@ run_razor_plasma_intro:
 razor_plasma_intro_loop:
     jsr wait_frame
     jsr razor_plasma_update_frame
+    lda plasma_title_state
+    cmp #$06                    ; PARALAX completed its five-second hold
+    beq razor_plasma_intro_exit
     lda #$7f                    ; row 7, column 4 is the C64 space key
     sta $dc00
     lda $dc01
     and #$10
     bne razor_plasma_intro_loop
+razor_plasma_intro_exit:
     lda #$ff                    ; leave no keyboard row selected
     sta $dc00
     lda #$00
@@ -576,6 +581,7 @@ prepare_transition_star_loop:
     inx
     cpx #TOP_STAR_COUNT
     bne prepare_transition_star_loop
+    jsr shiptransition_stamp_emblems
     rts
 
 run_ship_transition_intro:
@@ -1568,6 +1574,72 @@ pilot_hires_exo_end:
 pilot_ripple_field_exo:
 !bin "src/generated/pilot_ripple_field.exo"
 pilot_ripple_field_exo_end:
+
+; Rotate a light-blue dither highlight through eight angular groups of stable
+; emblem cells. The bitmap geometry remains fixed so foreground title pixels
+; are never cleared or rewritten.
+prelude_rotate_emblem:
+    lda prelude_rotation_enabled
+    beq prelude_rotation_done
+    lda transition_step
+    cmp #$04
+    bne prelude_rotation_done
+    dec intro_frame_counter
+    bne prelude_rotation_done
+    lda #$07
+    sta intro_frame_counter
+    ldx prelude_rotation_phase
+    lda #$0c
+    jsr prelude_rotation_apply_group
+    inc prelude_rotation_phase
+    lda prelude_rotation_phase
+    and #$07
+    sta prelude_rotation_phase
+    clc
+    adc #$03                    ; retain a four-phase rotating highlight trail
+    and #$07
+    tax
+    lda #$0e
+    jmp prelude_rotation_apply_group
+prelude_rotation_done:
+    rts
+
+prelude_rotation_apply_group:
+    sta tmp
+    lda prelude_rotation_group_starts,x
+    sta col_save
+    lda prelude_rotation_group_lengths,x
+    sta row_counter
+prelude_rotation_cell_loop:
+    ldx col_save
+    lda prelude_rotation_cell_lo,x
+    sta logo_src
+    sta logo_dst
+    lda prelude_rotation_cell_hi,x
+    clc
+    adc #$d8
+    sta logo_src+1
+    sec
+    sbc #$18
+    sta logo_dst+1
+    ldy #$00
+    lda tmp
+    sta (logo_src),y
+    asl
+    asl
+    asl
+    asl
+    sta (logo_dst),y
+    inc col_save
+    dec row_counter
+    bne prelude_rotation_cell_loop
+    rts
+
+prelude_rotation_phase:
+!byte $00
+prelude_rotation_enabled:
+!byte $00
+!source "src/generated/prelude_emblem_rotation.inc"
 !if * > $8100 {
     !error "compressed pilot streams overlap the plasma-message workspace"
 }
@@ -1579,9 +1651,9 @@ PLASMA_MESSAGE_BITMAP_BACKUP = SCROLL_DATA
 PLASMA_MESSAGE_SCREEN_BACKUP = $7cd8 ; 155 cells * 8 bitmap bytes
 PLASMA_MESSAGE_FIELD_BACKUP = $7d73  ; 155 saved screen bytes follow
 
-; Five seconds of clear plasma, then RETRODNA / PRESENTS / STARWARS. Each title
-; assembles in the same shuffled red-dot order used by its dissolve, holds for
-; three seconds, and leaves two seconds of clear plasma before the next word.
+; Five seconds of clear plasma, then RETRODNA / AND / PARALAX. The first two
+; titles hold for three seconds, dissolve, and leave a two-second gap. PARALAX
+; remains intact for five seconds before automatically advancing the scene.
 update_plasma_message:
     lda plasma_title_state
     beq plasma_title_initial_pause
@@ -1635,6 +1707,15 @@ plasma_title_assembling:
 plasma_title_holding:
     inc plasma_title_timer
     lda plasma_title_timer
+    ldx plasma_title_word
+    cpx #$02
+    bne plasma_title_standard_hold
+    cmp #125                    ; five seconds, then leave PARALAX intact
+    bne plasma_message_update_done
+    lda #$06                    ; consumed by the outer plasma scene loop
+    sta plasma_title_state
+    rts
+plasma_title_standard_hold:
     cmp #75                     ; three-second title hold
     bne plasma_message_update_done
     lda #$00
@@ -1655,7 +1736,9 @@ plasma_title_dissolving:
     jsr restore_next_plasma_title_cell
     lda plasma_title_index
     cmp plasma_title_frame_length
-    bcc plasma_message_update_done
+    bcs plasma_title_dissolve_complete
+    jmp plasma_message_update_done
+plasma_title_dissolve_complete:
     lda plasma_title_word
     cmp #$02
     beq plasma_title_sequence_complete
@@ -1921,7 +2004,7 @@ plasma_tie_copy_frames:
     inx
     bne plasma_tie_copy_frames
     ldx #$07
-    lda #$0f                    ; light gray hires TIE squadron
+    lda #$0f                    ; light gray TIE fighters
 plasma_tie_color_loop:
     sta $d027,x
     dex
@@ -1930,7 +2013,8 @@ plasma_tie_color_loop:
     sta $d017
     sta $d01d
     lda #$00
-    sta $d01b                   ; sprite in front of the plasma bitmap
+    sta $d01b                   ; combined sprites in front of the plasma
+    lda #$ff                    ; opaque blue/gray multicolor circular bobs
     sta $d01c
     jsr plasma_tie_update
     rts
@@ -1957,6 +2041,10 @@ plasma_tie_fade_ready:
     sta $d02c
     sta $d02d
     sta $d02e
+    lda plasma_tie_fade_shared0,x
+    sta $d025
+    lda plasma_tie_fade_shared1,x
+    sta $d026
 
     inc plasma_tie_spin_index
     inc plasma_tie_move_delay
@@ -2033,7 +2121,7 @@ plasma_tie_priority_ready:
     bne plasma_tie_position_loop
     lda plasma_tie_x_msb
     sta $d010
-    lda row_counter
+    lda row_counter             ; front of plasma, behind Vader on the left
     sta $d01b
     lda plasma_message_cell_index
     sta $d015
@@ -2041,6 +2129,10 @@ plasma_tie_priority_ready:
 
 plasma_tie_fade_colors:
 !byte $00,$0b,$0c,$0f
+plasma_tie_fade_shared0:
+!byte $00,$0b,$06,$06
+plasma_tie_fade_shared1:
+!byte $00,$0b,$04,$04
 
 !if PLASMA_MESSAGE_FIELD_BACKUP + 155 > $8100 {
     !error "plasma-message backups overlap the title workspace"
@@ -2112,14 +2204,19 @@ restore_pilot_screen_loop:
     bne restore_pilot_screen_loop
     rts
 
-; Fade in for 24 PAL frames, hold for 202, and fade out for 24: 250 frames,
-; keeping the complete prelude on screen for five seconds.
+; Fade in, hold STAR / RETRODNA / WARS with its rotating emblem for five
+; seconds, then show A / RETRODNA / PRODUCTION without the emblem for three.
 run_prelude_image:
     lda #$00
     sta $d015
     sta $d020
     sta $d021
     sta transition_step
+    sta prelude_rotation_phase
+    lda #$01
+    sta prelude_rotation_enabled
+    lda #$07
+    sta intro_frame_counter
     jsr prelude_apply_fade
     lda #$3b
     sta $d011
@@ -2135,7 +2232,27 @@ prelude_fade_in:
     cmp #$04
     bne prelude_fade_in
 
-    lda #202
+    lda #250                    ; five-second PAL hold after the initial fade
+    jsr prelude_wait_frames
+    lda #$00
+    sta prelude_rotation_enabled
+prelude_swap_fade_out:
+    lda #$02
+    jsr prelude_wait_frames
+    dec transition_step
+    jsr prelude_apply_fade
+    lda transition_step
+    bne prelude_swap_fade_out
+    jsr prelude_install_alt_frame
+prelude_swap_fade_in:
+    lda #$02
+    jsr prelude_wait_frames
+    inc transition_step
+    jsr prelude_apply_fade
+    lda transition_step
+    cmp #$04
+    bne prelude_swap_fade_in
+    lda #150                    ; three-second PAL replacement hold
     jsr prelude_wait_frames
 prelude_fade_out:
     lda #$06
@@ -2152,6 +2269,7 @@ prelude_wait_frames:
     sta transition_delay
 prelude_wait_frame_loop:
     jsr wait_frame
+    jsr prelude_rotate_emblem
     dec transition_delay
     bne prelude_wait_frame_loop
     rts
@@ -2215,6 +2333,74 @@ prelude_fade_destination_ready:
 
 prelude_cell_bayer:
 !byte $00,$02,$03,$01
+
+; The alternate bitmap is packed beneath I/O. Suspend the music IRQ briefly,
+; expose that RAM, copy its packed cell colors, and decrunch directly over the
+; live title bitmap. The resulting rewrite reads as a quick vector replacement.
+prelude_install_alt_frame:
+    sei
+    lda #$34
+    sta $01
+    lda #<prelude_alt_colors_exo_end
+    sta exod_byte_lo
+    lda #>prelude_alt_colors_exo_end
+    sta exod_byte_hi
+    jsr exod_decrunch
+    lda #<prelude_alt_bitmap_exo_end
+    sta exod_byte_lo
+    lda #>prelude_alt_bitmap_exo_end
+    sta exod_byte_hi
+    jsr exod_decrunch
+    lda #<opening_music_irq      ; bitmap bytes at $fffe/$ffff are the IRQ vector
+    sta $fffe
+    lda #>opening_music_irq
+    sta $ffff
+    lda #$35
+    sta $01
+
+    lda #<SCREEN
+    sta logo_dst
+    lda #>SCREEN
+    sta logo_dst+1
+    lda #<$d800
+    sta logo_src
+    lda #>$d800
+    sta logo_src+1
+    ldx #$00
+prelude_alt_color_byte:
+    lda $0200,x
+    sta tmp
+    stx col_save
+    lda #$04
+    sta transition_col
+prelude_alt_color_cell:
+    lda tmp
+    and #$03
+    tay
+    lda prelude_alt_color_values,y
+    ldy #$00
+    sta (logo_src),y
+    lsr tmp
+    lsr tmp
+    inc logo_src
+    bne prelude_alt_color_source_ready
+    inc logo_src+1
+prelude_alt_color_source_ready:
+    dec transition_col
+    bne prelude_alt_color_cell
+    ldx col_save
+    inx
+    cpx #250
+    bne prelude_alt_color_byte
+    lda #$00                    ; Exomizer clobbers the shared fade phase byte
+    sta transition_step
+    lda #$07
+    sta intro_frame_counter
+    cli
+    rts
+
+prelude_alt_color_values:
+!byte $01,$07,$0c,$0f
 
 !if * > $8800 {
     !error "prelude fade code overlaps RetroDNA workspace"
@@ -2439,8 +2625,14 @@ MAX_SEQUENCE_LENGTH_256 = 1
 galway_overlay_exo:
 !bin "src/generated/galway_overlay.exo"
 galway_overlay_exo_end:
-!if galway_overlay_exo_end > $dc00 {
-    !error "compressed Galway overlay overlaps CIA I/O"
+prelude_alt_bitmap_exo:
+!bin "src/generated/prelude_alt_hires_bitmap.exo"
+prelude_alt_bitmap_exo_end:
+prelude_alt_colors_exo:
+!bin "src/generated/prelude_alt_hires_colors_packed.exo"
+prelude_alt_colors_exo_end:
+!if prelude_alt_colors_exo_end > $dc00 {
+    !error "compressed opening assets overlap CIA I/O"
 }
 
 ; Exomizer reports a two-byte safety offset. The prefix is copied to RAM under

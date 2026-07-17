@@ -24,11 +24,20 @@ so the tune keeps 50 Hz timing while the plotter runs longer than a frame.
 into hires bitmap data that is AND-merged over the starfield in the 80-pixel
 banner area above the crawl, with per-cell C64 ink colours chosen from the
 source image. The native PRG opens in true hires bitmap mode with the
-supplied `STAR / RETRODNA / WAR` artwork traced into editable SVG paths by
+supplied `STAR / RETRODNA / WARS` artwork traced into editable SVG paths by
 `scripts/vectorize_star_retro_war.py`, then rasterized from that geometry into
-a full-screen C64 hires image. It fades in through a four-phase ordered cell
-mask, remains visible, and
-fades out within a five-second opening sequence. Its compressed bitmap expands
+a full-screen C64 hires image. A large light-blue/gray dithered rendering of
+`imperial_emblem_vector.svg` sits behind the title, with the stepped animated
+vector retained separately as `imperial_emblem_rotoscope.svg`. On the C64, an
+eight-phase light-blue dither highlight rotates through emblem-only cells about
+once every 1.1 seconds, creating motion without modifying foreground letters.
+After the initial fade, `STAR / RETRODNA / WARS` and the rotating emblem hold
+for five seconds. A short ordered fade replaces them with the cleaner outlined
+`A / RETRODNA / PRODUCTION` contours extracted from
+`a_retrodna_production_source.png`; this second card has a plain black
+background and holds for three seconds. Its bitmap and compressed two-bit
+color map fit in the remaining RAM beneath I/O. The replacement then fades out.
+The initial compressed bitmap expands
 in place at `$e000`; Color RAM preserves the target per-cell palette while the
 original plasma screen is temporarily backed up at `$0400`.
 The next scene opens in true hires bitmap mode with the
@@ -49,26 +58,32 @@ The two radial ripples retain additive interference but use separate color
 sequences: the first moves through blue and cyan, while the second moves through
 purple, red, light red, orange, and yellow according to the locally dominant
 wave amplitude.
-After five seconds of clear plasma, the red plasma titles `RETRODNA`, `PRESENTS`,
-and `STARWARS` assemble dot by dot in a pseudo-random dissolve pattern. Each word
-holds for three seconds, disperses through the same pattern, and leaves two
-seconds of clear plasma before the next title. A temporary per-cell backup restores the
+After five seconds of clear plasma, the red plasma titles `RETRODNA`, `AND`, and
+`PARALAX` assemble dot by dot in a pseudo-random dissolve pattern. Each word
+except the last holds for three seconds, disperses through the same pattern,
+and leaves two seconds of clear plasma before the next title. `PARALAX` remains
+intact for five seconds and then advances automatically to the ship transition;
+Space remains an early skip. A temporary per-cell backup restores the
 Vader bitmap, screen colors, and live ripple phase behind every removed dot.
-Eight expanded 48x42 hires TIE fighters orbit over the plasma on a 64-position
-elliptical path while four symmetric sprite frames provide continuous rotation.
-The hardware sprites are evenly spaced and use staggered animation phases while
-remaining independent of the bitmap renderer. They fade in through the C64
-black, dark-gray, gray, and light-gray ramp. Fighters crossing the left side
-switch to background priority so the Vader bitmap naturally occludes them. At startup the
-compressed intro-logo stream is shadowed at `$0400`, freeing its normal `$c400`
-workspace for the temporary TIE frames until Space begins the ship transition.
-The opening waits for the C64 space key, then cuts to source-derived 48x42 TIE
+Eight expanded 48x42 multicolor hardware sprites orbit over the plasma on a
+64-position path. Each self-contained sprite combines an opaque dark-blue
+circle with its light-gray TIE fighter, while four symmetric frames provide
+rotation.
+The TIE squadron orbits and rotates continuously throughout the plasma scene.
+The sprites are evenly spaced in front of the plasma and fade through the C64
+black, dark-gray, gray, and light-gray ramp. Vader changes their priority on
+the left side and fully hides the deepest pass. At startup the compressed
+intro-logo stream is shadowed at `$0400`, freeing `$c400-$c4ff` for the four
+temporary sprite frames until Space begins the ship transition.
+After the automatic hold or an early Space press, the opening cuts to source-derived 48x42 TIE
 fighter and X-wing composites crossing
-in opposite directions. Each ship uses four
+in opposite directions over transition-only Imperial and Rebel bitmap emblems.
+Each ship uses four
 synchronized sprite bobs with layered hires detail and carved negative space;
 a raster split reuses all eight sprites for the lower X-wing. Both cross the
 same hires starfield used by the main part, with the upper star pattern repeated
-behind the X-wing. After the flyby, the completed bitmap is revealed from the
+behind the X-wing. The transition emblems are cleared before the main
+Death Star setup resumes. After the flyby, the completed bitmap is revealed from the
 centre out. During that reveal, `scripts/generate_intro_logo.py` displays the
 supplied `STAR WARS` artwork as a 320x96 hires image beneath the Death Star. It
 remains fully visible for 150 PAL frames, fades through four cumulative Bayer
@@ -132,7 +147,10 @@ contracting near the horizon. The active crawl alphabet comes from
 `src/assets/scroller_charset.a`: the table generator maps
 its A-Z, numeric, and punctuation glyphs from 8x8 charset cells into the
 crawl's 16x16 source cells. Five horizontal samples keep the font compatible
-with the unrolled plotter's compact FontData vocabulary.
+with the unrolled plotter's compact FontData vocabulary. Scroller text can use
+build-time `[1]` and `[2]` markers: `[1]` selects the project charset and `[2]`
+selects the stock C64 character ROM from `chargen-901225-01.bin`. The markers
+are stripped before `scroll_text` is emitted.
 The logo title's original OTF is not vendored. Its embedded license is Creative
 Commons BY-NC-ND 3.0;
 source attribution: `https://fontstruct.com/fontstructions/show/470284/star_wars_27`.

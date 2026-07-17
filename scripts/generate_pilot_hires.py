@@ -26,26 +26,30 @@ BLACK = (0, 0, 0)
 BLUE = (64, 49, 141)
 CIRCLE = bytes((0x00, 0x3c, 0x7e, 0xff, 0xff, 0x7e, 0x3c, 0x00))
 BLANK = bytes(8)
-TITLE_WORDS = ("RETRODNA", "PRESENTS", "STARWARS")
+TITLE_WORDS = ("RETRODNA", "AND", "PARALAX")
 TITLE_LEFT = 5
 TITLE_TOP = 10
 TITLE_WIDTH = 31
 TITLE_ROWS = 5
 FONT_3X5 = {
     "A": ("010", "101", "111", "101", "101"),
+    "C": ("111", "100", "100", "100", "111"),
     "D": ("110", "101", "101", "101", "110"),
     "E": ("111", "100", "110", "100", "111"),
     "G": ("111", "100", "101", "101", "111"),
     "H": ("101", "101", "111", "101", "101"),
     "I": ("1", "1", "1", "1", "1"),
+    "L": ("100", "100", "100", "100", "111"),
     "N": ("101", "111", "111", "101", "101"),
     "O": ("111", "101", "101", "101", "111"),
     "P": ("110", "101", "110", "100", "100"),
     "R": ("110", "101", "110", "101", "101"),
     "S": ("111", "100", "111", "001", "111"),
     "T": ("111", "010", "010", "010", "010"),
+    "U": ("101", "101", "101", "101", "111"),
     "V": ("101", "101", "101", "101", "010"),
     "W": ("101", "101", "111", "111", "101"),
+    "X": ("101", "101", "010", "101", "101"),
 }
 
 
@@ -78,13 +82,16 @@ def title_frames():
     frames = []
     for word in TITLE_WORDS:
         final_cells = set()
+        word_width = len(word) * 4 - 1
+        word_offset = (TITLE_WIDTH - word_width) // 2
         for character_index, character in enumerate(word):
             glyph = FONT_3X5[character]
             for y, row in enumerate(glyph):
                 for x, pixel in enumerate(row):
                     if pixel == "1":
                         final_cells.add((TITLE_TOP + y,
-                                         TITLE_LEFT + character_index * 4 + x))
+                                         TITLE_LEFT + word_offset +
+                                         character_index * 4 + x))
         cells = sorted(final_cells, key=lambda cell: (
             (cell[0] * 73 + cell[1] * 151) & 0xff, cell[0] ^ cell[1]
         ))

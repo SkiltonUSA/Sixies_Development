@@ -28,6 +28,14 @@ OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "src", "generated")
 CHARSET_PATH = os.path.join(
     os.path.dirname(__file__), "..", "src", "assets", "scroller_charset.a"
 )
+ROM_CHARSET_CANDIDATES = (
+    os.path.join(
+        os.path.dirname(__file__), "..", "src", "assets",
+        "chargen-901225-01.bin"
+    ),
+    "/Applications/vice-arm64-sdl2-3.9/VICE.app/Contents/Resources/share/vice/C64/chargen-901225-01.bin",
+    "/Applications/vice-arm64-sdl2-3.9/VICE.app/Contents/Resources/bin/../share/vice/C64/chargen-901225-01.bin",
+)
 
 # --- geometry ---------------------------------------------------------------
 
@@ -86,7 +94,7 @@ FONT_5X7 = {
 }
 
 SCROLL_LINES = [
-    "",
+    "[1]",
     "",
     "",
     "A LONG TIME AGO",
@@ -102,6 +110,7 @@ SCROLL_LINES = [
     "NEITHER DID I",
     "UNTIL I STARTED",
     "THIS PROJECT.",
+    "",
     "THANKS TO",
     "RAISTLINGP, OF",
     "RAISTLIN PAPERS,",
@@ -120,10 +129,12 @@ SCROLL_LINES = [
     "BITMAP PLOTTERS",
     "....",
     "",
+    "",
     "GREETINGS TO",
     "GENESIS PROJECT",
     "FOR BEING OPEN",
     "TO NEW CODERS,",
+    "",
     "LINUS AKESSEN",
     "FOR AWESOME",
     "INSIGHTS INTO",
@@ -143,9 +154,10 @@ SCROLL_LINES = [
     "COME ON, ITS A",
     "STARWARS",
     "SCROLLER",
+    "[2]WITH MULTIPLE",
+    "FONTS!",
     "",
-    "",
-    "AND",
+    "[1]AND",
     "WHO DOESNT LIKE",
     "A GOOD 8BIT",
     "1MHZ STARWARS",
@@ -158,7 +170,7 @@ SCROLL_LINES = [
     "SCHOOLERS",
     "",
     "",
-    "PARALAX,",
+    "[2]PARALAX,",
     "",
     "HELLRAISERS,",
     "",
@@ -201,25 +213,52 @@ def expand_glyph(rows5: tuple[str, ...]) -> list[int]:
     return out
 
 
-def load_charset() -> dict[int, tuple[int, ...]]:
-    """Read the supplied 256-character, eight-byte C64 charset dump."""
-    glyphs = {}
+def parse_charset_lines(path: str) -> list[tuple[int, int | None, tuple[int, ...]]]:
     line_pattern = re.compile(
-        r"\.byte ((?:\$[0-9a-fA-F]{2},?){8}) // ([0-9a-fA-F]{2})"
+        r"\.byte ((?:\$[0-9a-fA-F]{2},?){8}) // "
+        r"([0-9a-fA-F]{2})(?:\s+-\s+([0-9a-fA-F]{2}))?"
     )
-    with open(CHARSET_PATH, encoding="ascii") as charset_file:
+    parsed = []
+    with open(path, encoding="ascii") as charset_file:
         for line in charset_file:
             match = line_pattern.fullmatch(line.strip())
             if not match:
                 continue
             code = int(match.group(2), 16)
+            grouped_code = (
+                int(match.group(3), 16) if match.group(3) is not None else None
+            )
             rows = tuple(
                 int(value, 16)
                 for value in re.findall(r"\$([0-9a-fA-F]{2})", match.group(1))
             )
-            glyphs[code] = rows
+            parsed.append((code, grouped_code, rows))
+    return parsed
+
+
+def load_charset() -> dict[int, tuple[int, ...]]:
+    """Read the supplied 256-character, eight-byte C64 charset dump."""
+    glyphs = {}
+    for code, _, rows in parse_charset_lines(CHARSET_PATH):
+        glyphs[code] = rows
     assert len(glyphs) == 256, f"expected 256 charset glyphs, got {len(glyphs)}"
     return glyphs
+
+
+def load_rom_charset() -> dict[int, tuple[int, ...]]:
+    """Read the stock C64 character ROM in screen-code order."""
+    for path in ROM_CHARSET_CANDIDATES:
+        if not os.path.exists(path):
+            continue
+        with open(path, "rb") as charset_file:
+            raw = charset_file.read()
+        if len(raw) < 2048:
+            raise ValueError(f"C64 chargen ROM is too small: {path}")
+        return {
+            code: tuple(raw[code * 8:code * 8 + 8])
+            for code in range(256)
+        }
+    raise FileNotFoundError("could not find chargen-901225-01.bin for font [2]")
 
 
 def expand_charset_glyph(rows8: tuple[int, ...]) -> list[int]:
@@ -242,36 +281,102 @@ def expand_charset_glyph(rows8: tuple[int, ...]) -> list[int]:
     return out
 
 
+def nearest_row(row: int, palette: list[int]) -> int:
+    return min(palette, key=lambda candidate: (row ^ candidate).bit_count())
+
+
+def char_code(ch: str) -> int:
+    return ord(ch) - ord("A") + 1 if "A" <= ch <= "Z" else ord(ch)
+
+
+def parse_scroll_line(line: str, current_font: int) -> tuple[list[tuple[int, str]], int]:
+    parsed = []
+    index = 0
+    line = line.upper()
+    while index < len(line):
+        marker = line[index:index + 3]
+        if marker == "[1]":
+            current_font = 1
+            index += 3
+            continue
+        if marker == "[2]":
+            current_font = 2
+            index += 3
+            continue
+        parsed.append((current_font, line[index]))
+        index += 1
+    return parsed, current_font
+
+
 def build_font_and_text():
-    used = sorted({ch for line in SCROLL_LINES for ch in line.upper()} | {" "})
-    for ch in used:
+    parsed_lines = []
+    current_font = 1
+    for line in SCROLL_LINES:
+        parsed_line, current_font = parse_scroll_line(line, current_font)
+        parsed_lines.append(parsed_line)
+    used_chars = {ch for line in parsed_lines for _, ch in line} | {" "}
+    for ch in used_chars:
         assert (
             "A" <= ch <= "Z" or "0" <= ch <= "9" or ch in FONT_5X7
         ), f"no glyph for {ch!r}"
-    char_index = {ch: i for i, ch in enumerate(used)}
 
     charset = load_charset()
+    rom_charset = load_rom_charset()
+    primary_glyphs = {
+        ch: expand_charset_glyph(charset[char_code(ch)])
+        for ch in used_chars
+    }
+    primary_row_palette = sorted({row for glyph in primary_glyphs.values()
+                                  for row in glyph})
+    alternate_glyphs = {}
+    for ch in used_chars:
+        code = char_code(ch)
+        if code in rom_charset and any(rom_charset[code]):
+            alternate = expand_charset_glyph(rom_charset[code])
+            alternate_glyphs[ch] = [
+                nearest_row(row, primary_row_palette) for row in alternate
+            ]
+
+    def canonical_key(font_id: int, ch: str) -> tuple[int, str]:
+        if (font_id == 2 and ch in alternate_glyphs and
+                alternate_glyphs[ch] != primary_glyphs[ch]):
+            return (2, ch)
+        return (1, ch)
+
+    used = set()
+    prepared_lines = []
+    for line in parsed_lines:
+        visible = line[:NUM_COLS]
+        pad = (NUM_COLS - len(visible)) // 2
+        visible = [canonical_key(font_id, ch) for font_id, ch in visible]
+        prepared = [(1, " ")] * pad + visible
+        prepared.extend([(1, " ")] * (NUM_COLS - len(prepared)))
+        prepared_lines.append(prepared)
+        used.update(prepared)
+
+    used = sorted(used, key=lambda item: (item[1], item[0]))
+    char_index = {key: i for i, key in enumerate(used)}
     glyphs = []
-    for ch in used:
-        code = ord(ch) - ord("A") + 1 if "A" <= ch <= "Z" else ord(ch)
-        glyphs.append(expand_charset_glyph(charset[code]))
+    for font_id, ch in used:
+        code = char_code(ch)
+        if font_id == 2 and ch in alternate_glyphs:
+            glyphs.append(alternate_glyphs[ch])
+        else:
+            glyphs.append(primary_glyphs[ch])
 
     shorts = [0]  # index 0 must stay the blank row
     for g in glyphs:
         for s in g:
             if s not in shorts:
                 shorts.append(s)
-    assert len(shorts) <= 48, f"too many unique font rows: {len(shorts)}"
+    assert len(shorts) <= 255, f"too many unique font rows: {len(shorts)}"
 
     remapped = [[shorts.index(glyphs[c][r]) for c in range(len(used))]
                 for r in range(16)]
 
     text_bytes = []
-    for line in SCROLL_LINES:
-        line = line.upper()[:NUM_COLS]
-        pad = (NUM_COLS - len(line)) // 2
-        line = (" " * pad + line).ljust(NUM_COLS)
-        text_bytes.extend(char_index[ch] for ch in line)
+    for line in prepared_lines:
+        text_bytes.extend(char_index[key] for key in line)
     text_bytes.append(0xFF)
     return used, shorts, remapped, text_bytes
 
@@ -438,9 +543,9 @@ def main():
 
     top_star_count = 36
     add_stars(top_star_count, 0, 320, 0, 80)  # behind and around the banner
-    add_stars(20, 0, 54, 0, 200)       # left of the crawl trapezoid
-    add_stars(20, 266, 320, 0, 200)    # right of the crawl trapezoid
-    add_stars(72, 0, 320, 176, 200)    # extended bottom field
+    add_stars(10, 0, 54, 0, 200)       # left of the crawl trapezoid
+    add_stars(10, 266, 320, 0, 200)    # right of the crawl trapezoid
+    add_stars(15, 0, 320, 176, 200)    # extended bottom field
     data.append(f"TOP_STAR_COUNT = {top_star_count}")
     data.append(f"STAR_COUNT = {len(stars)}")
     data.append("star_lo:")

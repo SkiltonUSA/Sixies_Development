@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 748 748"
+     role="img" aria-labelledby="title description">
+  <title id="title">Imperial emblem vector</title>
+  <desc id="description">Clean geometric trace of the supplied sixfold emblem.</desc>
+  <g id="imperial-emblem" fill="#fff" stroke="#fff">
+    <circle cx="374" cy="374" r="310" fill="none" stroke-width="20"/>
+    <g fill="none" stroke-width="32" stroke-linecap="butt">
+      <path d="M 618.32,285.07 A 260,260 0 0 1 618.32,462.93"/>
+      <path d="M 573.16,541.13 A 260,260 0 0 1 419.15,630.05"/>
+      <path d="M 328.85,630.05 A 260,260 0 0 1 174.84,541.13"/>
+      <path d="M 129.68,462.93 A 260,260 0 0 1 129.68,285.07"/>
+      <path d="M 174.84,206.87 A 260,260 0 0 1 328.85,117.95"/>
+      <path d="M 419.15,117.95 A 260,260 0 0 1 573.16,206.87"/>
+    </g>
+    <g fill="#fff" stroke="none">
+      <rect x="355" y="156" width="38" height="132"
+            transform="rotate(0 374 374)"/>
+      <rect x="355" y="156" width="38" height="132"
+            transform="rotate(60 374 374)"/>
+      <rect x="355" y="156" width="38" height="132"
+            transform="rotate(120 374 374)"/>
+      <rect x="355" y="156" width="38" height="132"
+            transform="rotate(180 374 374)"/>
+      <rect x="355" y="156" width="38" height="132"
+            transform="rotate(240 374 374)"/>
+      <rect x="355" y="156" width="38" height="132"
+            transform="rotate(300 374 374)"/>
+      <circle cx="374" cy="374" r="100"/>
+    </g>
+  </g>
+</svg>

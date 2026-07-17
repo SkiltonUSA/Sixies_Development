@@ -52,6 +52,10 @@ dd if=src/generated/prelude_hires_bitmap.exo \
   of=src/generated/prelude_hires_bitmap_tail.bin bs=1 skip=2 2>/dev/null
 exomizer mem -q -M256 -l none src/generated/prelude_hires_colors.prg \
   -o src/generated/prelude_hires_colors.exo
+exomizer mem -q -M256 -l none src/generated/prelude_alt_hires_bitmap.prg \
+  -o src/generated/prelude_alt_hires_bitmap.exo
+exomizer mem -q -M256 -l none src/generated/prelude_alt_hires_colors_packed.prg \
+  -o src/generated/prelude_alt_hires_colors_packed.exo
 acme src/music/galway_overlay.a
 exomizer mem -q -M256 -l none build/galway-overlay.prg \
   -o src/generated/galway_overlay.exo

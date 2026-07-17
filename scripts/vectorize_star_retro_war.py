@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Trace the STAR / RETRODNA / WAR raster into editable SVG geometry."""
+"""Trace the STAR / RETRODNA / WARS raster into editable SVG geometry."""
 
 from collections import defaultdict, deque
 from pathlib import Path
@@ -14,7 +14,6 @@ ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "src" / "assets" / "star_retro_war_vector_source.png"
 OUTPUT = ROOT / "src" / "assets" / "star_retro_war_vector.svg"
 RENDER_OUTPUT = ROOT / "src" / "assets" / "star_retro_war_vector_render.png"
-
 
 def pixel(rows, x: int, y: int):
     return rows[y][x * 4:x * 4 + 4]
@@ -89,7 +88,8 @@ def edge_direction(edge):
     ]
 
 
-def trace_loops(mask: set[tuple[int, int]]) -> list[list[tuple[int, int]]]:
+def trace_loops(mask: set[tuple[int, int]],
+                tolerance: float = 1.15) -> list[list[tuple[int, int]]]:
     edges = set()
     for x, y in mask:
         if (x, y - 1) not in mask:
@@ -134,7 +134,7 @@ def trace_loops(mask: set[tuple[int, int]]) -> list[list[tuple[int, int]]]:
             loop.append(point)
 
         if len(loop) >= 4 and loop[-1] == start:
-            loops.append(simplify_loop(loop[:-1]))
+            loops.append(simplify_loop(loop[:-1], tolerance))
     return loops
 
 
@@ -186,22 +186,24 @@ def simplify_loop(points: list[tuple[int, int]], tolerance: float = 1.15):
     return simplified if len(simplified) >= 3 else points
 
 
-def path_data(mask: set[tuple[int, int]]) -> str:
+def path_data(mask: set[tuple[int, int]], tolerance: float = 1.15) -> str:
     commands = []
-    for loop in trace_loops(mask):
+    for loop in trace_loops(mask, tolerance):
         commands.append(f"M{loop[0][0]} {loop[0][1]}")
         commands.extend(f"L{x} {y}" for x, y in loop[1:])
         commands.append("Z")
     return "".join(commands)
 
 
-def component_paths(mask: set[tuple[int, int]], prefix: str):
+def component_paths(mask: set[tuple[int, int]], prefix: str,
+                    tolerance: float = 1.15):
     components = sorted(
         connected_components(mask),
         key=lambda component: min((y, x) for x, y in component),
     )
     return [
-        f'<path id="{prefix}-{index + 1}" d="{path_data(component)}" '
+        f'<path id="{prefix}-{index + 1}" '
+        f'd="{path_data(component, tolerance)}" '
         'fill-rule="evenodd"/>'
         for index, component in enumerate(components)
     ]
@@ -280,8 +282,8 @@ def main() -> None:
             r, g, b, a = pixel(rows, x, y)
             if a < 64:
                 continue
-            in_title_band = 55 <= x <= 785 and (
-                55 <= y <= 250 or 335 <= y <= 550
+            in_title_band = 55 <= x <= 825 and (
+                55 <= y <= 250 or 340 <= y <= 530
             )
             if (
                 in_title_band
@@ -291,7 +293,7 @@ def main() -> None:
                 and r + g > b * 3
             ):
                 yellow.add((x, y))
-            if 185 <= x <= 685 and 245 <= y <= 330:
+            if 200 <= x <= 740 and 250 <= y <= 335:
                 if min(r, g, b) > 145 and max(r, g, b) - min(r, g, b) < 50:
                     white_word.add((x, y))
 
@@ -305,7 +307,7 @@ def main() -> None:
         '<?xml version="1.0" encoding="UTF-8"?>',
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
         f'width="{width}" height="{height}">',
-        "  <title>STAR RETRODNA WAR vector trace</title>",
+        "  <title>STAR RETRODNA WARS vector trace</title>",
         '  <rect id="background" width="100%" height="100%" fill="#020307"/>',
         '  <g id="starfield">',
         *(f"    {star}" for star in stars),
