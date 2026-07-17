@@ -25,8 +25,11 @@ PALETTE = (
     (120, 120, 120), (148, 224, 137), (120, 105, 196), (159, 159, 159),
 )
 
-# Match the Death Star converter's restrained set of possible hires inks.
-DEATHSTAR_INKS = (1, 4, 5, 6, 11, 12, 14, 15)
+# Vader is rendered as a black/gray hires portrait. Keeping the ink ramp
+# monochrome avoids C64 8x8 color-cell stair steps showing up as purple/blue
+# right angles across the helmet. Pure white is deliberately excluded: white
+# highlights are carried by dither density instead of 8x8 cell color changes.
+VADER_INKS = (11, 12, 15)
 
 
 def color_error(left, right):
@@ -89,12 +92,16 @@ def main() -> None:
                         ink_samples.append(pixel)
 
             if ink_samples:
-                average = tuple(
-                    sum(pixel[channel] for pixel in ink_samples) // len(ink_samples)
-                    for channel in range(3)
-                )
-                ink = min(DEATHSTAR_INKS,
-                          key=lambda color: color_error(average, PALETTE[color]))
+                tone = sum(display_tone(pixel) for pixel in ink_samples) / len(ink_samples)
+                # Keep bright highlights on light gray. The bitmap density
+                # still carries the highlight, but hard white cell corners do
+                # not appear on the curved helmet.
+                if tone >= 132:
+                    ink = 15
+                elif tone >= 88:
+                    ink = 12
+                else:
+                    ink = 11
             else:
                 ink = 15
             screen[cell_y * 40 + cell_x] = ink << 4

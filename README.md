@@ -1,9 +1,23 @@
 ![StarwarsScrollerDemo running in VICE](docs/StarwarsScrollerDemo.png)
 
-# Starwars Demo
+# StarwarsScrollerDemo
 
 Standalone C64 Starwars Demo scroller intro inspired by Raistlin's write-up and
 the Nobounds / Genesis Project Starwars part.
+
+Current highlights:
+
+- Full native ACME Star Wars-style perspective bitmap scroller.
+- Vector title opening with rotating Imperial emblem highlight.
+- Plasma/Vader intro with SID music, dissolving plasma text, and orbiting TIE sprites.
+- Automatic handoff from `PARALAX` after a five-second hold, with Space as an early skip.
+- Opposing TIE fighter and X-wing transition with Imperial/Rebel bitmap emblems.
+- Death Star / RetroDNA banner cycle above the crawl.
+- Two-font crawl text using build-time `[1]` and `[2]` markers.
+- Exomizer-crunched single-file PRG plus D64 and Sparkle2 packaging paths.
+
+Latest local crunched size after the Vader dithering pass:
+`build/StarwarsScrollerDemo-sfx.prg` is 26,967 bytes.
 
 The primary `build/StarwarsScrollerDemo.prg` target is a native ACME port of the
 technique from the NoBounds Starwars part (`Starwars.cpp` in the public
@@ -45,15 +59,17 @@ perspective-preserving `vader2` portrait over a full-screen field of solid
 circular plasma pixels. The portrait is shifted left by eleven 8x8 cells so the
 helmet meets the border, the pink cape edge is hidden, and the neck remains on
 the bottom border. `scripts/generate_vader2.py` uses the Death Star converter's
-4x4 Bayer threshold and restrained gray/blue/purple inks, with black plus one
-ink color per 8x8 hires cell. `scripts/generate_pilot_hires.py` composites those
-cells over the staggered plasma and phase field. Color RAM, which hires mode
-does not display,
-serves as a temporary packed-distance lookup page. Separate Exomizer memory
-streams keep the 8 KB opening bitmap, 500-byte visibility field, and later
-3,840-byte title inside the existing temporary workspaces; the official
-Exomizer 3 decruncher is vendored in `src/third_party/exomizer` with its original
-license notice.
+4x4 Bayer threshold but restricts Vader to a monochrome C64 ramp: black, dark
+gray, gray, and light gray. Pure white is deliberately excluded so helmet and
+cape highlights are carried by dither density instead of hard 8x8 white color
+cell corners. This removes the colored/right-angle artifacts that appeared when
+individual cells selected purple, blue, or bright white inks. `scripts/generate_pilot_hires.py`
+composites those cells over the staggered plasma and phase field. Color RAM,
+which hires mode does not display, serves as a temporary packed-distance lookup
+page. Separate Exomizer memory streams keep the 8 KB opening bitmap, 500-byte
+visibility field, and later 3,840-byte title inside the existing temporary
+workspaces; the official Exomizer 3 decruncher is vendored in
+`src/third_party/exomizer` with its original license notice.
 The two radial ripples retain additive interference but use separate color
 sequences: the first moves through blue and cyan, while the second moves through
 purple, red, light red, orange, and yellow according to the locally dominant
@@ -75,16 +91,16 @@ black, dark-gray, gray, and light-gray ramp. Vader changes their priority on
 the left side and fully hides the deepest pass. At startup the compressed
 intro-logo stream is shadowed at `$0400`, freeing `$c400-$c4ff` for the four
 temporary sprite frames until Space begins the ship transition.
-After the automatic hold or an early Space press, the opening cuts to source-derived 48x42 TIE
-fighter and X-wing composites crossing
-in opposite directions over transition-only Imperial and Rebel bitmap emblems.
-Each ship uses four
-synchronized sprite bobs with layered hires detail and carved negative space;
-a raster split reuses all eight sprites for the lower X-wing. Both cross the
-same hires starfield used by the main part, with the upper star pattern repeated
-behind the X-wing. The transition emblems are cleared before the main
-Death Star setup resumes. After the flyby, the completed bitmap is revealed from the
-centre out. During that reveal, `scripts/generate_intro_logo.py` displays the
+After the automatic hold or an early Space press, the opening cuts to
+source-derived 48x42 TIE fighter and X-wing composites crossing in opposite
+directions over transition-only Imperial and Rebel bitmap emblems. Each ship
+uses four synchronized sprite bobs with layered hires detail and carved
+negative space; a raster split reuses all eight sprites for the lower X-wing.
+Both cross the same hires starfield used by the main part, with the upper star
+pattern repeated behind the X-wing. The transition emblems are cleared before
+the main Death Star setup resumes. After the flyby, the completed bitmap is
+revealed from the centre out. During that reveal,
+`scripts/generate_intro_logo.py` displays the
 supplied `STAR WARS` artwork as a 320x96 hires image beneath the Death Star. It
 remains fully visible for 150 PAL frames, fades through four cumulative Bayer
 phases, and then releases its temporary `$7800-$86ff` storage to the cyclic
@@ -163,6 +179,7 @@ RUN_D64=1 ./scripts/run.sh
 
 Output:
 
+- `build/StarwarsScrollerDemo-sfx.prg` -- Exomizer-crunched single-file build, current local size 26,967 bytes
 - `build/better-off-alone-markov.sid` -- continuously looping 137 BPM PAL PSID
 - `build/galway-nights.sid` -- original Martin Galway style 107 BPM PAL PSID
 - `build/galway-nights.prg` -- standalone runnable driver for the same tune
@@ -170,8 +187,7 @@ Output:
 - `build/dark-armada.prg` -- standalone runnable driver for the same tune
 - `build/gearshift-markov.sid` -- punchy original 125 BPM motif-Markov PSID
 - `build/gearshift-markov.prg` -- standalone runnable driver for the same tune
-- `build/StarwarsScrollerDemo.prg` -- native bitmap perspective scroller (default run target)
-- `build/StarwarsScrollerDemo-sfx.prg` -- Exomizer-crunched single-file build
+- `build/StarwarsScrollerDemo.prg` -- native bitmap perspective scroller
 - `build/StarwarsScrollerDemo-sparkle-part.prg` -- Sparkle2 payload, assembled at `$080d`
 - `build/StarwarsScrollerDemo-loader.prg` -- D64 loader for the original Nobounds part
 - `build/StarwarsScrollerDemo-direct.prg` -- monitor-preload runner for the original part
