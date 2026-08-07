@@ -992,6 +992,7 @@ AnimateMergeGroup_Mark:
     inx
     cpx groupCount
     bne AnimateMergeGroup_Mark
+    jsr RunMergeGridSweep
     jmp RunDiceFlash
 
 AnimatePlacedPiece:
@@ -2583,6 +2584,7 @@ packedValue:       !byte 0
 !source "src/assets/game_over_prompt.asm"
 !source "src/assets/game_over_screen.asm"
 !source "src/assets/marching_ants.asm"
+!source "src/assets/merge_grid_sweep.asm"
 !source "src/assets/die_one.asm"
 !source "src/assets/die_two.asm"
 !source "src/assets/die_three.asm"
