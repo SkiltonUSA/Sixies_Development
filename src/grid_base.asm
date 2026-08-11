@@ -23,6 +23,14 @@ SPRITE_MULTICOLOR = $d01c
 SPRITE_X_EXPAND = $d01d
 SPRITE0_COLOR   = $d027
 SPRITE0_PTR     = SCREEN + $03f8
+SID_V1_FREQ_LO  = $d400
+SID_V1_FREQ_HI  = $d401
+SID_V1_PW_LO    = $d402
+SID_V1_PW_HI    = $d403
+SID_V1_CONTROL  = $d404
+SID_V1_AD       = $d405
+SID_V1_SR       = $d406
+SID_MODE_VOLUME = $d418
 IRQ_VECTOR      = $0314
 CIA1_IRQ        = $dc0d
 JOYSTICK2       = $dc00
@@ -100,6 +108,8 @@ Start:
 
 MainLoop:
     jsr WaitFrame
+    lda endAttractNewGame
+    bne MainLoop_NewGame
     jsr UpdateHighlightFlash
     jsr ReadAction
     lda action
@@ -128,6 +138,8 @@ MainLoop:
     jmp MainLoop
 
 MainLoop_NewGame:
+    lda #0
+    sta endAttractNewGame
     lda gameOverBlindActive
     beq MainLoop_NewGameReady
     jsr RestoreGameScreen
@@ -144,6 +156,7 @@ MainLoop_Left:
     lda cursorX
     beq MainLoop_Update
     dec cursorX
+    jsr PlayBounce
     jmp MainLoop_Update
 
 MainLoop_Right:
@@ -151,12 +164,14 @@ MainLoop_Right:
     cmp #4
     beq MainLoop_Update
     inc cursorX
+    jsr PlayBounce
     jmp MainLoop_Update
 
 MainLoop_Up:
     lda cursorY
     beq MainLoop_Update
     dec cursorY
+    jsr PlayBounce
     jmp MainLoop_Update
 
 MainLoop_Down:
@@ -164,16 +179,24 @@ MainLoop_Down:
     cmp #4
     beq MainLoop_Update
     inc cursorY
+    jsr PlayBounce
     jmp MainLoop_Update
 
 MainLoop_Rotate:
+    lda pieceCount
+    cmp #2
+    bne MainLoop_Update
     inc orientation
     lda orientation
     and #3
     sta orientation
+    jsr PlayPortalPing
 
 MainLoop_Update:
     jsr UpdatePlacement
+    ; Input runs just after the UI raster phase. Publish the new ghost now so
+    ; the next frame cannot render the cursor's previous row.
+    jsr BuildDisplayBoard
     jsr UpdateCursorHighlight
     jmp MainLoop
 
@@ -182,6 +205,7 @@ MainLoop_Place:
     bne MainLoop_PlaceValid
     jmp MainLoop
 MainLoop_PlaceValid:
+    jsr PlayPortalPing
     jsr PlaceCurrentPiece
     jmp MainLoop
 
@@ -288,29 +312,7 @@ CopyTitleBlock_Done:
     rts
 
 WaitForTitleStart:
-WaitForTitleStart_Drain:
-    jsr SCNKEY
-    jsr GETIN
-    bne WaitForTitleStart_Drain
-WaitForTitleStart_ReleaseFire:
-    lda JOYSTICK2
-    and #$10
-    beq WaitForTitleStart_ReleaseFire
-WaitForTitleStart_Input:
-    jsr SCNKEY
-    jsr GETIN
-    cmp #' '
-    beq WaitForTitleStart_Done
-    cmp #13
-    beq WaitForTitleStart_Done
-    lda JOYSTICK2
-    and #$10
-    bne WaitForTitleStart_Input
-WaitForTitleStart_Done:
-    lda VIC_MODE
-    and #%11101111
-    sta VIC_MODE
-    rts
+    jmp RunTitleAttractMode
 
 InitRasterIRQ:
     lda #<RasterIRQ
@@ -349,6 +351,7 @@ RasterIRQ_Board:
 
 RasterIRQ_UI:
     jsr SetupBottomSprites
+    jsr UpdateSoundEffects
     jsr SyncRenderBoard
     jsr BuildDisplayBoard
     inc frameCounter
@@ -463,6 +466,7 @@ ReadAction_Store:
 ResetGameLocked:
     lda #1
     sta boardUpdateInProgress
+    jsr ResetSoundEffects
     ldx #0
     lda #0
 ResetGame_ClearBoard:
@@ -835,6 +839,10 @@ PlaceCurrentPiece_Finish:
     sta boardUpdateInProgress
     lda #1
     sta boardDirty
+    ; Publish the new piece preview before input can move its bottom-row cell.
+    lda frameCounter
+    sta lastFrame
+    jsr WaitFrame
     rts
 
 SyncRenderBoard:
@@ -993,6 +1001,7 @@ AnimateMergeGroup_Mark:
     cpx groupCount
     bne AnimateMergeGroup_Mark
     jsr RunMergeGridSweep
+    jsr RunMergeFirework
     jmp RunDiceFlash
 
 AnimatePlacedPiece:
@@ -1159,7 +1168,8 @@ AnimateGameOverBlinds_Row:
     lda blindRow
     cmp #5
     bne AnimateGameOverBlinds_Row
-    jmp DrawGameOver
+    jsr DrawGameOver
+    jmp RunHighScorePage
 
 PrepareGameOverKoala:
     lda #1
@@ -1715,9 +1725,9 @@ RenderBoardRow_Column:
     lda renderSpriteY
     sta SPRITE0_Y,y
 
-    lda renderIndex
+    txa
     clc
-    adc renderColumn
+    adc renderIndex
     sta renderCellIndex
     tay
     lda displayValues,y
@@ -1727,7 +1737,6 @@ RenderBoardRow_ShowValue:
     ldy renderCellIndex
     lda displaySpritePointers,y
     sta SPRITE0_PTR,x
-    ldy renderCellIndex
     lda displayColors,y
     sta SPRITE0_COLOR,x
     lda SpriteBitMasks,x
@@ -1735,7 +1744,6 @@ RenderBoardRow_ShowValue:
     sta spriteEnableMask
 
 RenderBoardRow_Next:
-    inc renderColumn
     inx
     cpx #5
     beq RenderBoardRow_Finish
@@ -1744,15 +1752,17 @@ RenderBoardRow_Finish:
     lda spriteEnableMask
     ora uiEnableMask
     sta SPRITE_ENABLE
-    lda #0
-    sta renderColumn
     rts
 RenderBoardRow_Hidden:
-    lda #0
-    sta renderColumn
     rts
 
 SetupPiecePreview:
+    lda fireworkActive
+    beq SetupPiecePreview_CheckScreen
+    lda #%11100000
+    sta uiEnableMask
+    rts
+SetupPiecePreview_CheckScreen:
     lda gameOverBlindActive
     beq SetupPiecePreview_Visible
     lda #0
@@ -1777,7 +1787,7 @@ SetupPiecePreview_Active:
     sta SPRITE0_COLOR + 5
     lda #27
     sta SPRITE0_X + 10
-    lda #180
+    lda #158
     sta SPRITE0_Y + 10
     lda #%11100000
     sta uiEnableMask
@@ -1792,7 +1802,7 @@ SetupPiecePreview_Active:
     sta SPRITE0_COLOR + 6
     lda #51
     sta SPRITE0_X + 12
-    lda #180
+    lda #158
     sta SPRITE0_Y + 12
     lda #%11100000
     sta SPRITE_X_MSB
@@ -1805,27 +1815,7 @@ SetupPiecePreview_Single:
     rts
 
 SetupBottomSprites:
-    lda gameOverBlindActive
-    beq SetupBottomSprites_Visible
-    lda #0
-    sta uiEnableMask
-    sta SPRITE_ENABLE
-    rts
-SetupBottomSprites_Visible:
-    jsr ConfigureNewGameSprite
-    lda #$77
-    sta SPRITE0_PTR + 7
-    lda #COLOR_LTBLUE
-    sta SPRITE0_COLOR + 7
-    lda #12
-    sta SPRITE0_X + 14
-    lda #222
-    sta SPRITE0_Y + 14
-    lda #%10000000
-    sta SPRITE_X_MSB
-    lda #%11000000
-    sta SPRITE_ENABLE
-    rts
+    jmp SetupBottomSpritesImpl
 
 ConfigureNewGameSprite:
     lda #$76
@@ -2169,7 +2159,8 @@ SetGameOverColors_Character:
     sta COLOR_RAM + 40 + GAME_OVER_COL,x
     dex
     bpl SetGameOverColors_Character
-    jmp DrawGameOverPrompt
+    jsr DrawGameOverPrompt
+    rts
 
 DrawGameOver_Half:
     lda #4
@@ -2570,21 +2561,27 @@ rippleStep:        !byte 0
 blindRow:          !byte 0
 gameOverBlindActive: !byte 0
 blindFillColor:    !byte 0
-blindEdgeColor:    !byte 0
+fireworkActive:    !byte 0
 blindCharacterRow: !byte 0
-blindCharacterEnd: !byte 0
-revealRowsRemaining: !byte 0
+fireworkBaseX:     !byte 0
+fireworkBaseY:     !byte 0
 shadowSourceByte:  !byte 0
 titleCopyRemainder: !byte 0
 packedCount:       !byte 0
 packedValue:       !byte 0
 
 !source "src/assets/title_screen.asm"
+!source "src/assets/merge_firework_code.asm"
+!source "src/assets/high_scores.asm"
+!source "src/assets/sound_effects.asm"
 !source "src/assets/main_mascot.asm"
 !source "src/assets/game_over_prompt.asm"
+!source "src/assets/merge_firework_helpers.asm"
 !source "src/assets/game_over_screen.asm"
+!source "src/assets/merge_firework_paths.asm"
 !source "src/assets/marching_ants.asm"
 !source "src/assets/merge_grid_sweep.asm"
+!source "src/assets/merge_firework_sprite.asm"
 !source "src/assets/die_one.asm"
 !source "src/assets/die_two.asm"
 !source "src/assets/die_three.asm"

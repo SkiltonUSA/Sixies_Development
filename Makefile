@@ -2,6 +2,8 @@ ROOT := $(CURDIR)
 LOCAL_ACME := $(ROOT)/.tools/acme/bin/acme
 SYSTEM_ACME := $(shell command -v acme 2>/dev/null)
 ACME := $(if $(wildcard $(LOCAL_ACME)),$(LOCAL_ACME),$(SYSTEM_ACME))
+SIDKIT_DIR := $(ROOT)/.tools/c64SIDkit
+SIDKIT_PYTHON := $(SIDKIT_DIR)/.venv/bin/python
 TARGET := build/dice_merge.prg
 SOURCE := src/grid_base.asm
 ASSETS := $(wildcard src/assets/*.asm)
@@ -28,12 +30,18 @@ FONT_GAME_OVER := src/assets/game_over.asm
 FONT_GAME_OVER_PROMPT := src/assets/game_over_prompt.asm
 FONT_DIGITS := src/assets/large_digits.asm
 
-.PHONY: all setup-acme run clean
+.PHONY: all setup-acme setup-sidkit sidkit run clean
 
 all: $(TARGET)
 
 setup-acme:
 	./scripts/setup-acme.sh
+
+setup-sidkit:
+	./scripts/setup-c64sidkit.sh
+
+sidkit: setup-sidkit
+	cd "$(SIDKIT_DIR)" && "$(SIDKIT_PYTHON)" tools/sfx_tweaker.py
 
 build:
 	mkdir -p build
