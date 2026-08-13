@@ -1,5 +1,6 @@
 !cpu 6510
 
+CPU_PORT        = $01
 SCREEN          = $4400
 SHADOW_SPRITES  = $4c00
 BITMAP          = $6000
@@ -31,9 +32,12 @@ SID_V1_CONTROL  = $d404
 SID_V1_AD       = $d405
 SID_V1_SR       = $d406
 SID_MODE_VOLUME = $d418
+TITLE_MUSIC_INIT = $a000
+TITLE_MUSIC_PLAY = $a003
 IRQ_VECTOR      = $0314
 CIA1_IRQ        = $dc0d
 JOYSTICK2       = $dc00
+KEY_CURRENT     = $cb
 CURSOR_FLAG     = $cc
 TV_STANDARD     = $02a6
 SCNKEY          = $ff9f
@@ -62,6 +66,7 @@ GRID_SPAN       = 20
 GRID_LINES      = 6
 BOARD_CELLS     = 25
 SCORE_ROW       = 1
+SCORE_COL_FOUR  = 0
 SCORE_COL_THREE = 2
 SCORE_COL_TWO   = 3
 SCORE_COL_ONE   = 4
@@ -78,6 +83,7 @@ ACTION_ROTATE   = 5
 ACTION_PLACE    = 6
 ACTION_NEW      = 7
 ACTION_DEBUG_FILL = 8
+ACTION_SETTINGS = 9
 
 * = $0801
 !word BasicEnd
@@ -93,8 +99,16 @@ BasicEnd:
 Start:
     sei
     jsr InitVideo
+    jsr ShowPresentsScreen
+    cli
+    lda #5
+    jsr WaitStartupAttractSeconds
+    sei
     jsr ShowTitleScreen
+    jsr InitTitleRasterIRQ
+    cli
     jsr WaitForTitleStart
+    jsr StopTitleRasterIRQ
     jsr ClearBitmap
     jsr InitScreenColors
     jsr DrawGrid
@@ -118,10 +132,22 @@ MainLoop:
     beq MainLoop_NewGame
     cmp #ACTION_DEBUG_FILL
     beq MainLoop_DebugFill
+    cmp #ACTION_SETTINGS
+    beq MainLoop_Settings
 
     lda gameOver
     bne MainLoop
 
+    lda settingsFocused
+    beq MainLoop_GridAction
+    lda action
+    cmp #ACTION_PLACE
+    beq MainLoop_Settings
+    cmp #ACTION_UP
+    beq MainLoop_SettingsBack
+    jmp MainLoop
+
+MainLoop_GridAction:
     lda action
     cmp #ACTION_LEFT
     beq MainLoop_Left
@@ -134,10 +160,13 @@ MainLoop:
     cmp #ACTION_ROTATE
     beq MainLoop_Rotate
     cmp #ACTION_PLACE
-    beq MainLoop_Place
+    bne MainLoop_NoGridAction
+    jmp MainLoop_Place
+MainLoop_NoGridAction:
     jmp MainLoop
 
 MainLoop_NewGame:
+    jsr StopTitleMusic
     lda #0
     sta endAttractNewGame
     lda gameOverBlindActive
@@ -150,6 +179,14 @@ MainLoop_NewGameReady:
 
 MainLoop_DebugFill:
     jsr DebugFillBoard
+    jmp MainLoop
+
+MainLoop_Settings:
+    jsr ShowSettingsScreen
+    jmp MainLoop
+
+MainLoop_SettingsBack:
+    jsr UnfocusSettingsIcon
     jmp MainLoop
 
 MainLoop_Left:
@@ -177,10 +214,14 @@ MainLoop_Up:
 MainLoop_Down:
     lda cursorY
     cmp #4
-    beq MainLoop_Update
+    beq MainLoop_FocusSettings
     inc cursorY
     jsr PlayBounce
     jmp MainLoop_Update
+
+MainLoop_FocusSettings:
+    jsr FocusSettingsIcon
+    jmp MainLoop
 
 MainLoop_Rotate:
     lda pieceCount
@@ -203,6 +244,7 @@ MainLoop_Update:
 MainLoop_Place:
     lda placementValid
     bne MainLoop_PlaceValid
+    jsr PlayInvalidPlacement
     jmp MainLoop
 MainLoop_PlaceValid:
     jsr PlayPortalPing
@@ -210,6 +252,10 @@ MainLoop_PlaceValid:
     jmp MainLoop
 
 InitVideo:
+    ; Expose RAM under BASIC ROM for the relocated title tune while retaining
+    ; KERNAL and I/O access used by input, IRQ exit, VIC-II, and SID routines.
+    lda #$36
+    sta CPU_PORT
     lda #1
     sta CURSOR_FLAG
 
@@ -238,51 +284,105 @@ InitVideo:
     rts
 
 ShowTitleScreen:
+    lda #1
+    sta titleScreenActive
     lda #0
     sta SPRITE_ENABLE
     sta BORDER
     sta BACKGROUND
 
-    lda #<TitleBitmapData
+    ; The title is stored packed; expand it band by band into the bitmap,
+    ; screen and color planes through the shared Koala stream decoder.
+    lda #0
+    sta titleBand
+ShowTitleScreen_Band:
+    ldx titleBand
+    lda TitleKoalaBitmapLo,x
     sta SOURCE_LO
-    lda #>TitleBitmapData
+    lda TitleKoalaBitmapHi,x
     sta SOURCE_HI
-    lda #<BITMAP
+    lda KoalaBitmapBandLo,x
     sta PTR_LO
-    lda #>BITMAP
+    lda KoalaBitmapBandHi,x
     sta PTR_HI
-    ldx #31
-    lda #64
-    jsr CopyTitleBlock
+    jsr UnpackKoalaStream
 
-    lda #<TitleScreenData
+    ldx titleBand
+    lda TitleKoalaScreenLo,x
     sta SOURCE_LO
-    lda #>TitleScreenData
+    lda TitleKoalaScreenHi,x
     sta SOURCE_HI
-    lda #<SCREEN
+    lda KoalaScreenBandLo,x
     sta PTR_LO
-    lda #>SCREEN
+    lda KoalaScreenBandHi,x
     sta PTR_HI
-    ldx #3
-    lda #232
-    jsr CopyTitleBlock
+    jsr UnpackKoalaStream
 
-    lda #<TitleColorData
+    ldx titleBand
+    lda TitleKoalaColorLo,x
     sta SOURCE_LO
-    lda #>TitleColorData
+    lda TitleKoalaColorHi,x
     sta SOURCE_HI
-    lda #<COLOR_RAM
+    lda KoalaColorBandLo,x
     sta PTR_LO
-    lda #>COLOR_RAM
+    lda KoalaColorBandHi,x
     sta PTR_HI
-    ldx #3
-    lda #232
+    jsr UnpackKoalaStream
+
+    inc titleBand
+    lda titleBand
+    cmp #5
+    bne ShowTitleScreen_Band
+
+    lda #<TitlePromptSpriteData
+    sta SOURCE_LO
+    lda #>TitlePromptSpriteData
+    sta SOURCE_HI
+    lda #<SHADOW_SPRITES
+    sta PTR_LO
+    lda #>SHADOW_SPRITES
+    sta PTR_HI
+    ldx #1
+    lda #128
     jsr CopyTitleBlock
+    jsr SetupTitlePromptSprites
 
     lda VIC_MODE
     ora #%00010000
     sta VIC_MODE
     rts
+
+SetupTitlePromptSprites:
+    lda #0
+    sta SPRITE_X_MSB
+    sta SPRITE_MULTICOLOR
+    sta SPRITE_X_EXPAND
+    sta SPRITE_Y_EXPAND
+    sta SPRITE_PRIORITY
+    ldx #0
+SetupTitlePromptSprites_Sprite:
+    txa
+    clc
+    adc #$30
+    sta SPRITE0_PTR,x
+    lda #COLOR_WHITE
+    sta SPRITE0_COLOR,x
+    txa
+    asl
+    tay
+    lda TitlePromptSpriteX,x
+    sta SPRITE0_X,y
+    lda #234
+    sta SPRITE0_Y,y
+    inx
+    cpx #6
+    bne SetupTitlePromptSprites_Sprite
+    lda #%00111111
+    sta SPRITE_ENABLE
+    rts
+
+TitlePromptSpriteX:
+!byte 112,136,160,184,208,232
 
 CopyTitleBlock:
     sta titleCopyRemainder
@@ -350,8 +450,14 @@ RasterIRQ_Board:
     jmp RasterIRQ_Schedule
 
 RasterIRQ_UI:
-    jsr SetupBottomSprites
+    lda titleMusicActive
+    beq RasterIRQ_UI_SoundEffects
+    jsr UpdateTitleMusic
+    jmp RasterIRQ_UI_AudioDone
+RasterIRQ_UI_SoundEffects:
     jsr UpdateSoundEffects
+RasterIRQ_UI_AudioDone:
+    jsr SetupBottomSprites
     jsr SyncRenderBoard
     jsr BuildDisplayBoard
     inc frameCounter
@@ -374,93 +480,7 @@ WaitFrame:
     cmp lastFrame
     beq WaitFrame
     sta lastFrame
-    rts
-
-ReadAction:
-    lda #ACTION_NONE
-    sta action
-
-    jsr SCNKEY
-    jsr GETIN
-    beq ReadAction_Joystick
-    cmp #'A'
-    beq ReadAction_Left
-    cmp #'D'
-    beq ReadAction_Right
-    cmp #'W'
-    beq ReadAction_Up
-    cmp #'S'
-    beq ReadAction_Down
-    cmp #'R'
-    beq ReadAction_Rotate
-    cmp #'Q'
-    beq ReadAction_Rotate
-    cmp #' '
-    beq ReadAction_Place
-    cmp #13
-    beq ReadAction_Place
-    cmp #'N'
-    beq ReadAction_New
-    cmp #'.'
-    beq ReadAction_DebugFill
-    rts
-
-ReadAction_Joystick:
-    lda JOYSTICK2
-    and #$1f
-    cmp #$1f
-    bne ReadAction_JoyPressed
-    lda #0
-    sta joystickLatch
-    rts
-ReadAction_JoyPressed:
-    lda joystickLatch
-    bne ReadAction_Done
-    lda #1
-    sta joystickLatch
-    lda JOYSTICK2
-    and #$04
-    beq ReadAction_Left
-    lda JOYSTICK2
-    and #$08
-    beq ReadAction_Right
-    lda JOYSTICK2
-    and #$01
-    beq ReadAction_Up
-    lda JOYSTICK2
-    and #$02
-    beq ReadAction_Down
-    lda JOYSTICK2
-    and #$10
-    beq ReadAction_Place
-ReadAction_Done:
-    rts
-
-ReadAction_Left:
-    lda #ACTION_LEFT
-    bne ReadAction_Store
-ReadAction_Right:
-    lda #ACTION_RIGHT
-    bne ReadAction_Store
-ReadAction_Up:
-    lda #ACTION_UP
-    bne ReadAction_Store
-ReadAction_Down:
-    lda #ACTION_DOWN
-    bne ReadAction_Store
-ReadAction_Rotate:
-    lda #ACTION_ROTATE
-    bne ReadAction_Store
-ReadAction_Place:
-    lda #ACTION_PLACE
-    bne ReadAction_Store
-ReadAction_New:
-    lda #ACTION_NEW
-    bne ReadAction_Store
-ReadAction_DebugFill:
-    lda #ACTION_DEBUG_FILL
-ReadAction_Store:
-    sta action
+    jsr UpdateCreditsFade
     rts
 
 ResetGameLocked:
@@ -476,12 +496,15 @@ ResetGame_ClearBoard:
     bne ResetGame_ClearBoard
 
     lda #0
+    sta scoreThousands
     sta scoreHundreds
     sta scoreTens
     sta scoreOnes
     sta gameOver
     sta singlesOnlyMode
     sta joystickLatch
+    sta settingsFocused
+    sta ghostSuppressed
     sta BORDER
     lda RASTER_LINE
     eor $dc04
@@ -824,8 +847,6 @@ PlaceCurrentPiece_Merge:
     ldx secondIndex
     lda board,x
     beq PlaceCurrentPiece_Finish
-    lda #0
-    sta mergeChainDepth
     lda secondIndex
     sta activeIndex
     jsr ResolveAtActiveIndex
@@ -949,7 +970,7 @@ ResolveAtActiveIndex:
 ResolveAtActiveIndex_GroupReady:
     inc mergeChainDepth
     jsr AnimateMergeGroup
-    jsr AddGroupScore
+    jsr AddAnimatedGroupScore
 
     ldx #0
 ResolveAtActiveIndex_Clear:
@@ -982,6 +1003,8 @@ PauseBetweenChainMerges:
     jmp WaitAnimationFrames
 
 AnimateMergeGroup:
+    jsr RunMergeLevelEffects
+AnimateMergeGroup_Color:
     lda mergeChainDepth
     cmp #2
     bcc AnimateMergeGroup_FirstColor
@@ -1002,7 +1025,8 @@ AnimateMergeGroup_Mark:
     bne AnimateMergeGroup_Mark
     jsr RunMergeGridSweep
     jsr RunMergeFirework
-    jmp RunDiceFlash
+    jsr RunDiceFlash
+    rts
 
 AnimatePlacedPiece:
     lda #COLOR_WHITE
@@ -1085,6 +1109,7 @@ AnimateNewGame_TargetCleared:
     jsr ClearGameOverBlinds
     ; Let the lower-border phase publish the empty board without a ghost.
     jsr WaitFrame
+    jsr PlayGridSetup
 
     lda #20
     sta highlightCellIndex
@@ -1122,11 +1147,13 @@ AnimateNewGame_Wait:
 
     lda #0
     sta ghostSuppressed
+    jsr StopGridSetup
     jsr UpdatePlacement
     jsr UpdateCursorHighlight
     rts
 
 AnimateGameOver:
+    jsr InitTitleMusic
     lda #1
     sta ghostSuppressed
     lda #(BOARD_CELLS - 1)
@@ -1482,65 +1509,10 @@ AddGroupScore_Value:
     rts
 
 IncrementScore:
-    lda scoreHundreds
-    cmp #9
-    bne IncrementScore_Ones
-    lda scoreTens
-    cmp #9
-    bne IncrementScore_Ones
-    lda scoreOnes
-    cmp #9
-    beq IncrementScore_Done
-IncrementScore_Ones:
-    inc scoreOnes
-    lda scoreOnes
-    cmp #10
-    bcc IncrementScore_Done
-    lda #0
-    sta scoreOnes
-    inc scoreTens
-    lda scoreTens
-    cmp #10
-    bcc IncrementScore_Done
-    lda #0
-    sta scoreTens
-    inc scoreHundreds
-IncrementScore_Done:
-    rts
+    jmp IncrementScore4
 
 UpdateScoreDisplay:
-    lda scoreHundreds
-    beq UpdateScoreDisplay_NoHundreds
-    sta ScoreDigits
-    lda scoreTens
-    sta ScoreDigits + 1
-    lda scoreOnes
-    sta ScoreDigits + 2
-    lda #3
-    sta scoreDigitCount
-    lda #SCORE_COL_THREE
-    sta scoreStartCol
-    jmp DrawScore
-
-UpdateScoreDisplay_NoHundreds:
-    lda scoreTens
-    beq UpdateScoreDisplay_OneDigit
-    sta ScoreDigits
-    lda scoreOnes
-    sta ScoreDigits + 1
-    lda #2
-    sta scoreDigitCount
-    lda #SCORE_COL_TWO
-    sta scoreStartCol
-    jmp DrawScore
-
-UpdateScoreDisplay_OneDigit:
-    lda scoreOnes
-    sta ScoreDigits
-    lda #1
-    sta scoreDigitCount
-    lda #SCORE_COL_ONE
-    sta scoreStartCol
+    jmp UpdateScoreDisplay4
 
 DrawScore:
     jsr ClearScore
@@ -1606,35 +1578,35 @@ DrawScore_NextHalf:
     lda #(COLOR_LTBLUE << 4) | COLOR_BLACK
     ldx #0
 DrawScore_Color:
-    sta SCREEN + (SCORE_ROW * 40) + SCORE_COL_THREE,x
-    sta SCREEN + ((SCORE_ROW + 1) * 40) + SCORE_COL_THREE,x
+    sta SCREEN + (SCORE_ROW * 40) + SCORE_COL_FOUR,x
+    sta SCREEN + ((SCORE_ROW + 1) * 40) + SCORE_COL_FOUR,x
     inx
-    cpx #6
+    cpx #8
     bne DrawScore_Color
     rts
 
 ClearScore:
     lda #SCORE_ROW
     jsr SetBitmapRowPointer
-    lda #SCORE_COL_THREE
+    lda #SCORE_COL_FOUR
     jsr AddColumnOffset
     ldy #0
     lda #0
 ClearScore_Top:
     sta (PTR_LO),y
     iny
-    cpy #48
+    cpy #64
     bne ClearScore_Top
     lda #(SCORE_ROW + 1)
     jsr SetBitmapRowPointer
-    lda #SCORE_COL_THREE
+    lda #SCORE_COL_FOUR
     jsr AddColumnOffset
     ldy #0
     lda #0
 ClearScore_Bottom:
     sta (PTR_LO),y
     iny
-    cpy #48
+    cpy #64
     bne ClearScore_Bottom
     rts
 
@@ -1698,6 +1670,10 @@ BuildShadowDiceSprites_TargetReady:
     rts
 
 RenderBoardRow:
+    lda titleScreenActive
+    beq RenderBoardRow_GameScreen
+    rts
+RenderBoardRow_GameScreen:
     ; Previous-row sprites have finished; disable them before assigning new Y values.
     lda uiEnableMask
     sta SPRITE_ENABLE
@@ -1757,6 +1733,10 @@ RenderBoardRow_Hidden:
     rts
 
 SetupPiecePreview:
+    lda titleScreenActive
+    beq SetupPiecePreview_GameScreen
+    rts
+SetupPiecePreview_GameScreen:
     lda fireworkActive
     beq SetupPiecePreview_CheckScreen
     lda #%11100000
@@ -2258,19 +2238,29 @@ DrawHorizontalLine_Column:
 
 DrawBottomLabels:
     lda #<NewGameLabel
-    sta SOURCE_LO
-    lda #>NewGameLabel
-    sta SOURCE_HI
+    ldx #>NewGameLabel
+    jsr SetHighScoreTextSource
+    lda #8
+    sta highTextLength
+    lda #24
+    sta highTextRow
     lda #6
-    sta labelColumn
-    jsr DrawLabel32
+    sta highTextColumn
+    lda #COLOR_LTBLUE
+    sta highTextColor
+    jsr DrawSixiesHiresText
     lda #<SettingsLabel
-    sta SOURCE_LO
-    lda #>SettingsLabel
-    sta SOURCE_HI
+    ldx #>SettingsLabel
+    jsr SetHighScoreTextSource
+    lda #8
+    sta highTextLength
+    lda #24
+    sta highTextRow
     lda #30
-    sta labelColumn
-    jsr DrawLabel32
+    sta highTextColumn
+    lda #COLOR_LTBLUE
+    sta highTextColor
+    jsr DrawSixiesHiresText
     rts
 
 DrawMainMascot:
@@ -2335,32 +2325,6 @@ DrawMainMascot_ScreenSourceReady:
     lda workRow
     cmp #14
     bne DrawMainMascot_ScreenRow
-    rts
-
-DrawLabel32:
-    lda #24
-    jsr SetBitmapRowPointer
-    lda labelColumn
-    jsr AddColumnOffset
-    ldy #0
-DrawLabel32_Copy:
-    lda (SOURCE_LO),y
-    sta (PTR_LO),y
-    iny
-    cpy #32
-    bne DrawLabel32_Copy
-    lda #<(SCREEN + (24 * 40))
-    sta PTR_LO
-    lda #>(SCREEN + (24 * 40))
-    sta PTR_HI
-    ldy labelColumn
-    lda #(COLOR_LTBLUE << 4) | COLOR_BLACK
-    ldx #4
-DrawLabel32_Color:
-    sta (PTR_LO),y
-    iny
-    dex
-    bne DrawLabel32_Color
     rts
 
 SetBitmapRowPointer:
@@ -2501,10 +2465,11 @@ boardDirty:        !byte 0
 boardUpdateInProgress: !byte 0
 rngSeed:           !byte 1
 boardFiveCount:    !byte 0
+scoreThousands:    !byte 0
 scoreHundreds:     !byte 0
 scoreTens:         !byte 0
 scoreOnes:         !byte 0
-ScoreDigits:       !byte 0,0,0
+ScoreDigits:       !byte 0,0,0,0
 scoreDigitCount:   !byte 1
 scoreStartCol:     !byte SCORE_COL_ONE
 scoreIndex:        !byte 0
@@ -2567,6 +2532,8 @@ fireworkBaseX:     !byte 0
 fireworkBaseY:     !byte 0
 shadowSourceByte:  !byte 0
 titleCopyRemainder: !byte 0
+titleBand:          !byte 0
+titleScreenActive: !byte 0
 packedCount:       !byte 0
 packedValue:       !byte 0
 
@@ -2574,8 +2541,18 @@ packedValue:       !byte 0
 !source "src/assets/merge_firework_code.asm"
 !source "src/assets/high_scores.asm"
 !source "src/assets/sound_effects.asm"
+!source "src/assets/title_prompt.asm"
+!source "src/assets/score_four_digits.asm"
+!source "src/assets/merge_chain_sounds.asm"
+!source "src/assets/credits_mascot.asm"
+!source "src/assets/credits_font.asm"
+!source "src/assets/presents_screen.asm"
+!source "src/assets/title_music.asm"
+!source "src/assets/merge_diagonal_sweep.asm"
+!source "src/assets/settings_screen.asm"
 !source "src/assets/main_mascot.asm"
 !source "src/assets/game_over_prompt.asm"
+!source "src/assets/merge_shake.asm"
 !source "src/assets/merge_firework_helpers.asm"
 !source "src/assets/game_over_screen.asm"
 !source "src/assets/merge_firework_paths.asm"

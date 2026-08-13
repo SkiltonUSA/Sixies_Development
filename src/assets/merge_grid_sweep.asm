@@ -32,6 +32,7 @@ RunMergeGridSweep_PositionReady:
     sta rippleStep
 RunMergeGridSweep_Step:
     jsr RestoreMergeGridCross
+    jsr UpdateSixDiagonalSweep
 
     lda rippleStep
     cmp searchX
@@ -72,6 +73,7 @@ RunMergeGridSweep_BottomReady:
     cmp #5
     bne RunMergeGridSweep_Step
     jsr RestoreMergeGridCross
+    jsr UpdateSixDiagonalSweep
     lda #0
     sta mergeFlashPhase
     rts

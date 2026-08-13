@@ -2,99 +2,26 @@
 ; This region is ordinary CPU RAM outside VIC-II display memory.
 * = $8200
 
-RunTitleAttractMode:
-RunTitleAttractMode_DrainKeyboard:
-    jsr SCNKEY
-    jsr GETIN
-    bne RunTitleAttractMode_DrainKeyboard
-RunTitleAttractMode_ReleaseFire:
-    lda JOYSTICK2
-    and #$10
-    beq RunTitleAttractMode_ReleaseFire
-RunTitleAttractMode_Title:
-    lda #5
-    jsr WaitStartupAttractSeconds
-    bcs RunTitleAttractMode_Start
-    jsr DrawAttractHighScorePage
-    lda #5
-    jsr WaitStartupAttractSeconds
-    bcs RunTitleAttractMode_Start
-    jsr ShowTitleScreen
-    jmp RunTitleAttractMode_Title
-RunTitleAttractMode_Start:
+DrawAttractHighScorePage:
+    jsr PrepareHighScoreHiresPage
+    jmp DrawAttractHighScorePage_Content
+
+PrepareHighScoreHiresPage:
+    lda #0
+    sta titleScreenActive
+    sta SPRITE_ENABLE
+    sta BORDER
+    sta BACKGROUND
+    lda #1
+    sta gameOverBlindActive
+    jsr ClearBitmap
+    jsr InitScreenColors
     lda VIC_MODE
     and #%11101111
     sta VIC_MODE
     rts
 
-WaitStartupAttractSeconds:
-    sta attractSeconds
-WaitStartupAttractSeconds_Second:
-    lda TV_STANDARD
-    beq WaitStartupAttractSeconds_NTSC
-    lda #50
-    bne WaitStartupAttractSeconds_SetFrames
-WaitStartupAttractSeconds_NTSC:
-    lda #60
-WaitStartupAttractSeconds_SetFrames:
-    sta attractFrames
-WaitStartupAttractSeconds_Frame:
-    jsr PollTitleStartInput
-    bcs WaitStartupAttractSeconds_Pressed
-    jsr WaitStartupRasterFrame
-    dec attractFrames
-    bne WaitStartupAttractSeconds_Frame
-    dec attractSeconds
-    bne WaitStartupAttractSeconds_Second
-    clc
-    rts
-WaitStartupAttractSeconds_Pressed:
-    sec
-    rts
-
-PollTitleStartInput:
-    jsr SCNKEY
-    jsr GETIN
-    cmp #' '
-    beq PollTitleStartInput_Pressed
-    cmp #13
-    beq PollTitleStartInput_Pressed
-    lda JOYSTICK2
-    and #$10
-    beq PollTitleStartInput_Pressed
-    clc
-    rts
-PollTitleStartInput_Pressed:
-    sec
-    rts
-
-; Raster IRQs are not active on the startup screens, so count display frames
-; by waiting for raster line 250 to leave and return.
-WaitStartupRasterFrame:
-    lda RASTER_LINE
-    cmp #250
-    bne WaitStartupRasterFrame_Arrive
-WaitStartupRasterFrame_Leave:
-    lda RASTER_LINE
-    cmp #250
-    beq WaitStartupRasterFrame_Leave
-WaitStartupRasterFrame_Arrive:
-    lda RASTER_LINE
-    cmp #250
-    bne WaitStartupRasterFrame_Arrive
-    rts
-
-DrawAttractHighScorePage:
-    lda #0
-    sta SPRITE_ENABLE
-    sta BORDER
-    sta BACKGROUND
-    jsr ClearBitmap
-    jsr InitScreenColors
-    lda VIC_MODE
-    ora #%00010000
-    sta VIC_MODE
-
+DrawAttractHighScorePage_Content:
     lda #<HighScoreHeading
     ldx #>HighScoreHeading
     jsr SetHighScoreTextSource
@@ -106,7 +33,7 @@ DrawAttractHighScorePage:
     sta highTextColumn
     lda #COLOR_CYAN
     sta highTextColor
-    jsr DrawHighScoreText
+    jsr DrawSixiesFont16Text
 
     lda #0
     sta highEntryIndex
@@ -115,16 +42,16 @@ DrawAttractHighScorePage_Entry:
     lda #<HighScoreEntryLine
     ldx #>HighScoreEntryLine
     jsr SetHighScoreTextSource
-    lda #14
+    lda #15
     sta highTextLength
     ldx highEntryIndex
     lda AttractHighScoreRows,x
     sta highTextRow
-    lda #6
+    lda #5
     sta highTextColumn
     lda HighScoreColors,x
     sta highTextColor
-    jsr DrawHighScoreText
+    jsr DrawSixiesFont16Text
     inc highEntryIndex
     lda highEntryIndex
     cmp #5
@@ -141,10 +68,11 @@ DrawAttractHighScorePage_Entry:
     sta highTextColumn
     lda #COLOR_WHITE
     sta highTextColor
-    jmp DrawHighScoreText
+    jmp DrawSixiesFont16Text
 
 RunHighScorePage:
     jsr WaitHighScoreRevealDelay
+    jsr PrepareHighScoreHiresPage
     jsr ClearHighScorePanel
     jsr InstallNewTopScore
     jsr DrawHighScorePage
@@ -156,6 +84,12 @@ RunEndAttractMode_HighScores:
     lda #10
     jsr WaitEndAttractSeconds
     bcs RunEndAttractMode_NewGame
+    jsr DrawEndCreditsPage
+    lda #11
+    jsr WaitEndAttractSeconds
+    bcs RunEndAttractMode_NewGame
+    lda #0
+    sta creditsScreenActive
     jsr ShowTitleScreen
     lda #10
     jsr WaitEndAttractSeconds
@@ -163,6 +97,8 @@ RunEndAttractMode_HighScores:
     jsr ShowEndHighScorePage
     jmp RunEndAttractMode_HighScores
 RunEndAttractMode_NewGame:
+    lda #0
+    sta creditsScreenActive
     lda #1
     sta endAttractNewGame
     rts
@@ -195,9 +131,7 @@ WaitEndAttractSeconds_NewGame:
     rts
 
 ShowEndHighScorePage:
-    jsr PrepareGameOverKoala
-    jsr DrawGameOver
-    jsr ClearHighScorePanel
+    jsr PrepareHighScoreHiresPage
     jmp DrawHighScorePage
 
 WaitHighScoreRevealDelay:
@@ -238,41 +172,53 @@ ClearHighScorePanel_Tail:
 InstallNewTopScore:
     lda #0
     sta highScoreEntering
-    lda scoreHundreds
+    lda scoreThousands
     cmp HighScoreScores
     bcc InstallNewTopScore_Done
     bne InstallNewTopScore_Qualified
-    lda scoreTens
+    lda scoreHundreds
     cmp HighScoreScores + 1
     bcc InstallNewTopScore_Done
     bne InstallNewTopScore_Qualified
-    lda scoreOnes
+    lda scoreTens
     cmp HighScoreScores + 2
+    bcc InstallNewTopScore_Done
+    bne InstallNewTopScore_Qualified
+    lda scoreOnes
+    cmp HighScoreScores + 3
     bcc InstallNewTopScore_Done
     beq InstallNewTopScore_Done
 InstallNewTopScore_Qualified:
     ldx #11
-InstallNewTopScore_Shift:
+InstallNewTopScore_ShiftNames:
     lda HighScoreNames,x
     sta HighScoreNames + 3,x
-    lda HighScoreScores,x
-    sta HighScoreScores + 3,x
     dex
-    bpl InstallNewTopScore_Shift
+    bpl InstallNewTopScore_ShiftNames
+    ldx #15
+InstallNewTopScore_ShiftScores:
+    lda HighScoreScores,x
+    sta HighScoreScores + 4,x
+    dex
+    bpl InstallNewTopScore_ShiftScores
     lda #'A'
     sta HighScoreNames
     sta HighScoreNames + 1
     sta HighScoreNames + 2
-    lda scoreHundreds
+    lda scoreThousands
     sta HighScoreScores
-    lda scoreTens
+    lda scoreHundreds
     sta HighScoreScores + 1
-    lda scoreOnes
+    lda scoreTens
     sta HighScoreScores + 2
+    lda scoreOnes
+    sta HighScoreScores + 3
     lda #1
     sta highScoreEntering
     lda #0
     sta highInitialPosition
+    lda #$ff
+    sta highScoreFlashColor
 InstallNewTopScore_Done:
     rts
 
@@ -281,15 +227,15 @@ DrawHighScorePage:
     lda #<FinalScoreLine
     ldx #>FinalScoreLine
     jsr SetHighScoreTextSource
-    lda #9
+    lda #10
     sta highTextLength
     lda #3
     sta highTextRow
-    lda #11
+    lda #10
     sta highTextColumn
     lda #COLOR_YELLOW
     sta highTextColor
-    jsr DrawHighScoreText
+    jsr DrawSixiesFont16Text
 
     lda #<HighScoreHeading
     ldx #>HighScoreHeading
@@ -302,7 +248,7 @@ DrawHighScorePage:
     sta highTextColumn
     lda #COLOR_CYAN
     sta highTextColor
-    jsr DrawHighScoreText
+    jsr DrawSixiesFont16Text
 
     lda #0
     sta highEntryIndex
@@ -311,16 +257,16 @@ DrawHighScorePage_Entry:
     lda #<HighScoreEntryLine
     ldx #>HighScoreEntryLine
     jsr SetHighScoreTextSource
-    lda #14
+    lda #15
     sta highTextLength
     ldx highEntryIndex
     lda HighScoreRows,x
     sta highTextRow
-    lda #6
+    lda #5
     sta highTextColumn
     lda HighScoreColors,x
     sta highTextColor
-    jsr DrawHighScoreText
+    jsr DrawSixiesFont16Text
     inc highEntryIndex
     lda highEntryIndex
     cmp #5
@@ -339,24 +285,34 @@ DrawHighScorePage_Entry:
     sta highTextColumn
     lda #COLOR_WHITE
     sta highTextColor
-    jsr DrawHighScoreText
+    jsr DrawSixiesFont16Text
     jsr DrawEnteredInitials
 DrawHighScorePage_Done:
     rts
 
 BuildFinalScoreLine:
-    lda scoreHundreds
+    lda scoreThousands
+    beq BuildFinalScoreLine_NoThousands
     clc
     adc #$30
     sta FinalScoreLine + 6
-    lda scoreTens
+    bne BuildFinalScoreLine_Hundreds
+BuildFinalScoreLine_NoThousands:
+    lda #' '
+    sta FinalScoreLine + 6
+BuildFinalScoreLine_Hundreds:
+    lda scoreHundreds
     clc
     adc #$30
     sta FinalScoreLine + 7
-    lda scoreOnes
+    lda scoreTens
     clc
     adc #$30
     sta FinalScoreLine + 8
+    lda scoreOnes
+    clc
+    adc #$30
+    sta FinalScoreLine + 9
     rts
 
 BuildHighScoreEntryLine:
@@ -365,8 +321,7 @@ BuildHighScoreEntryLine:
     adc #$31
     sta HighScoreEntryLine
     ldx highEntryIndex
-    lda HighScoreOffsets,x
-    sta highScoreOffset
+    lda HighScoreNameOffsets,x
     tax
     ldy #0
 BuildHighScoreEntryLine_Name:
@@ -376,16 +331,25 @@ BuildHighScoreEntryLine_Name:
     iny
     cpy #3
     bne BuildHighScoreEntryLine_Name
-    ldx highScoreOffset
+    ldx highEntryIndex
+    lda HighScoreScoreOffsets,x
+    sta highScoreOffset
+    tax
     ldy #0
 BuildHighScoreEntryLine_Score:
     lda HighScoreScores,x
     clc
     adc #$30
+    cpy #0
+    bne BuildHighScoreEntryLine_StoreScore
+    cmp #'0'
+    bne BuildHighScoreEntryLine_StoreScore
+    lda #' '
+BuildHighScoreEntryLine_StoreScore:
     sta HighScoreEntryLine + 11,y
     inx
     iny
-    cpy #3
+    cpy #4
     bne BuildHighScoreEntryLine_Score
     rts
 
@@ -396,6 +360,7 @@ EnterHighScoreInitials_Drain:
     bne EnterHighScoreInitials_Drain
 EnterHighScoreInitials_Wait:
     jsr WaitFrame
+    jsr UpdateHighScoreEntryFlash
     jsr SCNKEY
     jsr GETIN
     beq EnterHighScoreInitials_Wait
@@ -427,7 +392,7 @@ DrawEnteredInitials:
     sta highTextColumn
     lda #COLOR_YELLOW
     sta highTextColor
-    jmp DrawHighScoreText
+    jmp DrawSixiesFont16Text
 
 SetHighScoreTextSource:
     sta highTextSourceLo
@@ -435,10 +400,19 @@ SetHighScoreTextSource:
     rts
 
 DrawHighScoreText:
+    jmp DrawSixiesMulticolorText
+
+DrawSixiesMulticolorText:
+    lda #<HighScoreCharset
+    sta highTextCharsetLo
+    lda #>HighScoreCharset
+    sta highTextCharsetHi
+
+DrawBitmapText:
     lda highTextSourceLo
-    sta DrawHighScoreText_Read + 1
+    sta DrawBitmapText_Read + 1
     lda highTextSourceHi
-    sta DrawHighScoreText_Read + 2
+    sta DrawBitmapText_Read + 2
 
     ; Color RAM supplies multicolor bitmap pixel value 3.
     ldx highTextRow
@@ -451,11 +425,11 @@ DrawHighScoreText:
     asl
     sta highTextCellsRemaining
     lda highTextColor
-DrawHighScoreText_Color:
+DrawBitmapText_Color:
     sta (PTR_LO),y
     iny
     dec highTextCellsRemaining
-    bne DrawHighScoreText_Color
+    bne DrawBitmapText_Color
 
     lda highTextRow
     jsr SetBitmapRowPointer
@@ -463,15 +437,15 @@ DrawHighScoreText_Color:
     jsr AddColumnOffset
     lda #0
     sta highTextIndex
-DrawHighScoreText_Character:
+DrawBitmapText_Character:
     ldx highTextIndex
-DrawHighScoreText_Read:
+DrawBitmapText_Read:
     lda $ffff,x
     sta highCharacter
     jsr SelectHighScoreGlyph
     lda #0
     sta highGlyphRow
-DrawHighScoreText_Row:
+DrawBitmapText_Row:
     ldy highGlyphRow
     lda (SOURCE_LO),y
     sta highGlyphBits
@@ -498,18 +472,18 @@ DrawHighScoreText_Row:
     inc highGlyphRow
     lda highGlyphRow
     cmp #8
-    bne DrawHighScoreText_Row
+    bne DrawBitmapText_Row
     lda PTR_LO
     clc
     adc #16
     sta PTR_LO
-    bcc DrawHighScoreText_Next
+    bcc DrawBitmapText_Next
     inc PTR_HI
-DrawHighScoreText_Next:
+DrawBitmapText_Next:
     inc highTextIndex
     lda highTextIndex
     cmp highTextLength
-    bne DrawHighScoreText_Character
+    bne DrawBitmapText_Character
     rts
 
 SelectHighScoreGlyph:
@@ -522,6 +496,13 @@ SelectHighScoreGlyph:
     sta SOURCE_HI
     rts
 SelectHighScoreGlyph_Charset:
+    lda highCharacter
+    ; The charset window starts at space; codes below it have no glyph.
+    sec
+    sbc #CHARSET_FIRST
+    bcs SelectHighScoreGlyph_Index
+    lda #0
+SelectHighScoreGlyph_Index:
     sta highGlyphOffset
     lda #0
     sta highGlyphPage
@@ -533,10 +514,10 @@ SelectHighScoreGlyph_Charset:
     rol highGlyphPage
     lda highGlyphOffset
     clc
-    adc #<HighScoreCharset
+    adc highTextCharsetLo
     sta SOURCE_LO
     lda highGlyphPage
-    adc #>HighScoreCharset
+    adc highTextCharsetHi
     sta SOURCE_HI
     rts
 
@@ -545,16 +526,18 @@ HighScoreHeading:
 EnterInitialsText:
 !byte 'E','N','T','E','R',' ','I','N','I','T','I','A','L','S'
 FinalScoreLine:
-!byte 'S','C','O','R','E',' ', '0','0','0'
+!byte 'S','C','O','R','E',' ', ' ','0','0','0'
 HighScoreEntryLine:
-!byte '1','.',' ','D','O','M','.','.','.','.','.', '2','2','0'
+!byte '1','.',' ','D','O','M','.','.','.','.','.', ' ','2','2','0'
 
 HighScoreNames:
-!byte 'D','O','M', 'S','H','A', 'A','C','E', 'K','I','M', 'M','A','X'
+!byte 'D','O','M', 'P','R','I', 'T','W','D', 'K','I','M', 'M','A','X'
 HighScoreScores:
-!byte 2,2,0, 1,6,3, 1,2,0, 0,8,0, 0,4,0
-HighScoreOffsets:
+!byte 0,7,9,3, 0,6,1,3, 0,5,9,0, 0,0,8,0, 0,0,4,0
+HighScoreNameOffsets:
 !byte 0,3,6,9,12
+HighScoreScoreOffsets:
+!byte 0,4,8,12,16
 HighScoreRows:
 !byte 8,10,12,14,16
 AttractHighScoreRows:
@@ -583,6 +566,8 @@ highGlyphRow:        !byte 0
 highGlyphBits:       !byte 0
 highGlyphOffset:     !byte 0
 highGlyphPage:       !byte 0
+highTextCharsetLo:   !byte 0
+highTextCharsetHi:   !byte 0
 highPanelRow:        !byte 0
 endAttractNewGame:   !byte 0
 attractSeconds:      !byte 0
@@ -593,6 +578,10 @@ HighScoreColorRowLo:
 HighScoreColorRowHi:
 !for row, 0, 24 { !byte >(COLOR_RAM + (row * 40)) }
 
-; ASCII-indexed Sixies glyphs generated from the supplied font sheet.
+; Sixies glyphs generated from the supplied font sheet, indexed by character
+; code less CHARSET_FIRST. The window runs from space to '_', which covers the
+; letters, digits, '!' and the '[' and ']' of the settings pager; a full
+; 256-entry table would spend 2048 bytes to carry 37 glyphs.
+CHARSET_FIRST = $20
 HighScoreCharset:
 !bin "src/assets/font/SixiesFont_charset.bin"

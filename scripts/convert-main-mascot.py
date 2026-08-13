@@ -8,6 +8,9 @@ import sys
 
 WIDTH = 64
 HEIGHT = 80
+USE_FULL_PALETTE = False
+USE_SOLID_LOGO_PALETTE = False
+FORCE_BLACK_BACKGROUND = False
 PALETTE = [
     (0x00, 0x00, 0x00), (0xFF, 0xFF, 0xFF), (0x81, 0x33, 0x38),
     (0x75, 0xCE, 0xC8), (0x8E, 0x3C, 0x97), (0x56, 0xAC, 0x4D),
@@ -49,6 +52,16 @@ def content_bounds(rgb, width, height):
 
 
 def flat_color(red, green, blue):
+    if USE_SOLID_LOGO_PALETTE:
+        return 0 if max(red, green, blue) < 48 else 13
+    if USE_FULL_PALETTE:
+        return min(
+            range(len(PALETTE)),
+            key=lambda color: sum(
+                (channel - target) ** 2
+                for channel, target in zip((red, green, blue), PALETTE[color])
+            ),
+        )
     maximum = max(red, green, blue)
     minimum = min(red, green, blue)
     if maximum < 42:
@@ -75,9 +88,17 @@ def encode(rgb):
                 for y in range(8) for x in range(8)
             ]
             counts = collections.Counter(colors)
-            pair = [color for color, _ in counts.most_common(2)]
-            pair.extend([0] * (2 - len(pair)))
-            if cell_y == 0 and cell_x == 4:
+            if FORCE_BLACK_BACKGROUND:
+                foreground_counts = [
+                    (color, count) for color, count in counts.most_common()
+                    if color != 0
+                ]
+                foreground = foreground_counts[0][0] if foreground_counts else 1
+                pair = [0, foreground]
+            else:
+                pair = [color for color, _ in counts.most_common(2)]
+                pair.extend([0] * (2 - len(pair)))
+            if not USE_SOLID_LOGO_PALETTE and cell_y == 0 and cell_x == 4:
                 pair = [0, 4]
             background, foreground = pair
             screen.append((foreground << 4) | background)
@@ -102,24 +123,41 @@ def encode(rgb):
 
 
 def main():
-    if len(sys.argv) != 3:
-        raise SystemExit("usage: convert-main-mascot.py INPUT.png OUTPUT_DIRECTORY")
+    global WIDTH, HEIGHT, USE_FULL_PALETTE
+    global USE_SOLID_LOGO_PALETTE, FORCE_BLACK_BACKGROUND
+    if len(sys.argv) not in (3, 4, 6, 7):
+        raise SystemExit(
+            "usage: convert-main-mascot.py INPUT.png OUTPUT_DIRECTORY "
+            "[PREFIX [WIDTH HEIGHT [full-palette|solid-logo]]]"
+        )
     source = pathlib.Path(sys.argv[1])
     output = pathlib.Path(sys.argv[2])
+    prefix = sys.argv[3] if len(sys.argv) == 4 else "main_mascot"
+    if len(sys.argv) >= 6:
+        prefix = sys.argv[3]
+        WIDTH = int(sys.argv[4])
+        HEIGHT = int(sys.argv[5])
+    palette_mode = sys.argv[6] if len(sys.argv) == 7 else ""
+    USE_FULL_PALETTE = palette_mode == "full-palette"
+    USE_SOLID_LOGO_PALETTE = palette_mode == "solid-logo"
+    FORCE_BLACK_BACKGROUND = palette_mode == "solid-logo"
+    if WIDTH % 8 or HEIGHT % 8:
+        raise SystemExit("mascot width and height must be multiples of 8")
     width, height = dimensions(source)
     source_rgb = raw_rgb(source)
     left, top, crop_width, crop_height = content_bounds(source_rgb, width, height)
     fitted = raw_rgb(source, (
         f"crop={crop_width}:{crop_height}:{left}:{top},"
-        "scale=60:76:force_original_aspect_ratio=decrease:flags=neighbor,"
+        f"scale={WIDTH - 4}:{HEIGHT - 4}:"
+        "force_original_aspect_ratio=decrease:flags=neighbor,"
         f"pad={WIDTH}:{HEIGHT}:(ow-iw)/2:(oh-ih)/2:black"
     ))
     bitmap, screen, preview = encode(fitted)
     output.mkdir(parents=True, exist_ok=True)
-    (output / "main_mascot_bitmap.bin").write_bytes(bitmap)
-    (output / "main_mascot_screen.bin").write_bytes(screen)
-    with (output / "main_mascot_preview.ppm").open("wb") as file:
-        file.write(b"P6\n64 80\n255\n")
+    (output / f"{prefix}_bitmap.bin").write_bytes(bitmap)
+    (output / f"{prefix}_screen.bin").write_bytes(screen)
+    with (output / f"{prefix}_preview.ppm").open("wb") as file:
+        file.write(f"P6\n{WIDTH} {HEIGHT}\n255\n".encode("ascii"))
         file.write(preview)
     print(f"Created {len(bitmap)} bitmap bytes and {len(screen)} screen bytes")
 

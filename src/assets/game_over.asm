@@ -3,23 +3,23 @@
 * = $5f80
 GameOverLabel:
 ; G
-!byte $3c,$7e,$fc,$e0,$ee,$fe,$7e,$3c
+!byte $3c,$7e,$e0,$ee,$e6,$7e,$3c,$00
 ; A
-!byte $18,$3c,$7e,$7e,$e6,$ff,$ff,$e7
+!byte $38,$7c,$6c,$c6,$fe,$c6,$c6,$00
 ; M
-!byte $66,$67,$ff,$ff,$ff,$db,$d3,$00
+!byte $c6,$ee,$fe,$d6,$c6,$c6,$c6,$00
 ; E
-!byte $7e,$7e,$7c,$7e,$7e,$7c,$7e,$7e
+!byte $7c,$7c,$60,$78,$60,$7c,$7c,$00
 ; space
 !byte $00,$00,$00,$00,$00,$00,$00,$00
 ; O
-!byte $3c,$7e,$ff,$e7,$e7,$ff,$7e,$3c
+!byte $3c,$7e,$66,$66,$66,$7e,$3c,$00
 ; V
-!byte $e7,$e7,$f7,$7e,$7e,$3e,$3c,$18
+!byte $66,$66,$66,$7e,$7e,$3c,$18,$00
 ; E
-!byte $7e,$7e,$7c,$7e,$7e,$7c,$7e,$7e
+!byte $7c,$7c,$60,$78,$60,$7c,$7c,$00
 ; R
-!byte $f8,$fc,$ee,$ee,$fc,$fc,$fe,$ee
+!byte $7c,$7e,$66,$7c,$7c,$6c,$66,$00
 
 ; Expands one four-bit font nibble into four multicolor pixels.
 GameOverMulticolorExpand:

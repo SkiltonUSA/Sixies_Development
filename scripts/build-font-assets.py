@@ -8,19 +8,6 @@ import sys
 BYTE_PATTERN = re.compile(r"\$([0-9a-fA-F]{2})")
 GAME_OVER_TEXT = "GAME OVER"
 GAME_OVER_PROMPT = "PRESS N FOR NEW GAME"
-COMPACT_PROMPT_FONT = {
-    "A": ("01110", "10001", "10001", "11111", "10001", "10001", "10001"),
-    "E": ("11111", "10000", "10000", "11110", "10000", "10000", "11111"),
-    "F": ("11111", "10000", "10000", "11110", "10000", "10000", "10000"),
-    "G": ("01110", "10001", "10000", "10111", "10001", "10001", "01110"),
-    "M": ("10001", "11011", "10101", "10101", "10001", "10001", "10001"),
-    "N": ("10001", "11001", "10101", "10101", "10011", "10011", "10001"),
-    "O": ("01110", "10001", "10001", "10001", "10001", "10001", "01110"),
-    "P": ("11110", "10001", "10001", "11110", "10000", "10000", "10000"),
-    "R": ("11110", "10001", "10001", "11110", "10100", "10010", "10001"),
-    "S": ("01111", "10000", "10000", "01110", "00001", "00001", "11110"),
-    "W": ("10001", "10001", "10001", "10101", "10101", "10101", "01010"),
-}
 
 
 def read_glyphs(path):
@@ -86,59 +73,28 @@ def write_game_over(glyphs, output):
     output.write_text("\n".join(lines) + "\n", encoding="ascii")
 
 
-def compact_prompt_bitmap():
-    rows = []
-    for row in range(8):
-        pixels = []
-        for character in GAME_OVER_PROMPT:
-            pattern = "00000" if character == " " or row == 7 else COMPACT_PROMPT_FONT[character][row]
-            pixels.extend(pixel == "1" for pixel in pattern)
-            pixels.append(False)
-        packed = []
-        for column in range(0, len(pixels), 4):
-            value = 0
-            for pixel in pixels[column:column + 4]:
-                value = (value << 2) | (3 if pixel else 0)
-            packed.append(value)
-        rows.append(packed)
-    return bytes(rows[row][column] for column in range(30) for row in range(8))
-
-
 def write_game_over_prompt(output):
-    bitmap = compact_prompt_bitmap()
     lines = [
         "; Generated from src/assets/font/SixiesFont_image.asm.",
-        "; Compact multicolor PRESS N FOR NEW GAME end-screen prompt.",
+        "; Full-width end-screen prompt rendered with the default Sixies font.",
         "* = $4ad0",
-        "GameOverPrompt:",
+        'GameOverPromptText: !text "PRESS N FOR NEW GAME"',
     ]
-    for offset in range(0, len(bitmap), 16):
-        lines.append(f"!byte {format_bytes(bitmap[offset:offset + 16])}")
     lines.extend((
         "",
         "DrawGameOverPrompt:",
-        "    lda #<GameOverPrompt",
-        "    sta SOURCE_LO",
-        "    lda #>GameOverPrompt",
-        "    sta SOURCE_HI",
-        "    lda #<(BITMAP + (23 * 320) + (5 * 8))",
-        "    sta PTR_LO",
-        "    lda #>(BITMAP + (23 * 320) + (5 * 8))",
-        "    sta PTR_HI",
-        "    ldy #0",
-        "DrawGameOverPrompt_Copy:",
-        "    lda (SOURCE_LO),y",
-        "    sta (PTR_LO),y",
-        "    iny",
-        "    cpy #240",
-        "    bne DrawGameOverPrompt_Copy",
-        "    ldx #29",
+        "    lda #<GameOverPromptText",
+        "    ldx #>GameOverPromptText",
+        "    jsr SetHighScoreTextSource",
+        "    lda #20",
+        "    sta highTextLength",
+        "    lda #23",
+        "    sta highTextRow",
+        "    lda #0",
+        "    sta highTextColumn",
         "    lda #COLOR_WHITE",
-        "DrawGameOverPrompt_Color:",
-        "    sta COLOR_RAM + (23 * 40) + 5,x",
-        "    dex",
-        "    bpl DrawGameOverPrompt_Color",
-        "    rts",
+        "    sta highTextColor",
+        "    jmp DrawSixiesMulticolorText",
     ))
     output.write_text("\n".join(lines) + "\n", encoding="ascii")
 

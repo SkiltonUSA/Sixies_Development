@@ -16,14 +16,31 @@ TITLE_MASTER := src/assets/title_logo_flat_master.png
 TITLE_BITMAP := src/assets/title_bitmap.bin
 TITLE_SCREEN := src/assets/title_screen.bin
 TITLE_COLOR := src/assets/title_color.bin
+TITLE_PROMPT_SPRITES := src/assets/title_prompt_sprites.bin
+TITLE_KLA := src/assets/title.kla
+TITLE_PACKED := src/assets/title_koala_packed.bin
+TITLE_TABLES := src/assets/title_koala_tables.asm
 MASCOT_MASTER := src/assets/main_mascot_master.png
 MASCOT_BITMAP := src/assets/main_mascot_bitmap.bin
 MASCOT_SCREEN := src/assets/main_mascot_screen.bin
+CREDITS_MASCOT_MASTER := src/assets/credits_mascot_master.png
+CREDITS_MASCOT_BITMAP := src/assets/credits_mascot_bitmap.bin
+CREDITS_MASCOT_SCREEN := src/assets/credits_mascot_screen.bin
+CREDITS_LOGO_MASTER := src/assets/credits_logo_master.jpg
+CREDITS_LOGO_BITMAP := src/assets/credits_logo_bitmap.bin
+CREDITS_LOGO_SCREEN := src/assets/credits_logo_screen.bin
+PRESENTS_MASTER := src/assets/Studio313.kla
+PRESENTS_BITMAP_PACKED := src/assets/presents_bitmap_packed.bin
+PRESENTS_SCREEN_PACKED := src/assets/presents_screen_packed.bin
+PRESENTS_COLOR_PACKED := src/assets/presents_color_packed.bin
+PRESENTS_BACKGROUND := src/assets/presents_background.bin
 FONT_SHEET := src/assets/font/SixiesFont_sheet.png
 FONT_SOURCE := src/assets/font/SixiesFont_image.asm
 FONT_CHARSET := src/assets/font/SixiesFont_charset.bin
+FONT_CHARSET16 := src/assets/font/SixiesFont16.bin
 FONT_COLORS := src/assets/font/SixiesFont_colors.asm
 FONT_PREVIEW := src/assets/font/SixiesFont_preview.png
+FONT_PREVIEW16 := src/assets/font/SixiesFont16_preview.png
 FONT_DIGITS16 := src/assets/font/SixiesDigits16.bin
 FONT_DIGITS_PREVIEW := src/assets/font/SixiesDigits16_preview.png
 FONT_GAME_OVER := src/assets/game_over.asm
@@ -56,12 +73,15 @@ $(KOALA_PACKED): $(KOALA_SOURCE) scripts/pack-koala.py
 $(KOALA_TABLES): $(KOALA_PACKED)
 	@test -f "$@"
 
-$(TITLE_BITMAP): $(TITLE_MASTER) scripts/convert-solid-koala.py
-	./scripts/convert-solid-koala.py "$(TITLE_MASTER)" src/assets title
+$(TITLE_BITMAP): $(TITLE_MASTER) $(FONT_CHARSET) scripts/convert-title.py
+	./scripts/convert-title.py "$(TITLE_MASTER)" src/assets
 	ffmpeg -v error -y -i src/assets/title_preview.ppm src/assets/title_preview.png
 
-$(TITLE_SCREEN) $(TITLE_COLOR): $(TITLE_BITMAP)
+$(TITLE_SCREEN) $(TITLE_COLOR) $(TITLE_PROMPT_SPRITES) $(TITLE_KLA): $(TITLE_BITMAP)
 	@test -f "$@"
+
+$(TITLE_PACKED) $(TITLE_TABLES): $(TITLE_KLA) scripts/pack-koala.py
+	./scripts/pack-koala.py "$(TITLE_KLA)" src/assets title_koala
 
 $(MASCOT_BITMAP): $(MASCOT_MASTER) scripts/convert-main-mascot.py
 	./scripts/convert-main-mascot.py "$(MASCOT_MASTER)" src/assets
@@ -70,12 +90,34 @@ $(MASCOT_BITMAP): $(MASCOT_MASTER) scripts/convert-main-mascot.py
 $(MASCOT_SCREEN): $(MASCOT_BITMAP)
 	@test -f "$@"
 
+$(CREDITS_MASCOT_BITMAP): $(CREDITS_MASCOT_MASTER) scripts/convert-main-mascot.py
+	./scripts/convert-main-mascot.py "$(CREDITS_MASCOT_MASTER)" src/assets credits_mascot 96 128
+	ffmpeg -v error -y -i src/assets/credits_mascot_preview.ppm src/assets/credits_mascot_preview.png
+
+$(CREDITS_MASCOT_SCREEN): $(CREDITS_MASCOT_BITMAP)
+	@test -f "$@"
+
+$(CREDITS_LOGO_BITMAP): $(CREDITS_LOGO_MASTER) scripts/convert-main-mascot.py
+	./scripts/convert-main-mascot.py "$(CREDITS_LOGO_MASTER)" src/assets credits_logo 128 40 solid-logo
+	ffmpeg -v error -y -i src/assets/credits_logo_preview.ppm src/assets/credits_logo_preview.png
+
+$(CREDITS_LOGO_SCREEN): $(CREDITS_LOGO_BITMAP)
+	@test -f "$@"
+
+$(PRESENTS_BITMAP_PACKED): $(PRESENTS_MASTER) $(FONT_CHARSET16) scripts/convert-presents.py
+	./scripts/convert-presents.py "$(PRESENTS_MASTER)" "$(FONT_CHARSET16)" src/assets
+	ffmpeg -v error -y -i src/assets/presents_preview.ppm src/assets/presents_preview.png
+
+$(PRESENTS_SCREEN_PACKED) $(PRESENTS_COLOR_PACKED) $(PRESENTS_BACKGROUND): $(PRESENTS_BITMAP_PACKED)
+	@test -f "$@"
+
 $(FONT_SOURCE): $(FONT_SHEET) scripts/extract-font-sheet.py
 	./scripts/extract-font-sheet.py "$(FONT_SHEET)" src/assets/font
 	ffmpeg -v error -y -i src/assets/font/SixiesFont_preview.ppm "$(FONT_PREVIEW)"
+	ffmpeg -v error -y -i src/assets/font/SixiesFont16_preview.ppm "$(FONT_PREVIEW16)"
 	ffmpeg -v error -y -i src/assets/font/SixiesDigits16_preview.ppm "$(FONT_DIGITS_PREVIEW)"
 
-$(FONT_CHARSET) $(FONT_COLORS) $(FONT_PREVIEW) $(FONT_DIGITS16) $(FONT_DIGITS_PREVIEW): $(FONT_SOURCE)
+$(FONT_CHARSET) $(FONT_CHARSET16) $(FONT_COLORS) $(FONT_PREVIEW) $(FONT_PREVIEW16) $(FONT_DIGITS16) $(FONT_DIGITS_PREVIEW): $(FONT_SOURCE)
 	@test -f "$@"
 
 $(FONT_GAME_OVER): $(FONT_SOURCE) $(FONT_DIGITS16) scripts/build-font-assets.py
@@ -87,7 +129,7 @@ $(FONT_DIGITS): $(FONT_GAME_OVER)
 $(FONT_GAME_OVER_PROMPT): $(FONT_GAME_OVER)
 	@test -f "$@"
 
-$(TARGET): $(SOURCE) $(ASSETS) $(BINARY_ASSETS) $(KOALA_PACKED) $(KOALA_TABLES) | build
+$(TARGET): $(SOURCE) $(ASSETS) $(BINARY_ASSETS) $(KOALA_PACKED) $(KOALA_TABLES) $(CREDITS_MASCOT_BITMAP) $(CREDITS_MASCOT_SCREEN) $(CREDITS_LOGO_BITMAP) $(CREDITS_LOGO_SCREEN) $(PRESENTS_BITMAP_PACKED) $(PRESENTS_SCREEN_PACKED) $(PRESENTS_COLOR_PACKED) $(PRESENTS_BACKGROUND) $(FONT_CHARSET16) $(FONT_COLORS) $(TITLE_PROMPT_SPRITES) $(TITLE_PACKED) $(TITLE_TABLES) | build
 	@if [ ! -x "$(LOCAL_ACME)" ]; then ./scripts/setup-acme.sh; fi
 	@"$(LOCAL_ACME)" -f cbm -o "$(TARGET)" "$(SOURCE)"
 
