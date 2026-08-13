@@ -506,6 +506,8 @@ ResetGame_ClearBoard:
     sta settingsFocused
     sta ghostSuppressed
     sta BORDER
+    lda #1
+    sta displayDirty
     lda RASTER_LINE
     eor $dc04
     ora #1
@@ -744,18 +746,11 @@ UpdatePlacement_Valid:
     lda #1
     sta placementValid
 UpdatePlacement_Done:
+    lda #1
+    sta displayDirty
     rts
 
 CheckAnyPlacement:
-    lda #1
-    sta ghostSuppressed
-    lda cursorX
-    sta savedCursorX
-    lda cursorY
-    sta savedCursorY
-    lda orientation
-    sta savedOrientation
-
     lda #0
     sta searchOrientation
 CheckAnyPlacement_Orientation:
@@ -765,15 +760,8 @@ CheckAnyPlacement_Row:
     lda #0
     sta searchX
 CheckAnyPlacement_Column:
-    lda searchX
-    sta cursorX
-    lda searchY
-    sta cursorY
-    lda searchOrientation
-    sta orientation
-    jsr UpdatePlacement
-    lda placementValid
-    bne CheckAnyPlacement_Found
+    jsr TestSearchPlacement
+    bcs CheckAnyPlacement_Found
 
     inc searchX
     lda searchX
@@ -799,25 +787,55 @@ CheckAnyPlacement_GameOver:
     sta BORDER
     lda #0
     sta placementValid
-    jmp CheckAnyPlacement_RestoreOnly
+    rts
 
 CheckAnyPlacement_Found:
     lda #0
     sta gameOver
-CheckAnyPlacement_RestoreOnly:
-    lda savedCursorX
-    sta cursorX
-    lda savedCursorY
-    sta cursorY
-    lda savedOrientation
-    sta orientation
-    lda gameOver
-    bne CheckAnyPlacement_RestoreGhost
     jsr UpdatePlacement
-CheckAnyPlacement_RestoreGhost:
-    lda #0
-    sta ghostSuppressed
-CheckAnyPlacement_Done:
+    rts
+
+; Carry set means the search coordinates can accept the current piece.
+; Unlike UpdatePlacement, this never touches live cursor or preview state.
+TestSearchPlacement:
+    ldx searchY
+    lda RowIndexBase,x
+    clc
+    adc searchX
+    tax
+    lda board,x
+    bne TestSearchPlacement_Invalid
+    lda pieceCount
+    cmp #2
+    bne TestSearchPlacement_Valid
+
+    lda searchOrientation
+    beq TestSearchPlacement_Right
+    cmp #1
+    beq TestSearchPlacement_Down
+    cmp #2
+    beq TestSearchPlacement_Left
+    lda UpNeighbor,x
+    jmp TestSearchPlacement_Second
+TestSearchPlacement_Right:
+    lda RightNeighbor,x
+    jmp TestSearchPlacement_Second
+TestSearchPlacement_Down:
+    lda DownNeighbor,x
+    jmp TestSearchPlacement_Second
+TestSearchPlacement_Left:
+    lda LeftNeighbor,x
+TestSearchPlacement_Second:
+    cmp #$ff
+    beq TestSearchPlacement_Invalid
+    tax
+    lda board,x
+    bne TestSearchPlacement_Invalid
+TestSearchPlacement_Valid:
+    sec
+    rts
+TestSearchPlacement_Invalid:
+    clc
     rts
 
 PlaceCurrentPiece:
@@ -880,10 +898,18 @@ SyncRenderBoard_Copy:
     inx
     cpx #BOARD_CELLS
     bne SyncRenderBoard_Copy
+    lda #1
+    sta displayDirty
 SyncRenderBoard_Done:
     rts
 
 BuildDisplayBoard:
+    lda displayDirty
+    bne BuildDisplayBoard_Rebuild
+    rts
+BuildDisplayBoard_Rebuild:
+    lda #0
+    sta displayDirty
     ldx #0
 BuildDisplayBoard_Cell:
     lda ghostSuppressed
@@ -1063,14 +1089,17 @@ RunDiceFlash:
     jsr WaitAnimationFrames
     lda #0
     sta mergeFlashPhase
+    jsr MarkDisplayDirty
     lda #3
     jsr WaitAnimationFrames
     lda #1
     sta mergeFlashPhase
+    jsr MarkDisplayDirty
     lda #3
     jsr WaitAnimationFrames
     lda #0
     sta mergeFlashPhase
+    jsr MarkDisplayDirty
     lda #2
     jsr WaitAnimationFrames
     lda #0
@@ -1085,6 +1114,11 @@ PublishBoardForAnimation:
     jsr WaitFrame
     lda #1
     sta boardUpdateInProgress
+    rts
+
+MarkDisplayDirty:
+    lda #1
+    sta displayDirty
     rts
 
 WaitAnimationFrames:
@@ -1156,6 +1190,7 @@ AnimateGameOver:
     jsr InitTitleMusic
     lda #1
     sta ghostSuppressed
+    jsr MarkDisplayDirty
     lda #(BOARD_CELLS - 1)
     sta rippleStep
 AnimateGameOver_Ripple:
@@ -2462,6 +2497,7 @@ gameOver:          !byte 0
 singlesOnlyMode:   !byte 0
 doubleSpaceAvailable: !byte 0
 boardDirty:        !byte 0
+displayDirty:      !byte 1
 boardUpdateInProgress: !byte 0
 rngSeed:           !byte 1
 boardFiveCount:    !byte 0
@@ -2498,9 +2534,6 @@ queueHead:         !byte 0
 queueTail:         !byte 0
 scoreAddCount:     !byte 0
 scoreAddValue:     !byte 0
-savedCursorX:      !byte 0
-savedCursorY:      !byte 0
-savedOrientation:  !byte 0
 searchX:           !byte 0
 searchY:           !byte 0
 searchOrientation: !byte 0

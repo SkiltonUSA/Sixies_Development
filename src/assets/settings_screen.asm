@@ -108,6 +108,7 @@ ShowSettingsScreen_HideBoard:
     lda #1
     sta ghostSuppressed
     sta gameOverBlindActive
+    jsr MarkDisplayDirty
     lda #5
     sta blindRow
     lda #0
@@ -161,6 +162,7 @@ FocusSettingsIcon_Set:
     lda #1
     sta settingsFocused
     sta ghostSuppressed
+    jsr MarkDisplayDirty
     jsr PlayBounce
 FocusSettingsIcon_Done:
     rts

@@ -1,7 +1,7 @@
 ; Three star particles burst from the merged die and fall in separate arcs.
 ; A five-to-six merge follows the burst with a full-height star shower.
 ; The effect sprites are multiplexed with the bottom New Game and Settings UI.
-* = $1be9
+* = $8e00
 
 RestoreBottomIconsDuringEffect:
     jsr ConfigureNewGameSprite

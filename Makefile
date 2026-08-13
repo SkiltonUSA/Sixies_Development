@@ -1,13 +1,48 @@
 ROOT := $(CURDIR)
 LOCAL_ACME := $(ROOT)/.tools/acme/bin/acme
 SYSTEM_ACME := $(shell command -v acme 2>/dev/null)
-ACME := $(if $(wildcard $(LOCAL_ACME)),$(LOCAL_ACME),$(SYSTEM_ACME))
+ACME = $(if $(wildcard $(LOCAL_ACME)),$(LOCAL_ACME),$(SYSTEM_ACME))
 SIDKIT_DIR := $(ROOT)/.tools/c64SIDkit
 SIDKIT_PYTHON := $(SIDKIT_DIR)/.venv/bin/python
 TARGET := build/dice_merge.prg
 SOURCE := src/grid_base.asm
-ASSETS := $(wildcard src/assets/*.asm)
-BINARY_ASSETS := $(wildcard src/assets/*.bin)
+ASM_SOURCES := \
+	src/assets/title_screen.asm \
+	src/assets/title_koala_tables.asm \
+	src/assets/merge_firework_code.asm \
+	src/assets/high_scores.asm \
+	src/assets/sound_effects.asm \
+	src/assets/title_prompt.asm \
+	src/assets/score_four_digits.asm \
+	src/assets/merge_chain_sounds.asm \
+	src/assets/credits_mascot.asm \
+	src/assets/credits_font.asm \
+	src/assets/font/SixiesFont_colors.asm \
+	src/assets/presents_screen.asm \
+	src/assets/title_music.asm \
+	src/assets/merge_diagonal_sweep.asm \
+	src/assets/settings_screen.asm \
+	src/assets/main_mascot.asm \
+	src/assets/game_over_prompt.asm \
+	src/assets/merge_shake.asm \
+	src/assets/merge_firework_helpers.asm \
+	src/assets/game_over_screen.asm \
+	src/assets/game_over_koala_tables.asm \
+	src/assets/merge_firework_paths.asm \
+	src/assets/marching_ants.asm \
+	src/assets/merge_grid_sweep.asm \
+	src/assets/merge_firework_sprite.asm \
+	src/assets/die_one.asm \
+	src/assets/die_two.asm \
+	src/assets/die_three.asm \
+	src/assets/die_four.asm \
+	src/assets/die_five.asm \
+	src/assets/die_six.asm \
+	src/assets/new_game.asm \
+	src/assets/settings.asm \
+	src/assets/bottom_labels.asm \
+	src/assets/large_digits.asm \
+	src/assets/game_over.asm
 KOALA_SOURCE := src/assets/game_over_koala.kla
 KOALA_MASTER := src/assets/game_over_logo_flat_master.png
 KOALA_PACKED := src/assets/game_over_koala_packed.bin
@@ -20,6 +55,7 @@ TITLE_PROMPT_SPRITES := src/assets/title_prompt_sprites.bin
 TITLE_KLA := src/assets/title.kla
 TITLE_PACKED := src/assets/title_koala_packed.bin
 TITLE_TABLES := src/assets/title_koala_tables.asm
+TITLE_MUSIC_BIN := src/assets/title_music.bin
 MASCOT_MASTER := src/assets/main_mascot_master.png
 MASCOT_BITMAP := src/assets/main_mascot_bitmap.bin
 MASCOT_SCREEN := src/assets/main_mascot_screen.bin
@@ -46,8 +82,25 @@ FONT_DIGITS_PREVIEW := src/assets/font/SixiesDigits16_preview.png
 FONT_GAME_OVER := src/assets/game_over.asm
 FONT_GAME_OVER_PROMPT := src/assets/game_over_prompt.asm
 FONT_DIGITS := src/assets/large_digits.asm
+BINARY_ASSETS := \
+	$(KOALA_PACKED) \
+	$(TITLE_PACKED) \
+	$(TITLE_MUSIC_BIN) \
+	$(TITLE_PROMPT_SPRITES) \
+	$(MASCOT_BITMAP) \
+	$(MASCOT_SCREEN) \
+	$(CREDITS_MASCOT_BITMAP) \
+	$(CREDITS_MASCOT_SCREEN) \
+	$(CREDITS_LOGO_BITMAP) \
+	$(CREDITS_LOGO_SCREEN) \
+	$(PRESENTS_BITMAP_PACKED) \
+	$(PRESENTS_SCREEN_PACKED) \
+	$(PRESENTS_COLOR_PACKED) \
+	$(PRESENTS_BACKGROUND) \
+	$(FONT_CHARSET) \
+	$(FONT_CHARSET16)
 
-.PHONY: all setup-acme setup-sidkit sidkit run clean
+.PHONY: all setup-acme setup-sidkit sidkit run clean FORCE
 
 all: $(TARGET)
 
@@ -62,6 +115,8 @@ sidkit: setup-sidkit
 
 build:
 	mkdir -p build
+
+FORCE:
 
 $(KOALA_SOURCE): $(KOALA_MASTER) scripts/convert-solid-koala.py
 	./scripts/convert-solid-koala.py "$(KOALA_MASTER)" src/assets game_over_koala
@@ -129,9 +184,9 @@ $(FONT_DIGITS): $(FONT_GAME_OVER)
 $(FONT_GAME_OVER_PROMPT): $(FONT_GAME_OVER)
 	@test -f "$@"
 
-$(TARGET): $(SOURCE) $(ASSETS) $(BINARY_ASSETS) $(KOALA_PACKED) $(KOALA_TABLES) $(CREDITS_MASCOT_BITMAP) $(CREDITS_MASCOT_SCREEN) $(CREDITS_LOGO_BITMAP) $(CREDITS_LOGO_SCREEN) $(PRESENTS_BITMAP_PACKED) $(PRESENTS_SCREEN_PACKED) $(PRESENTS_COLOR_PACKED) $(PRESENTS_BACKGROUND) $(FONT_CHARSET16) $(FONT_COLORS) $(TITLE_PROMPT_SPRITES) $(TITLE_PACKED) $(TITLE_TABLES) | build
+$(TARGET): FORCE $(SOURCE) $(ASM_SOURCES) $(BINARY_ASSETS) $(KOALA_TABLES) $(FONT_COLORS) $(TITLE_TABLES) | build
 	@if [ ! -x "$(LOCAL_ACME)" ]; then ./scripts/setup-acme.sh; fi
-	@"$(LOCAL_ACME)" -f cbm -o "$(TARGET)" "$(SOURCE)"
+	@"$(ACME)" --strict-segments -f cbm -o "$(TARGET)" "$(SOURCE)"
 
 run: $(TARGET)
 	@if command -v x64sc >/dev/null 2>&1; then \

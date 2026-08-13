@@ -1,5 +1,6 @@
 ; Merge cross: row and column segments travel from the grid edges to activeIndex.
-* = $5ad0
+; Keep this out of the packed sprite/bitmap asset bank at $5a00-$5fff.
+* = $8d00
 
 RunMergeGridSweep:
     lda activeIndex
@@ -76,7 +77,7 @@ RunMergeGridSweep_BottomReady:
     jsr UpdateSixDiagonalSweep
     lda #0
     sta mergeFlashPhase
-    rts
+    jmp MarkDisplayDirty
 
 RestoreMergeGridCross:
     lda #0
