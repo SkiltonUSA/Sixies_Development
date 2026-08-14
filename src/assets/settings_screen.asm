@@ -127,6 +127,12 @@ ShowSettingsScreen_HideBoard:
     sta VIC_MODE
     lda #0
     sta settingsPage
+    lda audioMode
+    beq ShowSettingsScreen_DefaultAudioSelection
+    sec
+    sbc #AUDIO_MUSIC_ONLY
+ShowSettingsScreen_DefaultAudioSelection:
+    sta settingsOptionSelection
     jsr DrawSettingsText
     cli
 
@@ -148,36 +154,8 @@ ShowSettingsScreen_HideBoard:
     cli
     rts
 
-FocusSettingsIcon:
-    lda settingsFocused
-    bne FocusSettingsIcon_Done
-    lda highlightedIndex
-    cmp #$ff
-    beq FocusSettingsIcon_Set
-    jsr ClearCursorHighlights
-    lda #$ff
-    sta highlightedIndex
-    sta highlightedSecondIndex
-FocusSettingsIcon_Set:
-    lda #1
-    sta settingsFocused
-    sta ghostSuppressed
-    jsr MarkDisplayDirty
-    jsr PlayBounce
-FocusSettingsIcon_Done:
-    rts
-
-UnfocusSettingsIcon:
-    lda #0
-    sta settingsFocused
-    sta ghostSuppressed
-    jsr UpdatePlacement
-    jsr BuildDisplayBoard
-    jsr UpdateCursorHighlight
-    jsr PlayBounce
-    rts
-
 DrawSettingsText:
+    jsr DrawSettingsArtwork
     ldx settingsPage
     lda SettingsPageStarts,x
     sta settingsLineIndex
@@ -196,138 +174,135 @@ DrawSettingsText_Line:
     sta highTextRow
     lda SettingsLineColumn,x
     sta highTextColumn
-    lda SettingsLineColor,x
+    lda settingsLineIndex
+    ldx settingsPage
+    cmp SettingsPageStarts,x
+    beq DrawSettingsText_Heading
+    cpx #0
+    beq DrawSettingsText_MenuColor
+    cpx #3
+    beq DrawSettingsText_OptionsColor
+DrawSettingsText_DefaultColor:
+    lda #COLOR_LTGRAY
+    bne DrawSettingsText_Body
+DrawSettingsText_OptionsColor:
+    lda settingsLineIndex
+    cmp #23
+    bcc DrawSettingsText_DefaultColor
+    cmp #25
+    bcs DrawSettingsText_DefaultColor
+    sec
+    sbc #23
+    cmp settingsOptionSelection
+    beq DrawSettingsText_Selected
+    lda #COLOR_DKGRAY
+    bne DrawSettingsText_Body
+DrawSettingsText_MenuColor:
+    lda settingsLineIndex
+    cmp #1
+    bcc DrawSettingsText_DefaultColor
+    cmp #4
+    bcs DrawSettingsText_DefaultColor
+    sec
+    sbc #1
+    cmp settingsMenuSelection
+    beq DrawSettingsText_Selected
+    lda #COLOR_DKGRAY
+    bne DrawSettingsText_Body
+DrawSettingsText_Selected:
+    lda #COLOR_LTGRAY
+DrawSettingsText_Body:
+    sta highTextColor
+    jsr DrawSixiesHiresText
+    jmp DrawSettingsText_Next
+DrawSettingsText_Heading:
+    lda #COLOR_WHITE
     sta highTextColor
     jsr DrawSixiesFont16Text
+DrawSettingsText_Next:
     inc settingsLineIndex
     lda settingsLineIndex
     cmp settingsLineEnd
-    bne DrawSettingsText_Line
+    beq DrawSettingsText_Done
+    jmp DrawSettingsText_Line
+DrawSettingsText_Done:
     rts
-
-WaitForSettingsClose:
-WaitForSettingsClose_ReleaseKeyboard:
-    jsr SCNKEY
-    lda KEY_CURRENT
-    cmp #$40
-    bne WaitForSettingsClose_ReleaseKeyboard
-    jsr GETIN
-    bne WaitForSettingsClose_ReleaseKeyboard
-WaitForSettingsClose_ReleaseFire:
-    lda JOYSTICK2
-    and #$10
-    beq WaitForSettingsClose_ReleaseFire
-WaitForSettingsClose_Frame:
-    jsr WaitFrame
-    jsr SCNKEY
-    lda KEY_CURRENT
-    cmp #$3d
-    beq WaitForSettingsClose_Keyboard
-    jsr GETIN
-    cmp #'N'
-    beq WaitForSettingsClose_NextPage
-    cmp #' '
-    beq WaitForSettingsClose_Keyboard
-    cmp #13
-    beq WaitForSettingsClose_Keyboard
-    lda JOYSTICK2
-    and #$10
-    bne WaitForSettingsClose_Frame
-WaitForSettingsClose_FireRelease:
-    lda JOYSTICK2
-    and #$10
-    beq WaitForSettingsClose_FireRelease
-WaitForSettingsClose_Keyboard:
-    jsr SCNKEY
-    lda KEY_CURRENT
-    cmp #$40
-    bne WaitForSettingsClose_Keyboard
-    jsr GETIN
-    rts
-
-WaitForSettingsClose_NextPage:
-    inc settingsPage
-    lda settingsPage
-    cmp #SETTINGS_PAGE_COUNT
-    bcc WaitForSettingsClose_DrawPage
-    lda #0
-    sta settingsPage
-WaitForSettingsClose_DrawPage:
-    sei
-    jsr ClearBitmap
-    jsr InitScreenColors
-    jsr DrawSettingsText
-    cli
-    jmp WaitForSettingsClose_ReleaseKeyboard
-
-SETTINGS_PAGE_COUNT = 3
 
 SettingsLineLo:
-    !byte <SettingsTextTitle, <SettingsTextHow, <SettingsTextPlace
-    !byte <SettingsTextMatch, <SettingsTextNextValue, <SettingsTextChain
-    !byte <SettingsTextNextPage
-    !byte <SettingsTextMergeRules, <SettingsTextMergeOne, <SettingsTextMergeTwo
-    !byte <SettingsTextMergeThree, <SettingsTextMergeFour, <SettingsTextMergeFive
-    !byte <SettingsTextMergeSix, <SettingsTextNextPage
-    !byte <SettingsTextControls, <SettingsTextMoveVertical
-    !byte <SettingsTextMoveHorizontal, <SettingsTextRotate
-    !byte <SettingsTextPlaceKey, <SettingsTextShortcuts, <SettingsTextGear
-    !byte <SettingsTextNextPage
+    !byte <SettingsTextTitle, <SettingsTextMenuControls, <SettingsTextMenuHow
+    !byte <SettingsTextMenuOptions, <SettingsTextMenuHelp, <SettingsTextTabClose
+    !byte <SettingsTextControls, <SettingsTextMove, <SettingsTextRotate
+    !byte <SettingsTextPlaceKey, <SettingsTextBottom, <SettingsTextNewGame
+    !byte <SettingsTextTabOpenClose, <SettingsTextMenuReturn
+    !byte <SettingsTextHow, <SettingsTextPlace, <SettingsTextMatch
+    !byte <SettingsTextNextValue, <SettingsTextFives, <SettingsTextSixes
+    !byte <SettingsTextChain, <SettingsTextMenuReturn
+    !byte <SettingsTextOptions, <SettingsTextMusicOnly, <SettingsTextSfxOnly
+    !byte <SettingsTextOptionHelp, <SettingsTextOptionClose
 SettingsLineHi:
-    !byte >SettingsTextTitle, >SettingsTextHow, >SettingsTextPlace
-    !byte >SettingsTextMatch, >SettingsTextNextValue, >SettingsTextChain
-    !byte >SettingsTextNextPage
-    !byte >SettingsTextMergeRules, >SettingsTextMergeOne, >SettingsTextMergeTwo
-    !byte >SettingsTextMergeThree, >SettingsTextMergeFour, >SettingsTextMergeFive
-    !byte >SettingsTextMergeSix, >SettingsTextNextPage
-    !byte >SettingsTextControls, >SettingsTextMoveVertical
-    !byte >SettingsTextMoveHorizontal, >SettingsTextRotate
-    !byte >SettingsTextPlaceKey, >SettingsTextShortcuts, >SettingsTextGear
-    !byte >SettingsTextNextPage
+    !byte >SettingsTextTitle, >SettingsTextMenuControls, >SettingsTextMenuHow
+    !byte >SettingsTextMenuOptions, >SettingsTextMenuHelp, >SettingsTextTabClose
+    !byte >SettingsTextControls, >SettingsTextMove, >SettingsTextRotate
+    !byte >SettingsTextPlaceKey, >SettingsTextBottom, >SettingsTextNewGame
+    !byte >SettingsTextTabOpenClose, >SettingsTextMenuReturn
+    !byte >SettingsTextHow, >SettingsTextPlace, >SettingsTextMatch
+    !byte >SettingsTextNextValue, >SettingsTextFives, >SettingsTextSixes
+    !byte >SettingsTextChain, >SettingsTextMenuReturn
+    !byte >SettingsTextOptions, >SettingsTextMusicOnly, >SettingsTextSfxOnly
+    !byte >SettingsTextOptionHelp, >SettingsTextOptionClose
 SettingsLineLength:
-    !byte 8,11,18,16,20,18,13
-    !byte 11,14,14,14,14,14,13,13
-    !byte 8,11,14,13,19,17,19,13
+    !byte 8,11,14,10,20,8
+    !byte 8,21,19,20,22,17,18,17
+    !byte 11,21,21,20,16,17,23,17
+    !byte 7,13,16,19,16
 SettingsLineRow:
-    !byte 1,4,7,10,13,16,22
-    !byte 1,4,7,10,13,16,19,22
-    !byte 1,4,7,10,13,16,19,22
+    !byte 1,9,12,15,20,22
+    !byte 1,9,11,13,15,17,19,22
+    !byte 1,9,11,13,15,17,19,22
+    !byte 1,9,12,20,22
 SettingsLineColumn:
-    !byte 12,9,2,4,0,2,7
-    !byte 9,6,6,6,6,6,7,7
-    !byte 12,9,6,7,1,3,1,7
-SettingsLineColor:
-    !fill 23,COLOR_WHITE
+    !byte 11,12,12,12,10,16
+    !byte 11,9,10,10,9,11,10,11
+    !byte 9,9,9,10,12,11,8,11
+    !byte 11,13,12,10,11
 
-SettingsPageStarts: !byte 0,7,15
-SettingsPageCounts: !byte 7,8,8
+SettingsPageStarts: !byte 0,6,14,22
+SettingsPageCounts: !byte 6,8,8,5
 
-SettingsTextTitle:          !text "SETTINGS"
-SettingsTextHow:            !text "HOW TO PLAY"
-SettingsTextPlace:          !text "PLACE DICE ON GRID"
-SettingsTextMatch:          !text "MATCH 3 ADJACENT"
-SettingsTextNextValue:      !text "THREE SAME MAKE NEXT"
-SettingsTextChain:          !text "CHAIN MERGES SCORE"
-SettingsTextMergeRules:     !text "MERGE RULES"
-SettingsTextMergeOne:       !text "THREE 1 MAKE 2"
-SettingsTextMergeTwo:       !text "THREE 2 MAKE 3"
-SettingsTextMergeThree:     !text "THREE 3 MAKE 4"
-SettingsTextMergeFour:      !text "THREE 4 MAKE 5"
-SettingsTextMergeFive:      !text "THREE 5 MAKE 6"
-SettingsTextMergeSix:       !text "THREE 6 CLEAR"
-SettingsTextControls:       !text "CONTROLS"
-SettingsTextMoveVertical:   !text "W UP S DOWN"
-SettingsTextMoveHorizontal: !text "A LEFT D RIGHT"
-SettingsTextRotate:         !text "R OR Q ROTATE"
-SettingsTextPlaceKey:       !text "SPACE OR FIRE PLACE"
-SettingsTextShortcuts:      !text "TAB OPEN OR CLOSE"
-SettingsTextGear:           !text "DOWN THEN FIRE GEAR"
-SettingsTextNextPage:       !text "[N] NEXT PAGE"
+SettingsTextTitle:         !text "SETTINGS"
+SettingsTextMenuControls:  !text "1. CONTROLS"
+SettingsTextMenuHow:       !text "2. HOW TO PLAY"
+SettingsTextMenuOptions:   !text "3. OPTIONS"
+SettingsTextMenuHelp:      !text "W/S SELECT FIRE OPEN"
+SettingsTextTabClose:      !text "X CLOSES"
+SettingsTextControls:      !text "CONTROLS"
+SettingsTextMove:          !text "WASD OR JOYSTICK MOVE"
+SettingsTextRotate:        !text "R OR Q ROTATES PAIR"
+SettingsTextPlaceKey:      !text "SPACE OR FIRE PLACES"
+SettingsTextBottom:        !text "DOWN OPENS BOTTOM MENU"
+SettingsTextNewGame:       !text "N STARTS NEW GAME"
+SettingsTextTabOpenClose:  !text "TAB OPENS SETTINGS"
+SettingsTextMenuReturn:    !text "M RETURNS TO MENU"
+SettingsTextHow:           !text "HOW TO PLAY"
+SettingsTextPlace:         !text "PLACE ONE OR TWO DICE"
+SettingsTextMatch:         !text "MATCH 3 TOUCHING DICE"
+SettingsTextNextValue:     !text "THREE SAME MAKE NEXT"
+SettingsTextFives:         !text "FIVES MAKE SIXES"
+SettingsTextSixes:         !text "THREE SIXES CLEAR"
+SettingsTextChain:         !text "CHAIN MERGES SCORE MORE"
+SettingsTextOptions:       !text "OPTIONS"
+SettingsTextMusicOnly:     !text "1. MUSIC ONLY"
+SettingsTextSfxOnly:       !text "2. SOUND FX ONLY"
+SettingsTextOptionHelp:    !text "W/S SELECT FIRE SET"
+SettingsTextOptionClose:   !text "M MENU  X CLOSES"
 
 settingsFocused: !byte 0
+newGameFocused:  !byte 0
 settingsLineIndex: !byte 0
 settingsLineEnd: !byte 0
 settingsPage: !byte 0
+settingsMenuSelection: !byte 0
+settingsOptionSelection: !byte 0
 
 RunTitleAttractMode:
 RunTitleAttractMode_DrainKeyboard:
@@ -518,6 +493,12 @@ DrawCreditsFadeCard:
     sta creditsLineEnd
 DrawCreditsFadeCard_Line:
     ldx creditsLineIndex
+    lda creditsFadePhase
+    cmp #CREDITS_HOLD_PHASE
+    bne DrawCreditsFadeCard_LineColorReady
+    lda CreditsLineHoldColors,x
+    sta highTextColor
+DrawCreditsFadeCard_LineColorReady:
     lda CreditsLineLo,x
     sta highTextSourceLo
     lda CreditsLineHi,x
@@ -768,35 +749,39 @@ CREDITS_FADE_PHASES = 7
 CREDITS_HOLD_PHASE = 3
 
 CreditsLineLo:
-    !byte <CreditsTextProgrammer, <CreditsTextDSkilton
-    !byte <CreditsTextGraphics, <CreditsTextDSkilton
+    !byte <CreditsTextDesigned, <CreditsTextCharset
+    !byte <CreditsTextBitmapsBy, <CreditsTextDSkilton
     !byte <CreditsTextMusic, <CreditsTextTrack
     !byte <CreditsTextComposerFirst, <CreditsTextComposerLast, <CreditsTextSonix
+    !byte <CreditsTextThanks, <CreditsTextRaistlingp, <CreditsTextLinus
+    !byte <CreditsTextForTheir, <CreditsTextInspiration
     !byte <CreditsTextYear
 CreditsLineHi:
-    !byte >CreditsTextProgrammer, >CreditsTextDSkilton
-    !byte >CreditsTextGraphics, >CreditsTextDSkilton
+    !byte >CreditsTextDesigned, >CreditsTextCharset
+    !byte >CreditsTextBitmapsBy, >CreditsTextDSkilton
     !byte >CreditsTextMusic, >CreditsTextTrack
     !byte >CreditsTextComposerFirst, >CreditsTextComposerLast, >CreditsTextSonix
+    !byte >CreditsTextThanks, >CreditsTextRaistlingp, >CreditsTextLinus
+    !byte >CreditsTextForTheir, >CreditsTextInspiration
     !byte >CreditsTextYear
 CreditsLineLength:
-    !byte 11,8,12,8,5,11,10,11,7,8
+    !byte 8,7,10,8,8,11,10,11,7,9,10,12,9,11,8
 CreditsLineRow:
-    !byte 9,12,9,12,6,9,12,15,18,11
+    !byte 7,10,13,16,6,9,12,15,18,6,9,12,15,18,11
 CreditsLineColumn:
-    !byte 15,18,14,18,22,15,16,15,20,19
+    !byte 19,20,17,19,19,15,16,15,20,18,17,15,18,16,19
 CreditsCardStarts:
-    !byte 0,2,4,9
+    !byte 0,4,9,14
 CreditsCardCounts:
-    !byte 2,2,5,1
+    !byte 4,5,5,1
 CreditsFadeColors:
     !byte COLOR_BLACK,COLOR_DKGRAY,COLOR_LTGRAY,COLOR_WHITE
     !byte COLOR_LTGRAY,COLOR_DKGRAY,COLOR_BLACK
 
-CreditsTextProgrammer: !text "DESIGNED BY"
+CreditsTextDesigned:   !text "DESIGNED"
+CreditsTextCharset:    !text "CHARSET"
+CreditsTextBitmapsBy:  !text "BITMAPS BY"
 CreditsTextDSkilton:   !text "DSKILTON"
-CreditsTextGraphics:   !text "GRAPHIC ARTS"
-CreditsTextMusic:      !text "MUSIC"
 CreditsTextTrack:      !text "ETERNITY #1"
 CreditsTextComposerFirst: !text "PRZEMYSLAW"
 CreditsTextComposerLast: !text "LEWANDOWSKI"
@@ -811,4 +796,3 @@ creditsFadeCard: !byte 0
 creditsFadePhase: !byte 0
 creditsFadeDelay: !byte 0
 creditsFadeHold: !byte 0
-creditsLineEnd: !byte 0

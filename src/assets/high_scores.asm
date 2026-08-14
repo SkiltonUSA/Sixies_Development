@@ -172,53 +172,82 @@ ClearHighScorePanel_Tail:
 InstallNewTopScore:
     lda #0
     sta highScoreEntering
+    sta highEntryIndex
+InstallNewTopScore_CheckEntry:
+    ldx highEntryIndex
+    lda HighScoreScoreOffsets,x
+    tax
     lda scoreThousands
-    cmp HighScoreScores
-    bcc InstallNewTopScore_Done
+    cmp HighScoreScores,x
+    bcc InstallNewTopScore_NotQualified
     bne InstallNewTopScore_Qualified
     lda scoreHundreds
-    cmp HighScoreScores + 1
-    bcc InstallNewTopScore_Done
+    cmp HighScoreScores + 1,x
+    bcc InstallNewTopScore_NotQualified
     bne InstallNewTopScore_Qualified
     lda scoreTens
-    cmp HighScoreScores + 2
-    bcc InstallNewTopScore_Done
+    cmp HighScoreScores + 2,x
+    bcc InstallNewTopScore_NotQualified
     bne InstallNewTopScore_Qualified
     lda scoreOnes
-    cmp HighScoreScores + 3
-    bcc InstallNewTopScore_Done
-    beq InstallNewTopScore_Done
+    cmp HighScoreScores + 3,x
+    bcc InstallNewTopScore_NotQualified
+    bne InstallNewTopScore_Qualified
+InstallNewTopScore_NotQualified:
+    jmp InstallNewTopScore_NextEntry
 InstallNewTopScore_Qualified:
+    ldx highEntryIndex
+    stx highScoreInsertIndex
+    lda HighScoreNameOffsets,x
+    sta highScoreNameOffset
+    lda HighScoreScoreOffsets,x
+    sta highScoreOffset
+
     ldx #11
 InstallNewTopScore_ShiftNames:
+    cpx highScoreNameOffset
+    bcc InstallNewTopScore_NamesShifted
     lda HighScoreNames,x
     sta HighScoreNames + 3,x
     dex
     bpl InstallNewTopScore_ShiftNames
+InstallNewTopScore_NamesShifted:
     ldx #15
 InstallNewTopScore_ShiftScores:
+    cpx highScoreOffset
+    bcc InstallNewTopScore_ScoresShifted
     lda HighScoreScores,x
     sta HighScoreScores + 4,x
     dex
     bpl InstallNewTopScore_ShiftScores
+InstallNewTopScore_ScoresShifted:
     lda #'A'
-    sta HighScoreNames
-    sta HighScoreNames + 1
-    sta HighScoreNames + 2
+    ldx highScoreNameOffset
+    sta HighScoreNames,x
+    sta HighScoreNames + 1,x
+    sta HighScoreNames + 2,x
+    ldx highScoreOffset
     lda scoreThousands
-    sta HighScoreScores
+    sta HighScoreScores,x
     lda scoreHundreds
-    sta HighScoreScores + 1
+    sta HighScoreScores + 1,x
     lda scoreTens
-    sta HighScoreScores + 2
+    sta HighScoreScores + 2,x
     lda scoreOnes
-    sta HighScoreScores + 3
+    sta HighScoreScores + 3,x
     lda #1
     sta highScoreEntering
     lda #0
     sta highInitialPosition
     lda #$ff
     sta highScoreFlashColor
+    rts
+InstallNewTopScore_NextEntry:
+    inc highEntryIndex
+    lda highEntryIndex
+    cmp #5
+    beq InstallNewTopScore_Done
+    jmp InstallNewTopScore_CheckEntry
 InstallNewTopScore_Done:
     rts
 
@@ -368,22 +397,32 @@ EnterHighScoreInitials_Wait:
     bcc EnterHighScoreInitials_Wait
     cmp #$5b
     bcs EnterHighScoreInitials_Wait
+    sta highCharacter
     ldx highInitialPosition
+    txa
+    clc
+    adc highScoreNameOffset
+    tax
+    lda highCharacter
     sta HighScoreNames,x
     inc highInitialPosition
     jsr DrawEnteredInitials
     lda highInitialPosition
     cmp #3
     bne EnterHighScoreInitials_Wait
-    jsr DrawHighScorePage
     lda #0
     sta highScoreEntering
+    jsr DrawHighScorePage
     rts
 
 DrawEnteredInitials:
     lda #<HighScoreNames
-    ldx #>HighScoreNames
-    jsr SetHighScoreTextSource
+    clc
+    adc highScoreNameOffset
+    sta highTextSourceLo
+    lda #>HighScoreNames
+    adc #0
+    sta highTextSourceHi
     lda #3
     sta highTextLength
     lda #21
@@ -393,6 +432,58 @@ DrawEnteredInitials:
     lda #COLOR_YELLOW
     sta highTextColor
     jmp DrawSixiesFont16Text
+
+UpdateHighScoreEntryFlash:
+    lda frameCounter
+    and #8
+    beq UpdateHighScoreEntryFlash_Yellow
+    lda #COLOR_WHITE
+    bne UpdateHighScoreEntryFlash_ColorReady
+UpdateHighScoreEntryFlash_Yellow:
+    lda #COLOR_YELLOW
+UpdateHighScoreEntryFlash_ColorReady:
+    cmp highScoreFlashColor
+    beq UpdateHighScoreEntryFlash_Done
+    sta highScoreFlashColor
+    pha
+    ldx highScoreInsertIndex
+    lda HighScoreRows,x
+    tax
+    lda ScreenRowLo,x
+    sta PTR_LO
+    lda ScreenRowHi,x
+    sta PTR_HI
+    pla
+    asl
+    asl
+    asl
+    asl
+    ldy #6
+UpdateHighScoreEntryFlash_Cell:
+    sta (PTR_LO),y
+    iny
+    cpy #34
+    bne UpdateHighScoreEntryFlash_Cell
+    lda PTR_LO
+    clc
+    adc #40
+    sta PTR_LO
+    bcc UpdateHighScoreEntryFlash_BottomReady
+    inc PTR_HI
+UpdateHighScoreEntryFlash_BottomReady:
+    lda highScoreFlashColor
+    asl
+    asl
+    asl
+    asl
+    ldy #6
+UpdateHighScoreEntryFlash_BottomCell:
+    sta (PTR_LO),y
+    iny
+    cpy #34
+    bne UpdateHighScoreEntryFlash_BottomCell
+UpdateHighScoreEntryFlash_Done:
+    rts
 
 SetHighScoreTextSource:
     sta highTextSourceLo
@@ -531,9 +622,9 @@ HighScoreEntryLine:
 !byte '1','.',' ','D','O','M','.','.','.','.','.', ' ','2','2','0'
 
 HighScoreNames:
-!byte 'D','O','M', 'P','R','I', 'T','W','D', 'K','I','M', 'M','A','X'
+!byte 'D','O','M', 'P','R','I', 'T','W','D', 'T','A','N', 'M','A','X'
 HighScoreScores:
-!byte 0,7,9,3, 0,6,1,3, 0,5,9,0, 0,0,8,0, 0,0,4,0
+!byte 1,3,4,6, 0,6,1,3, 0,5,9,0, 0,0,8,0, 0,0,4,0
 HighScoreNameOffsets:
 !byte 0,3,6,9,12
 HighScoreScoreOffsets:
@@ -552,7 +643,10 @@ AttractPromptText:
 highScoreEntering:   !byte 0
 highInitialPosition: !byte 0
 highEntryIndex:      !byte 0
+highScoreInsertIndex: !byte 0
+highScoreNameOffset: !byte 0
 highScoreOffset:     !byte 0
+highScoreFlashColor: !byte $ff
 highTextSourceLo:    !byte 0
 highTextSourceHi:    !byte 0
 highTextLength:      !byte 0
@@ -585,3 +679,17 @@ HighScoreColorRowHi:
 CHARSET_FIRST = $20
 HighScoreCharset:
 !bin "src/assets/font/SixiesFont_charset.bin"
+
+; Credits text placed in the remaining gap below the $8a00 mascot segment.
+CreditsTextThanks:      !text "THANKS TO"
+CreditsTextRaistlingp:  !text "RAISTLINGP"
+CreditsTextLinus:       !text "LINUS @KESSON"
+CreditsTextForTheir:    !text "FOR THEIR"
+CreditsTextInspiration: !text "INSPIRATION"
+CreditsTextMusic:       !text "MUSIC BY"
+CreditsLineHoldColors:
+    !byte COLOR_WHITE,COLOR_WHITE,COLOR_WHITE,COLOR_LTGRAY
+    !byte COLOR_WHITE,COLOR_LTGRAY,COLOR_LTGRAY,COLOR_LTGRAY,COLOR_LTGRAY
+    !byte COLOR_WHITE,COLOR_LTGRAY,COLOR_LTGRAY,COLOR_LTGRAY,COLOR_LTGRAY
+    !byte COLOR_LTGRAY
+creditsLineEnd: !byte 0

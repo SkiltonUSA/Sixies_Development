@@ -78,25 +78,21 @@ def expand_nibble(value):
     return output
 
 
-def draw_font16(bitmap, color_ram, font, text, cell_x, cell_y, color):
+def draw_font16_multicolor(bitmap, color_ram, font, text, cell_x, cell_y, color):
     for character_index, character in enumerate(text):
-        if "A" <= character <= "Z":
-            glyph_index = ord(character) - ord("A")
-        elif "0" <= character <= "9":
-            glyph_index = 26 + ord(character) - ord("0")
-        else:
+        glyph_index = ord(character) - 0x20
+        if glyph_index < 0 or glyph_index >= len(font) // 8:
             raise ValueError(f"unsupported presents character {character!r}")
-        glyph = font[glyph_index * 32:(glyph_index + 1) * 32]
-        for glyph_y in range(16):
-            source = (glyph[glyph_y * 2] << 8) | glyph[glyph_y * 2 + 1]
-            logical = 0
-            for pair in range(8):
-                mask = 0xC000 >> (pair * 2)
-                logical = (logical << 1) | int(bool(source & mask))
+        glyph = font[glyph_index * 8:(glyph_index + 1) * 8]
+        for source_y, source in enumerate(glyph):
+            glyph_y = source_y * 2
             row = cell_y + glyph_y // 8
             left_cell = row * 40 + cell_x + character_index * 2
-            bitmap[left_cell * 8 + glyph_y % 8] = expand_nibble(logical >> 4)
-            bitmap[(left_cell + 1) * 8 + glyph_y % 8] = expand_nibble(logical & 0x0f)
+            left = expand_nibble(source >> 4)
+            right = expand_nibble(source & 0x0f)
+            for doubled_y in (glyph_y, glyph_y + 1):
+                bitmap[left_cell * 8 + doubled_y % 8] = left
+                bitmap[(left_cell + 1) * 8 + doubled_y % 8] = right
             color_ram[left_cell] = color
             color_ram[left_cell + 1] = color
 
@@ -112,14 +108,14 @@ def main():
         raise ValueError("expected a standard 10003-byte Koala file loaded at $6000")
 
     bitmap = bytearray(koala[2:8002])
-    screen = koala[8002:9002]
+    screen = bytearray(koala[8002:9002])
     color_ram = bytearray(koala[9002:10002])
     background = koala[10002]
     font = font_path.read_bytes()
-    if len(font) != 36 * 32:
-        raise ValueError(f"expected 1152 font bytes, received {len(font)}")
-    draw_font16(bitmap, color_ram, font, "A", 19, 0, 5)
-    draw_font16(bitmap, color_ram, font, "GAME", 16, 23, 5)
+    if len(font) != 64 * 8:
+        raise ValueError(f"expected 512 font bytes, received {len(font)}")
+    draw_font16_multicolor(bitmap, color_ram, font, "A", 19, 0, 1)
+    draw_font16_multicolor(bitmap, color_ram, font, "PRESENTATION", 8, 23, 1)
     packed_bitmap = pack(bitmap)
     packed_screen = pack(screen)
     packed_color = pack(color_ram)

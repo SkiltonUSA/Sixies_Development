@@ -5,6 +5,12 @@ ACME = $(if $(wildcard $(LOCAL_ACME)),$(LOCAL_ACME),$(SYSTEM_ACME))
 SIDKIT_DIR := $(ROOT)/.tools/c64SIDkit
 SIDKIT_PYTHON := $(SIDKIT_DIR)/.venv/bin/python
 TARGET := build/dice_merge.prg
+CRUNCHED_TARGET := build/dice_merge-crunched.prg
+SIXIES_MUSIC_SOURCE := src/music/sixies_rhythmic_grammar.asm
+SIXIES_MUSIC_RAW := build/sixies_rhythmic_grammar.bin
+SIXIES_MUSIC_SID := build/Sixies_Rhythmic_Grammar.sid
+SYSTEM_EXOMIZER := $(shell command -v exomizer 2>/dev/null)
+EXOMIZER ?= $(if $(SYSTEM_EXOMIZER),$(SYSTEM_EXOMIZER),/Applications/ALBERT.app/Contents/MacOS/exomizer)
 SOURCE := src/grid_base.asm
 ASM_SOURCES := \
 	src/assets/title_screen.asm \
@@ -21,7 +27,11 @@ ASM_SOURCES := \
 	src/assets/presents_screen.asm \
 	src/assets/title_music.asm \
 	src/assets/merge_diagonal_sweep.asm \
+	src/assets/merge_mascot_callout.asm \
+	src/assets/merge_callout_data.asm \
+	src/assets/bottom_controls.asm \
 	src/assets/settings_screen.asm \
+	src/assets/settings_art.asm \
 	src/assets/main_mascot.asm \
 	src/assets/game_over_prompt.asm \
 	src/assets/merge_shake.asm \
@@ -59,6 +69,9 @@ TITLE_MUSIC_BIN := src/assets/title_music.bin
 MASCOT_MASTER := src/assets/main_mascot_master.png
 MASCOT_BITMAP := src/assets/main_mascot_bitmap.bin
 MASCOT_SCREEN := src/assets/main_mascot_screen.bin
+SETTINGS_DICE_MASTER := src/assets/settings_dice_master.png
+SETTINGS_DICE_BITMAP := src/assets/settings_dice_bitmap.bin
+SETTINGS_DICE_SCREEN := src/assets/settings_dice_screen.bin
 CREDITS_MASCOT_MASTER := src/assets/credits_mascot_master.png
 CREDITS_MASCOT_BITMAP := src/assets/credits_mascot_bitmap.bin
 CREDITS_MASCOT_SCREEN := src/assets/credits_mascot_screen.bin
@@ -82,6 +95,19 @@ FONT_DIGITS_PREVIEW := src/assets/font/SixiesDigits16_preview.png
 FONT_GAME_OVER := src/assets/game_over.asm
 FONT_GAME_OVER_PROMPT := src/assets/game_over_prompt.asm
 FONT_DIGITS := src/assets/large_digits.asm
+MERGE_CALLOUT_PACKED := src/assets/merge_callouts_packed.bin
+MERGE_CALLOUT_TABLES := src/assets/merge_callout_data.asm
+MERGE_CALLOUT_SOURCES := \
+	src/assets/exclamations/AWESOME.png \
+	src/assets/exclamations/BOOM.png \
+	src/assets/exclamations/DANG.png \
+	src/assets/exclamations/FIVES.png \
+	src/assets/exclamations/LETS_GO.png \
+	src/assets/exclamations/SIXIES.png \
+	src/assets/exclamations/WHOA.png \
+	src/assets/exclamations/WOW.png \
+	src/assets/exclamations/YEAH.png \
+	src/assets/exclamations/YES.png
 BINARY_ASSETS := \
 	$(KOALA_PACKED) \
 	$(TITLE_PACKED) \
@@ -89,6 +115,8 @@ BINARY_ASSETS := \
 	$(TITLE_PROMPT_SPRITES) \
 	$(MASCOT_BITMAP) \
 	$(MASCOT_SCREEN) \
+	$(SETTINGS_DICE_BITMAP) \
+	$(SETTINGS_DICE_SCREEN) \
 	$(CREDITS_MASCOT_BITMAP) \
 	$(CREDITS_MASCOT_SCREEN) \
 	$(CREDITS_LOGO_BITMAP) \
@@ -98,11 +126,16 @@ BINARY_ASSETS := \
 	$(PRESENTS_COLOR_PACKED) \
 	$(PRESENTS_BACKGROUND) \
 	$(FONT_CHARSET) \
-	$(FONT_CHARSET16)
+	$(FONT_CHARSET16) \
+	$(MERGE_CALLOUT_PACKED)
 
-.PHONY: all setup-acme setup-sidkit sidkit run clean FORCE
+.PHONY: all crunch release music setup-acme setup-sidkit sidkit run clean FORCE
 
 all: $(TARGET)
+
+crunch release: $(CRUNCHED_TARGET)
+
+music: $(SIXIES_MUSIC_SID)
 
 setup-acme:
 	./scripts/setup-acme.sh
@@ -139,10 +172,17 @@ $(TITLE_PACKED) $(TITLE_TABLES): $(TITLE_KLA) scripts/pack-koala.py
 	./scripts/pack-koala.py "$(TITLE_KLA)" src/assets title_koala
 
 $(MASCOT_BITMAP): $(MASCOT_MASTER) scripts/convert-main-mascot.py
-	./scripts/convert-main-mascot.py "$(MASCOT_MASTER)" src/assets
+	./scripts/convert-main-mascot.py "$(MASCOT_MASTER)" src/assets main_mascot 80 80
 	ffmpeg -v error -y -i src/assets/main_mascot_preview.ppm src/assets/main_mascot_preview.png
 
 $(MASCOT_SCREEN): $(MASCOT_BITMAP)
+	@test -f "$@"
+
+$(SETTINGS_DICE_BITMAP): $(SETTINGS_DICE_MASTER) scripts/convert-main-mascot.py
+	./scripts/convert-main-mascot.py "$(SETTINGS_DICE_MASTER)" src/assets settings_dice 64 56 full-palette
+	ffmpeg -v error -y -i src/assets/settings_dice_preview.ppm src/assets/settings_dice_preview.png
+
+$(SETTINGS_DICE_SCREEN): $(SETTINGS_DICE_BITMAP)
 	@test -f "$@"
 
 $(CREDITS_MASCOT_BITMAP): $(CREDITS_MASCOT_MASTER) scripts/convert-main-mascot.py
@@ -159,8 +199,8 @@ $(CREDITS_LOGO_BITMAP): $(CREDITS_LOGO_MASTER) scripts/convert-main-mascot.py
 $(CREDITS_LOGO_SCREEN): $(CREDITS_LOGO_BITMAP)
 	@test -f "$@"
 
-$(PRESENTS_BITMAP_PACKED): $(PRESENTS_MASTER) $(FONT_CHARSET16) scripts/convert-presents.py
-	./scripts/convert-presents.py "$(PRESENTS_MASTER)" "$(FONT_CHARSET16)" src/assets
+$(PRESENTS_BITMAP_PACKED): $(PRESENTS_MASTER) $(FONT_CHARSET) scripts/convert-presents.py
+	./scripts/convert-presents.py "$(PRESENTS_MASTER)" "$(FONT_CHARSET)" src/assets
 	ffmpeg -v error -y -i src/assets/presents_preview.ppm src/assets/presents_preview.png
 
 $(PRESENTS_SCREEN_PACKED) $(PRESENTS_COLOR_PACKED) $(PRESENTS_BACKGROUND): $(PRESENTS_BITMAP_PACKED)
@@ -184,9 +224,30 @@ $(FONT_DIGITS): $(FONT_GAME_OVER)
 $(FONT_GAME_OVER_PROMPT): $(FONT_GAME_OVER)
 	@test -f "$@"
 
+$(MERGE_CALLOUT_PACKED): $(MERGE_CALLOUT_SOURCES) scripts/build-merge-callouts.py
+	python3 scripts/build-merge-callouts.py src/assets/exclamations src/assets
+	ffmpeg -v error -y -i src/assets/merge_callouts_preview.ppm src/assets/merge_callouts_preview.png
+
+$(MERGE_CALLOUT_TABLES): $(MERGE_CALLOUT_PACKED)
+	@test -f "$@"
+
+$(SIXIES_MUSIC_RAW): $(SIXIES_MUSIC_SOURCE) | build
+	@if [ ! -x "$(LOCAL_ACME)" ]; then ./scripts/setup-acme.sh; fi
+	@"$(ACME)" --strict-segments -f plain -o "$@" "$<"
+
+$(SIXIES_MUSIC_SID): $(SIXIES_MUSIC_RAW) scripts/package-psid.py | build
+	@python3 scripts/package-psid.py "$<" "$@"
+
 $(TARGET): FORCE $(SOURCE) $(ASM_SOURCES) $(BINARY_ASSETS) $(KOALA_TABLES) $(FONT_COLORS) $(TITLE_TABLES) | build
 	@if [ ! -x "$(LOCAL_ACME)" ]; then ./scripts/setup-acme.sh; fi
 	@"$(ACME)" --strict-segments -f cbm -o "$(TARGET)" "$(SOURCE)"
+
+$(CRUNCHED_TARGET): $(TARGET) | build
+	@if [ ! -x "$(EXOMIZER)" ]; then \
+		echo "Exomizer 3.1.2 was not found at $(EXOMIZER)."; \
+		exit 1; \
+	fi
+	@"$(EXOMIZER)" sfx basic -o "$(abspath $@)" "$(abspath $(TARGET))"
 
 run: $(TARGET)
 	@if command -v x64sc >/dev/null 2>&1; then \

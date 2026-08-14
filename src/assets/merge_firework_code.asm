@@ -15,7 +15,7 @@ RestoreBottomIconsDuringEffect_SettingsIdle:
     lda #COLOR_LTBLUE
 RestoreBottomIconsDuringEffect_SettingsColor:
     sta SPRITE0_COLOR + 7
-    lda #12
+    lda #SETTINGS_ICON_X
     sta SPRITE0_X + 14
     lda #222
     sta SPRITE0_Y + 14
@@ -214,7 +214,7 @@ SetupBottomSpritesImpl_SettingsIdle:
     lda #COLOR_LTBLUE
 SetupBottomSpritesImpl_SettingsColor:
     sta SPRITE0_COLOR + 7
-    lda #12
+    lda #SETTINGS_ICON_X
     sta SPRITE0_X + 14
     lda #222
     sta SPRITE0_Y + 14

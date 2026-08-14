@@ -23,7 +23,7 @@ ResetSoundEffects:
     sta sfxRandomSeed
     rts
 
-PlayBounce:
+PlayBounceImpl:
     lda sfxPriority
     cmp #2
     bcs PlayBounce_Done
@@ -49,7 +49,7 @@ PlayBounce:
 PlayBounce_Done:
     rts
 
-PlayPortalPing:
+PlayPortalPingImpl:
     ; Drop the previous gate before restoring the preset registers so rapid
     ; rotations retrigger the envelope instead of extending the old note.
     lda #$10
@@ -74,7 +74,7 @@ PlayPortalPing:
     sta sfxFrames
     rts
 
-PlayGridSetup:
+PlayGridSetupImpl:
     jsr InitTest11
     lda #3
     sta sfxPriority
@@ -82,7 +82,7 @@ PlayGridSetup:
     sta sfxFrames
     rts
 
-PlayInvalidPlacement:
+PlayInvalidPlacementImpl:
     jsr InitInvalidBonk
     lda #2
     sta sfxPriority
@@ -90,7 +90,7 @@ PlayInvalidPlacement:
     sta sfxFrames
     rts
 
-PlayFirstMerge:
+PlayFirstMergeImpl:
     ; A rising major arpeggio gives every first merge a happy resolution.
     lda #$40
     sta SID_V1_CONTROL
@@ -116,7 +116,7 @@ PlayFirstMerge:
     sta sfxFrames
     rts
 
-PlaySecondMerge:
+PlaySecondMergeImpl:
     ; A brighter octave-up flourish distinguishes the second chain reaction.
     lda #$40
     sta SID_V1_CONTROL

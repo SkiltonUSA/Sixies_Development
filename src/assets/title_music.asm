@@ -32,7 +32,7 @@ TitleMusicRasterIRQ:
 TitleMusicRasterIRQ_Exit:
     jmp IRQ_EXIT
 
-InitTitleMusic:
+InitTitleMusicImpl:
     jsr ResetSoundEffects
     lda #0
     sta titleMusicNtscDivider
@@ -71,58 +71,8 @@ StopTitleMusic_ClearSid:
     bpl StopTitleMusic_ClearSid
     rts
 
-UpdateHighScoreEntryFlash:
-    lda frameCounter
-    and #8
-    beq UpdateHighScoreEntryFlash_Yellow
-    lda #COLOR_WHITE
-    bne UpdateHighScoreEntryFlash_ColorReady
-UpdateHighScoreEntryFlash_Yellow:
-    lda #COLOR_YELLOW
-UpdateHighScoreEntryFlash_ColorReady:
-    cmp highScoreFlashColor
-    beq UpdateHighScoreEntryFlash_Done
-    sta highScoreFlashColor
-    pha
-    lda ScreenRowLo + 8
-    sta PTR_LO
-    lda ScreenRowHi + 8
-    sta PTR_HI
-    pla
-    asl
-    asl
-    asl
-    asl
-    ldy #6
-UpdateHighScoreEntryFlash_Cell:
-    sta (PTR_LO),y
-    iny
-    cpy #34
-    bne UpdateHighScoreEntryFlash_Cell
-    lda PTR_LO
-    clc
-    adc #40
-    sta PTR_LO
-    bcc UpdateHighScoreEntryFlash_BottomReady
-    inc PTR_HI
-UpdateHighScoreEntryFlash_BottomReady:
-    lda highScoreFlashColor
-    asl
-    asl
-    asl
-    asl
-    ldy #6
-UpdateHighScoreEntryFlash_BottomCell:
-    sta (PTR_LO),y
-    iny
-    cpy #34
-    bne UpdateHighScoreEntryFlash_BottomCell
-UpdateHighScoreEntryFlash_Done:
-    rts
-
 titleMusicNtscDivider: !byte 0
 titleMusicActive:      !byte 0
-highScoreFlashColor:   !byte $ff
 
 * = $a000
 TitleMusicData:

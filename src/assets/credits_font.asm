@@ -164,6 +164,8 @@ SelectCreditsFont16Glyph:
     beq SelectCreditsFont16Glyph_RightBracket
     cmp #'.'
     beq SelectCreditsFont16Glyph_Period
+    cmp #'@'
+    beq SelectCreditsFont16Glyph_Aring
     cmp #'0'
     bcc SelectCreditsFont16Glyph_Letter
     cmp #('9' + 1)
@@ -221,6 +223,10 @@ SelectCreditsFont16Glyph_Period:
     lda #<CreditsFont16Period
     ldx #>CreditsFont16Period
     bne SelectCreditsFont16Glyph_Store
+SelectCreditsFont16Glyph_Aring:
+    lda #<CreditsFont16Aring
+    ldx #>CreditsFont16Aring
+    bne SelectCreditsFont16Glyph_Store
 SelectCreditsFont16Glyph_LeftBracket:
     lda #<CreditsFont16LeftBracket
     ldx #>CreditsFont16LeftBracket
@@ -246,6 +252,11 @@ CreditsFont16RightParen:
 CreditsFont16Period:
 !fill 24,0
 !byte $03,$c0,$03,$c0,$03,$c0,$00,$00
+CreditsFont16Aring:
+; A custom Sixies-style A-ring. Credits strings use '@' for this glyph.
+!byte $01,$80,$02,$40,$01,$80
+!byte $07,$80,$0f,$c0,$1f,$e0,$3f,$f0,$3f,$f0,$3f,$f0,$3c,$f0,$7f,$fc
+!byte $7f,$fc,$7f,$fc,$7c,$fc,$7c,$fc,$38,$78
 CreditsFont16LeftBracket:
 !byte $0f,$f0,$0f,$f0
 !for row, 1, 12 { !byte $0c,$00 }

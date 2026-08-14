@@ -1,5 +1,5 @@
-; Uses the final bytes before the runtime shadow-sprite bank at $4c00.
-* = $4be6
+; Lives with the merge-shake code below the packed callouts and above the screen.
+* = $4300
 
 ConfigureMergeFirework:
     ldx #2

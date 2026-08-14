@@ -60,6 +60,10 @@ COLOR_DKGRAY    = 11
 COLOR_LTBLUE    = 14
 COLOR_LTGRAY    = 15
 
+AUDIO_BOTH       = 0
+AUDIO_MUSIC_ONLY = 1
+AUDIO_SFX_ONLY   = 2
+
 GRID_LEFT       = 10
 GRID_TOP        = 1
 GRID_SPAN       = 20
@@ -84,6 +88,11 @@ ACTION_PLACE    = 6
 ACTION_NEW      = 7
 ACTION_DEBUG_FILL = 8
 ACTION_SETTINGS = 9
+
+; Sprite coordinates include the VIC-II's 24-pixel left border. These values
+; center each 24-pixel icon over its 64-pixel label.
+NEW_GAME_ICON_X = 92
+SETTINGS_ICON_X = 28
 
 * = $0801
 !word BasicEnd
@@ -138,13 +147,14 @@ MainLoop:
     lda gameOver
     bne MainLoop
 
-    lda settingsFocused
+    lda newGameFocused
+    ora settingsFocused
     beq MainLoop_GridAction
-    lda action
-    cmp #ACTION_PLACE
+    jsr HandleBottomControlAction
+    cmp #ACTION_NEW
+    beq MainLoop_NewGame
+    cmp #ACTION_SETTINGS
     beq MainLoop_Settings
-    cmp #ACTION_UP
-    beq MainLoop_SettingsBack
     jmp MainLoop
 
 MainLoop_GridAction:
@@ -185,10 +195,6 @@ MainLoop_Settings:
     jsr ShowSettingsScreen
     jmp MainLoop
 
-MainLoop_SettingsBack:
-    jsr UnfocusSettingsIcon
-    jmp MainLoop
-
 MainLoop_Left:
     lda cursorX
     beq MainLoop_Update
@@ -214,14 +220,13 @@ MainLoop_Up:
 MainLoop_Down:
     lda cursorY
     cmp #4
-    beq MainLoop_FocusSettings
+    bne MainLoop_MoveDown
+    jsr FocusBottomOption
+    jmp MainLoop
+MainLoop_MoveDown:
     inc cursorY
     jsr PlayBounce
     jmp MainLoop_Update
-
-MainLoop_FocusSettings:
-    jsr FocusSettingsIcon
-    jmp MainLoop
 
 MainLoop_Rotate:
     lda pieceCount
@@ -291,8 +296,8 @@ ShowTitleScreen:
     sta BORDER
     sta BACKGROUND
 
-    ; The title is stored packed; expand it band by band into the bitmap,
-    ; screen and color planes through the shared Koala stream decoder.
+    ; The title remains packed in the program image so the merge callouts can
+    ; occupy their own RAM block. Expand it in five independent bands.
     lda #0
     sta titleBand
 ShowTitleScreen_Band:
@@ -481,6 +486,7 @@ WaitFrame:
     beq WaitFrame
     sta lastFrame
     jsr UpdateCreditsFade
+    jsr UpdateMascotCalloutRipple
     rts
 
 ResetGameLocked:
@@ -504,8 +510,10 @@ ResetGame_ClearBoard:
     sta singlesOnlyMode
     sta joystickLatch
     sta settingsFocused
+    sta newGameFocused
     sta ghostSuppressed
     sta BORDER
+    sta mergeCalloutIndex
     lda #1
     sta displayDirty
     lda RASTER_LINE
@@ -1040,6 +1048,7 @@ AnimateMergeGroup_FirstColor:
     lda #COLOR_WHITE
 AnimateMergeGroup_StoreColor:
     sta mergeFlashColor
+    jsr BeginMascotMergeCallout
     jsr ClearMergeCellMarks
     ldx #0
 AnimateMergeGroup_Mark:
@@ -1052,6 +1061,7 @@ AnimateMergeGroup_Mark:
     jsr RunMergeGridSweep
     jsr RunMergeFirework
     jsr RunDiceFlash
+    jsr EndMascotMergeCallout
     rts
 
 AnimatePlacedPiece:
@@ -1125,6 +1135,18 @@ WaitAnimationFrames:
     sta animationFrames
 WaitAnimationFrames_Next:
     jsr WaitFrame
+    lda TV_STANDARD
+    bne WaitAnimationFrames_CountFrame
+    ; PAL animations use 50 frames/second. Add one frame after every five
+    ; NTSC frames so visible gameplay effects keep the same duration at 60 Hz.
+    inc animationNtscDivider
+    lda animationNtscDivider
+    cmp #5
+    bne WaitAnimationFrames_CountFrame
+    lda #0
+    sta animationNtscDivider
+    jsr WaitFrame
+WaitAnimationFrames_CountFrame:
     dec animationFrames
     bne WaitAnimationFrames_Next
     rts
@@ -1835,9 +1857,15 @@ SetupBottomSprites:
 ConfigureNewGameSprite:
     lda #$76
     sta SPRITE0_PTR + 6
+    lda newGameFocused
+    beq ConfigureNewGameSprite_Idle
+    lda #COLOR_YELLOW
+    bne ConfigureNewGameSprite_ColorReady
+ConfigureNewGameSprite_Idle:
     lda #COLOR_LTBLUE
+ConfigureNewGameSprite_ColorReady:
     sta SPRITE0_COLOR + 6
-    lda #76
+    lda #NEW_GAME_ICON_X
     sta SPRITE0_X + 12
     lda #222
     sta SPRITE0_Y + 12
@@ -2273,29 +2301,19 @@ DrawHorizontalLine_Column:
 
 DrawBottomLabels:
     lda #<NewGameLabel
-    ldx #>NewGameLabel
-    jsr SetHighScoreTextSource
+    sta SOURCE_LO
+    lda #>NewGameLabel
+    sta SOURCE_HI
     lda #8
-    sta highTextLength
-    lda #24
-    sta highTextRow
-    lda #6
-    sta highTextColumn
-    lda #COLOR_LTBLUE
-    sta highTextColor
-    jsr DrawSixiesHiresText
+    sta labelColumn
+    jsr DrawLabel32
     lda #<SettingsLabel
-    ldx #>SettingsLabel
-    jsr SetHighScoreTextSource
-    lda #8
-    sta highTextLength
-    lda #24
-    sta highTextRow
-    lda #30
-    sta highTextColumn
-    lda #COLOR_LTBLUE
-    sta highTextColor
-    jsr DrawSixiesHiresText
+    sta SOURCE_LO
+    lda #>SettingsLabel
+    sta SOURCE_HI
+    lda #32
+    sta labelColumn
+    jsr DrawLabel32
     rts
 
 DrawMainMascot:
@@ -2360,6 +2378,32 @@ DrawMainMascot_ScreenSourceReady:
     lda workRow
     cmp #14
     bne DrawMainMascot_ScreenRow
+    rts
+
+DrawLabel32:
+    lda #24
+    jsr SetBitmapRowPointer
+    lda labelColumn
+    jsr AddColumnOffset
+    ldy #0
+DrawLabel32_Copy:
+    lda (SOURCE_LO),y
+    sta (PTR_LO),y
+    iny
+    cpy #32
+    bne DrawLabel32_Copy
+    lda #<(SCREEN + (24 * 40))
+    sta PTR_LO
+    lda #>(SCREEN + (24 * 40))
+    sta PTR_HI
+    ldy labelColumn
+    lda #(COLOR_LTBLUE << 4) | COLOR_BLACK
+    ldx #4
+DrawLabel32_Color:
+    sta (PTR_LO),y
+    iny
+    dex
+    bne DrawLabel32_Color
     rts
 
 SetBitmapRowPointer:
@@ -2554,6 +2598,7 @@ mergeFlashPhase:   !byte 0
 mergeFlashColor:   !byte COLOR_WHITE
 mergeChainDepth:   !byte 0
 animationFrames:   !byte 0
+animationNtscDivider: !byte 0
 rippleColor:       !byte COLOR_LTBLUE
 rippleStep:        !byte 0
 blindRow:          !byte 0
@@ -2563,6 +2608,7 @@ fireworkActive:    !byte 0
 blindCharacterRow: !byte 0
 fireworkBaseX:     !byte 0
 fireworkBaseY:     !byte 0
+mergeCalloutIndex: !byte 0
 shadowSourceByte:  !byte 0
 titleCopyRemainder: !byte 0
 titleBand:          !byte 0
@@ -2582,7 +2628,10 @@ packedValue:       !byte 0
 !source "src/assets/presents_screen.asm"
 !source "src/assets/title_music.asm"
 !source "src/assets/merge_diagonal_sweep.asm"
+!source "src/assets/merge_mascot_callout.asm"
+!source "src/assets/bottom_controls.asm"
 !source "src/assets/settings_screen.asm"
+!source "src/assets/settings_art.asm"
 !source "src/assets/main_mascot.asm"
 !source "src/assets/game_over_prompt.asm"
 !source "src/assets/merge_shake.asm"

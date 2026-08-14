@@ -1,6 +1,6 @@
 ; Generated from src/assets/font/SixiesFont_image.asm.
 ; Full-width end-screen prompt rendered with the default Sixies font.
-* = $4ad0
+* = $41d0
 GameOverPromptText: !text "PRESS N FOR NEW GAME"
 
 DrawGameOverPrompt:

@@ -1,6 +1,6 @@
 ; Value-scaled impact shake for the second and later merges in one turn.
-; This occupies the fixed gap below the merge-firework helper at $4be6.
-* = $4b10
+; Lives in the gap between packed merge callouts and the screen at $4400.
+* = $4220
 
 RunMergeGridShake:
     lda VIC_MODE

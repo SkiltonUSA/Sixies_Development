@@ -2,7 +2,11 @@
 * = $9400
 
 RunMergeLevelEffects:
+    lda audioMode
+    cmp #AUDIO_MUSIC_ONLY
+    beq RunMergeLevelEffects_Shake
     jsr PlayMergeValueSound
+RunMergeLevelEffects_Shake:
     lda mergeChainDepth
     cmp #2
     bcc RunMergeLevelEffects_Done
