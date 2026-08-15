@@ -744,7 +744,7 @@ DrawSixiesHiresText_Next:
     bne DrawSixiesHiresText_Character
     rts
 
-CREDITS_CARD_COUNT = 4
+CREDITS_CARD_COUNT = 3
 CREDITS_FADE_PHASES = 7
 CREDITS_HOLD_PHASE = 3
 
@@ -753,27 +753,23 @@ CreditsLineLo:
     !byte <CreditsTextBitmapsBy, <CreditsTextDSkilton
     !byte <CreditsTextMusic, <CreditsTextTrack
     !byte <CreditsTextComposerFirst, <CreditsTextComposerLast, <CreditsTextSonix
-    !byte <CreditsTextThanks, <CreditsTextRaistlingp, <CreditsTextLinus
-    !byte <CreditsTextForTheir, <CreditsTextInspiration
-    !byte <CreditsTextYear
+    !byte <CreditsTextStudio313, <CreditsTextGames, <CreditsTextYear
 CreditsLineHi:
     !byte >CreditsTextDesigned, >CreditsTextCharset
     !byte >CreditsTextBitmapsBy, >CreditsTextDSkilton
     !byte >CreditsTextMusic, >CreditsTextTrack
     !byte >CreditsTextComposerFirst, >CreditsTextComposerLast, >CreditsTextSonix
-    !byte >CreditsTextThanks, >CreditsTextRaistlingp, >CreditsTextLinus
-    !byte >CreditsTextForTheir, >CreditsTextInspiration
-    !byte >CreditsTextYear
+    !byte >CreditsTextStudio313, >CreditsTextGames, >CreditsTextYear
 CreditsLineLength:
-    !byte 8,7,10,8,8,11,10,11,7,9,10,12,9,11,8
+    !byte 8,7,10,8,8,11,10,11,7,10,5,8
 CreditsLineRow:
-    !byte 7,10,13,16,6,9,12,15,18,6,9,12,15,18,11
+    !byte 7,10,13,16,6,9,12,15,18,8,11,14
 CreditsLineColumn:
-    !byte 19,20,17,19,19,15,16,15,20,18,17,15,18,16,19
+    !byte 19,20,17,19,19,15,16,15,20,17,22,19
 CreditsCardStarts:
-    !byte 0,4,9,14
+    !byte 0,4,9
 CreditsCardCounts:
-    !byte 4,5,5,1
+    !byte 4,5,3
 CreditsFadeColors:
     !byte COLOR_BLACK,COLOR_DKGRAY,COLOR_LTGRAY,COLOR_WHITE
     !byte COLOR_LTGRAY,COLOR_DKGRAY,COLOR_BLACK
@@ -786,6 +782,8 @@ CreditsTextTrack:      !text "ETERNITY #1"
 CreditsTextComposerFirst: !text "PRZEMYSLAW"
 CreditsTextComposerLast: !text "LEWANDOWSKI"
 CreditsTextSonix:      !text "(SONIX)"
+CreditsTextStudio313:  !text "STUDIO 313"
+CreditsTextGames:      !text "GAMES"
 CreditsTextYear:       !text "(C) 2026"
 CreditsStartPrompt:    !text "PRESS FIRE START"
 CreditsNewGamePrompt:  !text "PRESS N NEW GAME"

@@ -680,16 +680,10 @@ CHARSET_FIRST = $20
 HighScoreCharset:
 !bin "src/assets/font/SixiesFont_charset.bin"
 
-; Credits text placed in the remaining gap below the $8a00 mascot segment.
-CreditsTextThanks:      !text "THANKS TO"
-CreditsTextRaistlingp:  !text "RAISTLINGP"
-CreditsTextLinus:       !text "LINUS @KESSON"
-CreditsTextForTheir:    !text "FOR THEIR"
-CreditsTextInspiration: !text "INSPIRATION"
+; Credits data placed in the remaining gap below the $8a00 mascot segment.
 CreditsTextMusic:       !text "MUSIC BY"
 CreditsLineHoldColors:
     !byte COLOR_WHITE,COLOR_WHITE,COLOR_WHITE,COLOR_LTGRAY
     !byte COLOR_WHITE,COLOR_LTGRAY,COLOR_LTGRAY,COLOR_LTGRAY,COLOR_LTGRAY
-    !byte COLOR_WHITE,COLOR_LTGRAY,COLOR_LTGRAY,COLOR_LTGRAY,COLOR_LTGRAY
-    !byte COLOR_LTGRAY
+    !byte COLOR_LTGRAY,COLOR_LTGRAY,COLOR_LTGRAY
 creditsLineEnd: !byte 0
