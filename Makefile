@@ -129,13 +129,22 @@ BINARY_ASSETS := \
 	$(FONT_CHARSET16) \
 	$(MERGE_CALLOUT_PACKED)
 
-.PHONY: all crunch release music setup-acme setup-sidkit sidkit run clean FORCE
+.PHONY: all crunch release music test-porting setup-porting setup-nes setup-acme setup-sidkit sidkit run clean FORCE
 
 all: $(TARGET)
 
 crunch release: $(CRUNCHED_TARGET)
 
 music: $(SIXIES_MUSIC_SID)
+
+test-porting:
+	python3 tests/porting/validate_vectors.py
+
+setup-porting:
+	./scripts/setup-porting-workspace.sh
+
+setup-nes:
+	./scripts/setup-nes-toolchain.sh
 
 setup-acme:
 	./scripts/setup-acme.sh

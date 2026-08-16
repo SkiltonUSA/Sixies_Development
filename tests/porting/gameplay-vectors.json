@@ -1,0 +1,231 @@
+{
+  "schema": "sixies-gameplay-vectors-v1",
+  "board_format": "Five rows of five row-major cells; 0 is empty and 1-6 are dice.",
+  "vectors": [
+    {
+      "id": "placement-single-empty",
+      "operation": "placement",
+      "board": [[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+      "piece": {"values": [3], "origin": [2,2], "orientation": 0},
+      "expected": {"valid": true, "origin_index": 12, "second_index": null}
+    },
+    {
+      "id": "placement-single-occupied",
+      "operation": "placement",
+      "board": [[0,0,0,0,0],[0,0,0,0,0],[0,0,4,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+      "piece": {"values": [1], "origin": [2,2], "orientation": 0},
+      "expected": {"valid": false, "origin_index": 12, "second_index": null}
+    },
+    {
+      "id": "placement-double-down",
+      "operation": "placement",
+      "board": [[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+      "piece": {"values": [2,3], "origin": [1,1], "orientation": 1},
+      "expected": {"valid": true, "origin_index": 6, "second_index": 11}
+    },
+    {
+      "id": "placement-double-edge",
+      "operation": "placement",
+      "board": [[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+      "piece": {"values": [2,3], "origin": [4,4], "orientation": 0},
+      "expected": {"valid": false, "origin_index": 24, "second_index": null}
+    },
+    {
+      "id": "placement-double-second-occupied",
+      "operation": "placement",
+      "board": [[0,0,0,0,0],[0,0,3,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+      "piece": {"values": [2,4], "origin": [1,1], "orientation": 0},
+      "expected": {"valid": false, "origin_index": 6, "second_index": 7}
+    },
+    {
+      "id": "merge-three-ones",
+      "operation": "resolve",
+      "board": [[0,0,0,0,0],[0,0,0,0,0],[1,1,1,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+      "active": 11,
+      "expected": {
+        "board": [[0,0,0,0,0],[0,0,0,0,0],[0,2,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+        "score": 3,
+        "events": [{"value": 1, "count": 3, "score_delta": 3, "active": 11}]
+      }
+    },
+    {
+      "id": "merge-four-twos-one-result",
+      "operation": "resolve",
+      "board": [[0,0,0,0,0],[0,2,2,0,0],[0,2,2,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+      "active": 12,
+      "expected": {
+        "board": [[0,0,0,0,0],[0,0,0,0,0],[0,0,3,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+        "score": 8,
+        "events": [{"value": 2, "count": 4, "score_delta": 8, "active": 12}]
+      }
+    },
+    {
+      "id": "diagonal-does-not-merge",
+      "operation": "resolve",
+      "board": [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+      "active": 6,
+      "expected": {
+        "board": [[1,0,0,0,0],[0,1,0,0,0],[0,0,1,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+        "score": 0,
+        "events": []
+      }
+    },
+    {
+      "id": "separated-equal-dice-do-not-merge",
+      "operation": "resolve",
+      "board": [[3,3,0,3,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+      "active": 0,
+      "expected": {
+        "board": [[3,3,0,3,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+        "score": 0,
+        "events": []
+      }
+    },
+    {
+      "id": "merge-sixes-clear",
+      "operation": "resolve",
+      "board": [[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[6,6,6,0,0]],
+      "active": 21,
+      "expected": {
+        "board": [[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+        "score": 18,
+        "events": [{"value": 6, "count": 3, "score_delta": 18, "active": 21}]
+      }
+    },
+    {
+      "id": "chain-ones-through-twos",
+      "operation": "resolve",
+      "board": [[0,0,0,0,0],[0,0,2,0,0],[0,1,1,1,0],[0,0,2,0,0],[0,0,0,0,0]],
+      "active": 12,
+      "expected": {
+        "board": [[0,0,0,0,0],[0,0,0,0,0],[0,0,3,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+        "score": 9,
+        "events": [
+          {"value": 1, "count": 3, "score_delta": 3, "active": 12},
+          {"value": 2, "count": 3, "score_delta": 6, "active": 12}
+        ]
+      }
+    },
+    {
+      "id": "score-saturates-at-9999",
+      "operation": "resolve",
+      "score": 9995,
+      "board": [[6,6,6,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+      "active": 1,
+      "expected": {
+        "board": [[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+        "score": 9999,
+        "events": [{"value": 6, "count": 3, "score_delta": 18, "active": 1}]
+      }
+    },
+    {
+      "id": "double-origin-resolves-before-second",
+      "operation": "place",
+      "board": [[0,0,2,0,0],[1,0,0,0,0],[0,1,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+      "piece": {"values": [1,2], "origin": [1,1], "orientation": 0},
+      "expected": {
+        "valid": true,
+        "board": [[0,0,0,0,0],[0,3,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+        "score": 9,
+        "events": [
+          {"value": 1, "count": 3, "score_delta": 3, "active": 6},
+          {"value": 2, "count": 3, "score_delta": 6, "active": 6}
+        ]
+      }
+    },
+    {
+      "id": "double-second-cleared-by-origin",
+      "operation": "place",
+      "board": [[0,0,0,0,0],[1,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+      "piece": {"values": [1,1], "origin": [1,1], "orientation": 0},
+      "expected": {
+        "valid": true,
+        "board": [[0,0,0,0,0],[0,2,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+        "score": 3,
+        "events": [{"value": 1, "count": 3, "score_delta": 3, "active": 6}]
+      }
+    },
+    {
+      "id": "spawn-basic-single-consumes-two-values",
+      "operation": "spawn",
+      "seed": 1,
+      "board": [[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+      "expected": {"count": 1, "raw_values": [1,1], "cursor": [2,2], "orientation": 0, "seed": 8, "singles_only": false, "game_over": false}
+    },
+    {
+      "id": "spawn-basic-double",
+      "operation": "spawn",
+      "seed": 129,
+      "board": [[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+      "expected": {"count": 2, "raw_values": [3,1], "cursor": [2,2], "orientation": 0, "seed": 124, "singles_only": false, "game_over": false}
+    },
+    {
+      "id": "spawn-double-four-rerolls-second",
+      "operation": "spawn",
+      "seed": 224,
+      "board": [[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+      "expected": {"count": 2, "raw_values": [4,3], "cursor": [2,2], "orientation": 0, "seed": 166, "singles_only": false, "game_over": false}
+    },
+    {
+      "id": "spawn-five-eligible-low-probability",
+      "operation": "spawn",
+      "seed": 1,
+      "board": [[5,5,5,5,5],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+      "expected": {"count": 1, "raw_values": [5,1], "cursor": [2,2], "orientation": 0, "seed": 16, "singles_only": false, "game_over": false}
+    },
+    {
+      "id": "spawn-four-fives-do-not-run-eligibility-roll",
+      "operation": "spawn",
+      "seed": 1,
+      "board": [[5,5,5,5,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+      "expected": {"count": 1, "raw_values": [1,1], "cursor": [2,2], "orientation": 0, "seed": 8, "singles_only": false, "game_over": false}
+    },
+    {
+      "id": "spawn-five-test-cannot-pass-for-double-sequence",
+      "operation": "spawn",
+      "seed": 129,
+      "board": [[5,5,5,5,5],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+      "expected": {"count": 2, "raw_values": [3,1], "cursor": [2,2], "orientation": 0, "seed": 248, "singles_only": false, "game_over": false}
+    },
+    {
+      "id": "spaces-adjacent-pair",
+      "operation": "space_detection",
+      "board": [[0,0,1,1,1],[1,1,1,1,1],[1,1,1,1,1],[1,1,1,1,1],[1,1,1,1,1]],
+      "expected": {"double_space_available": true, "single_placement_available": true, "double_placement_available": true}
+    },
+    {
+      "id": "spaces-separated-empties-force-singles",
+      "operation": "space_detection",
+      "board": [[0,1,0,1,1],[1,1,1,1,1],[1,1,1,1,1],[1,1,1,1,1],[1,1,1,1,1]],
+      "expected": {"double_space_available": false, "single_placement_available": true, "double_placement_available": false}
+    },
+    {
+      "id": "spawn-forced-single-with-space",
+      "operation": "spawn",
+      "seed": 129,
+      "board": [[0,1,0,1,1],[1,1,1,1,1],[1,1,1,1,1],[1,1,1,1,1],[1,1,1,1,1]],
+      "expected": {"count": 1, "raw_values": [3,1], "cursor": [2,2], "orientation": 0, "seed": 124, "singles_only": true, "game_over": false}
+    },
+    {
+      "id": "spawn-existing-single-only-mode-is-permanent",
+      "operation": "spawn",
+      "seed": 129,
+      "singles_only": true,
+      "board": [[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+      "expected": {"count": 1, "raw_values": [3,1], "cursor": [2,2], "orientation": 0, "seed": 124, "singles_only": true, "game_over": false}
+    },
+    {
+      "id": "full-board-detected",
+      "operation": "space_detection",
+      "board": [[1,2,3,4,5],[6,1,2,3,4],[5,6,1,2,3],[4,5,6,1,2],[3,4,5,6,1]],
+      "expected": {"double_space_available": false, "single_placement_available": false, "double_placement_available": false}
+    },
+    {
+      "id": "spawn-full-board-game-over",
+      "operation": "spawn",
+      "seed": 129,
+      "board": [[1,2,3,4,5],[6,1,2,3,4],[5,6,1,2,3],[4,5,6,1,2],[3,4,5,6,1]],
+      "expected": {"count": 1, "raw_values": [3,1], "cursor": [2,2], "orientation": 0, "seed": 124, "singles_only": true, "game_over": true}
+    }
+  ]
+}
