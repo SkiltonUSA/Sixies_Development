@@ -1,0 +1,5 @@
+"$schema" = "https://conductor.build/schemas/settings.repo.schema.json"
+
+[scripts]
+setup = "if [ \"$CONDUCTOR_IS_LOCAL\" = \"1\" ]; then ./scripts/setup-gameboy.sh; fi"
+run_mode = "concurrent"
