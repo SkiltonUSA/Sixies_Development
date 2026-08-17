@@ -6,9 +6,11 @@ from pathlib import Path
 
 from nes_graphics import (
     indexed_preview,
+    nesst_rle_decode,
     parse_ines,
     parse_palette,
     render_chr_sheet,
+    render_nesst_screen,
     render_tilemap,
     write_png,
 )
@@ -35,8 +37,13 @@ def main():
                         help="tile sheet columns (default: 16)")
     parser.add_argument("--max-tiles", type=positive,
                         help="render only the first N tiles")
-    parser.add_argument("--nametable", type=Path,
-                        help="render this compact nametable instead of a tile sheet")
+    nametable_group = parser.add_mutually_exclusive_group()
+    nametable_group.add_argument("--nametable", type=Path,
+                                 help="render this compact nametable")
+    nametable_group.add_argument("--nesst-nam", type=Path,
+                                 help="render a NESst .nam or .rle screen")
+    parser.add_argument("--nesst-palette", type=Path,
+                        help="16-byte NESst .pal file")
     parser.add_argument("--tile-columns", type=positive)
     parser.add_argument("--tile-rows", type=positive)
     args = parser.parse_args()
@@ -44,7 +51,18 @@ def main():
     try:
         data = args.input.read_bytes()
         chr_data = parse_ines(data).chr_rom if args.ines else data
-        if args.nametable:
+        if args.nesst_palette and not args.nesst_nam:
+            raise ValueError("--nesst-palette requires --nesst-nam")
+        if args.nesst_nam:
+            if args.tile_columns is not None or args.tile_rows is not None:
+                raise ValueError("tile dimensions cannot be used with --nesst-nam")
+            screen_data = args.nesst_nam.read_bytes()
+            if args.nesst_nam.suffix.lower() == ".rle":
+                screen_data = nesst_rle_decode(screen_data)
+            palette_data = (args.nesst_palette.read_bytes()
+                            if args.nesst_palette else bytes(args.palette) * 4)
+            image = render_nesst_screen(chr_data, screen_data, palette_data)
+        elif args.nametable:
             if args.tile_columns is None or args.tile_rows is None:
                 raise ValueError("--nametable requires --tile-columns and --tile-rows")
             indexed = render_tilemap(
@@ -53,12 +71,14 @@ def main():
                 args.tile_columns,
                 args.tile_rows,
             )
+            image = indexed_preview(indexed, args.palette)
         else:
             if args.tile_columns is not None or args.tile_rows is not None:
                 raise ValueError("tile dimensions require --nametable")
             indexed = render_chr_sheet(chr_data, args.columns, args.max_tiles)
+            image = indexed_preview(indexed, args.palette)
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        write_png(args.output, indexed_preview(indexed, args.palette))
+        write_png(args.output, image)
     except (OSError, ValueError) as error:
         parser.error(str(error))
 

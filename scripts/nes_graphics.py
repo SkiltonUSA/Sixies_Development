@@ -68,6 +68,12 @@ class InesImage:
     trailing_data: bytes
 
 
+@dataclass(frozen=True)
+class NesstScreen:
+    nametable: bytes
+    attributes: bytes
+
+
 def _paeth(left, up, upper_left):
     estimate = left + up - upper_left
     distances = (
@@ -371,6 +377,151 @@ def crop_indexed(indexed, width, height):
     if height > len(indexed) or any(width > len(row) for row in indexed[:height]):
         raise ValueError("crop exceeds indexed image dimensions")
     return tuple(tuple(row[:width]) for row in indexed[:height])
+
+
+def decode_attribute_table(attributes, tile_columns=32, tile_rows=30):
+    """Expand NES attribute bytes to one background palette index per tile."""
+    if tile_columns <= 0 or tile_rows <= 0:
+        raise ValueError("attribute dimensions must be positive")
+    attribute_columns = (tile_columns + 3) // 4
+    attribute_rows = (tile_rows + 3) // 4
+    if len(attributes) != attribute_columns * attribute_rows:
+        raise ValueError("attribute table size does not match tile dimensions")
+    output = []
+    for y in range(tile_rows):
+        row = []
+        for x in range(tile_columns):
+            value = attributes[(y // 4) * attribute_columns + x // 4]
+            shift = (2 if x & 2 else 0) + (4 if y & 2 else 0)
+            row.append((value >> shift) & 3)
+        output.append(tuple(row))
+    return tuple(output)
+
+
+def encode_attribute_table(palette_grid):
+    """Pack tile palette choices into NES attributes.
+
+    Every 2x2-tile quadrant must use a single palette, matching PPU hardware.
+    """
+    tile_rows = len(palette_grid)
+    tile_columns = len(palette_grid[0]) if tile_rows else 0
+    if tile_columns == 0 or any(len(row) != tile_columns for row in palette_grid):
+        raise ValueError("palette grid must be a non-empty rectangle")
+    if any(value < 0 or value > 3 for row in palette_grid for value in row):
+        raise ValueError("background palette indices must be between 0 and 3")
+    attribute_columns = (tile_columns + 3) // 4
+    attribute_rows = (tile_rows + 3) // 4
+    attributes = bytearray(attribute_columns * attribute_rows)
+    for quadrant_y in range((tile_rows + 1) // 2):
+        for quadrant_x in range((tile_columns + 1) // 2):
+            values = {
+                palette_grid[y][x]
+                for y in range(quadrant_y * 2, min(quadrant_y * 2 + 2, tile_rows))
+                for x in range(quadrant_x * 2, min(quadrant_x * 2 + 2, tile_columns))
+            }
+            if len(values) != 1:
+                raise ValueError(
+                    f"palette changes inside 2x2 tile quadrant at "
+                    f"({quadrant_x * 2},{quadrant_y * 2})"
+                )
+            palette_index = values.pop()
+            attribute_x = quadrant_x // 2
+            attribute_y = quadrant_y // 2
+            shift = (quadrant_x & 1) * 2 + (quadrant_y & 1) * 4
+            attributes[attribute_y * attribute_columns + attribute_x] |= (
+                palette_index << shift
+            )
+    return bytes(attributes)
+
+
+def parse_nesst_nam(data):
+    """Parse a standard NESst 960-byte or 1024-byte nametable file."""
+    if len(data) == 960:
+        return NesstScreen(data, bytes(64))
+    if len(data) == 1024:
+        return NesstScreen(data[:960], data[960:])
+    raise ValueError("NESst nametable must contain 960 or 1024 bytes")
+
+
+def render_nesst_screen(chr_data, screen_data, palette_data):
+    """Render a standard NESst screen using all four background palettes."""
+    screen = parse_nesst_nam(screen_data)
+    if len(palette_data) != 16:
+        raise ValueError("NESst palette must contain exactly 16 bytes")
+    if any(value >= 64 for value in palette_data):
+        raise ValueError("NES palette values must be between 00 and 3f")
+    indexed = render_tilemap(chr_data, screen.nametable, 32, 30)
+    palette_grid = decode_attribute_table(screen.attributes, 32, 30)
+    pixels = []
+    for y, row in enumerate(indexed):
+        output = []
+        for x, value in enumerate(row):
+            palette_index = palette_grid[y // 8][x // 8]
+            nes_color = palette_data[palette_index * 4 + value]
+            output.append(NES_PALETTE[nes_color] + (255,))
+        pixels.append(tuple(output))
+    return RgbaImage(256, 240, tuple(pixels))
+
+
+def nesst_rle_encode(data):
+    """Encode bytes with Shiru's NESst tag-and-repeat RLE format."""
+    used = set(data)
+    tag = next((value for value in range(256) if value not in used), None)
+    if tag is None:
+        raise ValueError("NESst RLE needs one byte value unused by the input")
+    output = bytearray((tag,))
+    previous = None
+    run_length = 1
+    for offset, value in enumerate(data):
+        if (previous != value or run_length >= 255
+                or offset == len(data) - 1):
+            if run_length > 1:
+                if run_length == 2:
+                    output.append(previous)
+                else:
+                    output.extend((tag, run_length - 1))
+            output.append(value)
+            previous = value
+            run_length = 1
+        else:
+            run_length += 1
+    output.extend((tag, 0))
+    return bytes(output)
+
+
+def nesst_rle_decode(data, expected_size=None):
+    """Decode Shiru's NESst RLE format with structural and size checks."""
+    if not data:
+        raise ValueError("NESst RLE data is empty")
+    tag = data[0]
+    output = bytearray()
+    offset = 1
+    terminated = False
+    while offset < len(data):
+        value = data[offset]
+        offset += 1
+        if value != tag:
+            output.append(value)
+            continue
+        if offset >= len(data):
+            raise ValueError("NESst RLE repeat marker is truncated")
+        count = data[offset]
+        offset += 1
+        if count == 0:
+            terminated = True
+            break
+        if not output:
+            raise ValueError("NESst RLE stream repeats before its first byte")
+        output.extend((output[-1],) * count)
+    if not terminated:
+        raise ValueError("NESst RLE stream has no end marker")
+    if offset != len(data):
+        raise ValueError("NESst RLE stream has trailing data")
+    if expected_size is not None and len(output) != expected_size:
+        raise ValueError(
+            f"NESst RLE decoded to {len(output)} bytes, expected {expected_size}"
+        )
+    return bytes(output)
 
 
 def expand_metatile_atlas(definitions, metatile_width, metatile_height,

@@ -15,11 +15,16 @@ from nes_graphics import (  # noqa: E402
     RgbaImage,
     build_tiles,
     choose_palette,
+    decode_attribute_table,
     decode_tile,
+    encode_attribute_table,
     encode_tile,
     expand_metatile_atlas,
     map_nametable_to_chr,
+    nesst_rle_decode,
+    nesst_rle_encode,
     parse_ines,
+    parse_nesst_nam,
     read_png,
     render_tilemap,
     write_png,
@@ -80,6 +85,33 @@ class NesGraphicsTests(unittest.TestCase):
             bytes((1, 2, 5, 6, 3, 4, 7, 8)),
         )
 
+    def test_nes_attributes_round_trip_four_quadrants(self):
+        palette_grid = (
+            (0, 0, 1, 1),
+            (0, 0, 1, 1),
+            (2, 2, 3, 3),
+            (2, 2, 3, 3),
+        )
+        attributes = encode_attribute_table(palette_grid)
+        self.assertEqual(attributes, b"\xe4")
+        self.assertEqual(decode_attribute_table(attributes, 4, 4), palette_grid)
+
+    def test_nesst_rle_matches_reference_format(self):
+        source = b"\x01\x01\x01\x01\x02"
+        packed = nesst_rle_encode(source)
+        self.assertEqual(packed, b"\x00\x01\x00\x03\x02\x00\x00")
+        self.assertEqual(nesst_rle_decode(packed, expected_size=5), source)
+        self.assertEqual(
+            nesst_rle_encode(b"\x01\x01\x01\x02"),
+            b"\x00\x01\x00\x02\x02\x00\x00",
+        )
+
+    def test_nesst_nam_accepts_tiles_with_or_without_attributes(self):
+        tiles = bytes(960)
+        self.assertEqual(parse_nesst_nam(tiles).attributes, bytes(64))
+        attributes = bytes((0xe4,)) + bytes(63)
+        self.assertEqual(parse_nesst_nam(tiles + attributes).attributes, attributes)
+
     def test_ines_parser_extracts_chr_rom(self):
         header = b"NES\x1a" + bytes((1, 1, 0, 0)) + bytes(8)
         rom = header + bytes(16384) + bytes((0x5a,)) * 8192
@@ -128,6 +160,28 @@ class NesGraphicsTests(unittest.TestCase):
             ), check=True, capture_output=True, text=True)
             image = read_png(preview)
             self.assertEqual((image.width, image.height), (128, 8))
+
+    def test_chr_render_cli_accepts_nesst_screen(self):
+        solid = encode_tile(tuple((1,) * 8 for _ in range(8)))
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            chr_path = directory / "screen.chr"
+            nam_path = directory / "screen.rle"
+            pal_path = directory / "screen.pal"
+            preview = directory / "screen.png"
+            chr_path.write_bytes(solid)
+            nam_path.write_bytes(nesst_rle_encode(bytes(1024)))
+            pal_path.write_bytes(bytes((0x0f, 0x16, 0x27, 0x30)) * 4)
+            subprocess.run((
+                sys.executable,
+                str(ROOT / "scripts/render-nes-chr.py"),
+                str(chr_path),
+                str(preview),
+                "--nesst-nam", str(nam_path),
+                "--nesst-palette", str(pal_path),
+            ), check=True, capture_output=True, text=True)
+            image = read_png(preview)
+            self.assertEqual((image.width, image.height), (256, 240))
 
 
 if __name__ == "__main__":

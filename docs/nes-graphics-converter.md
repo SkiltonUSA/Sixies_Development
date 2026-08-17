@@ -78,7 +78,30 @@ a compact tilemap instead of displaying sequential tiles. The shared library
 also exposes `map_nametable_to_chr`, `expand_metatile_atlas`, and `parse_ines`
 for asset-build scripts.
 
+## NESst compatibility
+
+Shiru's NES Screen Tool uses hardware-native files: `.chr` pattern data,
+16-byte `.pal` files, and `.nam` screens containing either 960 tile indices or
+960 tile indices followed by the 64-byte NES attribute table. Render those
+files on macOS without the legacy Windows application:
+
+```sh
+python3 scripts/render-nes-chr.py screen.chr screen.png \
+  --nesst-nam screen.nam --nesst-palette screen.pal
+```
+
+The renderer also recognizes NESst `.rle` files passed to `--nesst-nam` and
+decodes them automatically. `nes_graphics.py` provides checked implementations
+of NESst RLE encoding/decoding and NES attribute packing/unpacking. Attribute
+packing rejects palette changes inside a 2x2-tile quadrant because the NES PPU
+cannot represent them.
+
 The inspection and metatile features are informed by Matthew Gilmore's
 `fc_tools` utilities. The pinned source and license reference is recorded in
 `third_party/segaloco-fc-tools/README.md`; the external C and shell programs
 are not build dependencies.
+
+NESst v2.51 is public domain. Its source is Borland C++Builder/VCL code and is
+therefore retained as a format and behavior reference rather than introduced
+as a build dependency. Provenance and the original 6502 RLE decoder are in
+`third_party/shiru-nesst/`.
