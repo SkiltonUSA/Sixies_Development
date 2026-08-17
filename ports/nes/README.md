@@ -21,6 +21,7 @@ Build and test it with:
 ```sh
 make nes-test
 make nes
+make nes-usage
 make run-nes
 ```
 
@@ -33,6 +34,11 @@ with normal, legal-preview, and blocked variants. The prototype uses the stock
 cc65 NES runtime and NROM layout.
 `make run-nes` opens it in the Nestopia UE emulator installed by
 `make setup-nes`.
+
+`make nes-usage` rebuilds the ROM if necessary and analyzes the current ld65
+map. It reports each segment's byte count and the contribution from every game
+or runtime object, making code, data, BSS, and CHR growth visible before mapper
+or memory-layout decisions are made.
 
 For general artwork, `scripts/convert-png-to-nes.py` emits CHR, compact
 nametable, palette, metadata, and preview files from an 8-bit PNG. See

@@ -28,6 +28,7 @@ make setup-porting
 make setup-nes
 make nes-test
 make nes
+make nes-usage
 make run-nes
 ```
 
@@ -44,7 +45,8 @@ the gameplay vectors; and writes discoverable local paths to the gitignored
 
 `make nes-test` checks the portable C rules implementation on the host, and
 `make nes` builds the rough playable ROM at
-`ports/nes/build/sixies-nes.nes`. `make run-nes` opens that ROM in Nestopia UE.
+`ports/nes/build/sixies-nes.nes`. `make nes-usage` reports ROM and RAM segment
+use by linked object. `make run-nes` opens the ROM in Nestopia UE.
 
 `make crunch` uses `exomizer` from `PATH` when available. Set `EXOMIZER=/path/to/exomizer` to use a specific binary; the bundled Albert path remains a fallback for this development machine.
 

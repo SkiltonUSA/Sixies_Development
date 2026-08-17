@@ -19,6 +19,7 @@ make setup-porting   # verify and index a fresh branch/workspace
 make setup-nes       # verify or install the cc65 NES toolchain
 make nes-test        # run the portable C rules checks on the host
 make nes             # build the playable NES shell ROM
+make nes-usage       # report NES ROM and RAM use by segment and object
 make run-nes         # launch the NES shell in Nestopia UE
 make setup-acme      # install the local ACME assembler
 make setup-sidkit    # install the local c64SIDkit tools

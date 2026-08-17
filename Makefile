@@ -15,6 +15,7 @@ NES_SOURCES := $(NES_ROOT)/src/game.c $(NES_ROOT)/src/rules.c $(NES_ROOT)/src/ch
 NES_HEADERS := $(NES_ROOT)/include/sixies_rules.h
 NES_HOST_TEST := $(NES_ROOT)/build/rules_test
 NES_GRAPHICS_TEST := $(NES_ROOT)/tests/test_nes_graphics.py
+NES_USAGE_TOOL := third_party/pinobatch-full-quiet-oss/tools/ld65ramuse.py
 HOST_CC ?= cc
 SIXIES_MUSIC_SOURCE := src/music/sixies_rhythmic_grammar.asm
 SIXIES_MUSIC_RAW := build/sixies_rhythmic_grammar.bin
@@ -139,7 +140,7 @@ BINARY_ASSETS := \
 	$(FONT_CHARSET16) \
 	$(MERGE_CALLOUT_PACKED)
 
-.PHONY: all crunch release music nes nes-test run-nes test-porting setup-porting setup-nes setup-acme setup-sidkit sidkit run clean FORCE
+.PHONY: all crunch release music nes nes-test nes-usage run-nes test-porting setup-porting setup-nes setup-acme setup-sidkit sidkit run clean FORCE
 
 all: $(TARGET)
 
@@ -152,6 +153,9 @@ nes: $(NES_ROM)
 nes-test: $(NES_HOST_TEST)
 	$(NES_HOST_TEST)
 	python3 $(NES_GRAPHICS_TEST)
+
+nes-usage: $(NES_ROM)
+	python3 $(NES_USAGE_TOOL) $(NES_MAP)
 
 run-nes: $(NES_ROM)
 	nestopia $(NES_ROM)

@@ -209,6 +209,11 @@ CHR space, worst-case NMI update bytes, and maximum sprite count. Mapper,
 persistence, and audio decisions should be made from those measurements rather
 than from the C64 memory map.
 
+Run `make nes-usage` after linking to report segment and object-level ROM/RAM
+use from `ports/nes/build/sixies-nes.map`. Full Quiet OSS stripe extraction and
+metasprite bank packing remain deferred until the presentation milestones need
+background-object queues or animated sprite cels.
+
 The C64 raster schedule, Koala unpacking, and SID calls are references for
 feel, not implementation requirements.
 
