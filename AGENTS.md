@@ -17,6 +17,9 @@ make music           # package the standalone Sixies SID tune
 make test-porting    # validate the portable gameplay conformance vectors
 make setup-porting   # verify and index a fresh branch/workspace
 make setup-nes       # verify or install the cc65 NES toolchain
+make nes-test        # run the portable C rules checks on the host
+make nes             # build the playable NES shell ROM
+make run-nes         # launch the NES shell in Nestopia UE
 make setup-acme      # install the local ACME assembler
 make setup-sidkit    # install the local c64SIDkit tools
 make sidkit          # open the c64SIDkit sound-effect editor

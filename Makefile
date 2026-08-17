@@ -6,6 +6,16 @@ SIDKIT_DIR := $(ROOT)/.tools/c64SIDkit
 SIDKIT_PYTHON := $(SIDKIT_DIR)/.venv/bin/python
 TARGET := build/dice_merge.prg
 CRUNCHED_TARGET := build/dice_merge-crunched.prg
+NES_ROOT := ports/nes
+NES_ROM := $(NES_ROOT)/build/sixies-nes.nes
+NES_MAP := $(NES_ROOT)/build/sixies-nes.map
+NES_CHR := $(NES_ROOT)/build/sixies.chr
+NES_DICE_ASSETS := $(wildcard $(NES_ROOT)/assets/dice/dice_*_64x64.png)
+NES_SOURCES := $(NES_ROOT)/src/game.c $(NES_ROOT)/src/rules.c $(NES_ROOT)/src/chr.s
+NES_HEADERS := $(NES_ROOT)/include/sixies_rules.h
+NES_HOST_TEST := $(NES_ROOT)/build/rules_test
+NES_GRAPHICS_TEST := $(NES_ROOT)/tests/test_nes_graphics.py
+HOST_CC ?= cc
 SIXIES_MUSIC_SOURCE := src/music/sixies_rhythmic_grammar.asm
 SIXIES_MUSIC_RAW := build/sixies_rhythmic_grammar.bin
 SIXIES_MUSIC_SID := build/Sixies_Rhythmic_Grammar.sid
@@ -129,13 +139,34 @@ BINARY_ASSETS := \
 	$(FONT_CHARSET16) \
 	$(MERGE_CALLOUT_PACKED)
 
-.PHONY: all crunch release music test-porting setup-porting setup-nes setup-acme setup-sidkit sidkit run clean FORCE
+.PHONY: all crunch release music nes nes-test run-nes test-porting setup-porting setup-nes setup-acme setup-sidkit sidkit run clean FORCE
 
 all: $(TARGET)
 
 crunch release: $(CRUNCHED_TARGET)
 
 music: $(SIXIES_MUSIC_SID)
+
+nes: $(NES_ROM)
+
+nes-test: $(NES_HOST_TEST)
+	$(NES_HOST_TEST)
+	python3 $(NES_GRAPHICS_TEST)
+
+run-nes: $(NES_ROM)
+	nestopia $(NES_ROM)
+
+$(NES_ROM): $(NES_SOURCES) $(NES_HEADERS) $(NES_CHR) | $(NES_ROOT)/build
+	cl65 -t nes -O -I $(NES_ROOT)/include -m $(NES_MAP) -o $@ $(NES_SOURCES)
+
+$(NES_CHR): scripts/build-nes-chr.py scripts/nes_graphics.py $(NES_DICE_ASSETS) | $(NES_ROOT)/build
+	python3 scripts/build-nes-chr.py $@
+
+$(NES_HOST_TEST): $(NES_ROOT)/tests/rules_test.c $(NES_ROOT)/src/rules.c $(NES_HEADERS) | $(NES_ROOT)/build
+	$(HOST_CC) -std=c99 -Wall -Wextra -Werror -pedantic -I $(NES_ROOT)/include -o $@ $(NES_ROOT)/tests/rules_test.c $(NES_ROOT)/src/rules.c
+
+$(NES_ROOT)/build:
+	mkdir -p $@
 
 test-porting:
 	python3 tests/porting/validate_vectors.py

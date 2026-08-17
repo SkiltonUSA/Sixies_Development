@@ -21,6 +21,16 @@ if ! command -v cc65 >/dev/null 2>&1; then
   fi
 fi
 
+if ! command -v nestopia >/dev/null 2>&1; then
+  if command -v brew >/dev/null 2>&1; then
+    echo "Nestopia UE not found on PATH. Installing via Homebrew..."
+    brew install nestopia-ue
+  else
+    echo "Nestopia UE is required for NES ROM smoke tests and Homebrew is unavailable." >&2
+    exit 1
+  fi
+fi
+
 required_tools=(cc65 ca65 ld65 cl65 ar65 od65 sim65)
 for tool in "${required_tools[@]}"; do
   if ! command -v "$tool" >/dev/null 2>&1; then
@@ -54,6 +64,7 @@ cc65_version="$(cc65 --version 2>&1 | head -n 1 || true)"
   write_export SIXIES_AR65 "$(command -v ar65)"
   write_export SIXIES_OD65 "$(command -v od65)"
   write_export SIXIES_SIM65 "$(command -v sim65)"
+  write_export SIXIES_NES_EMULATOR "$(command -v nestopia)"
 } > "$ENV_FILE"
 
 {
@@ -67,6 +78,7 @@ cc65_version="$(cc65 --version 2>&1 | head -n 1 || true)"
   printf 'ar65 path: %s\n' "$(command -v ar65)"
   printf 'od65 path: %s\n' "$(command -v od65)"
   printf 'sim65 path: %s\n' "$(command -v sim65)"
+  printf 'NES emulator path: %s\n' "$(command -v nestopia)"
   printf 'Environment exports: %s\n' "$ENV_FILE"
 } > "$STATUS_FILE"
 

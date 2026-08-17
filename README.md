@@ -26,6 +26,9 @@ make run
 make crunch
 make setup-porting
 make setup-nes
+make nes-test
+make nes
+make run-nes
 ```
 
 The normal build creates `build/dice_merge.prg`. `make crunch` also creates the self-extracting release file `build/dice_merge-crunched.prg` using the installed Exomizer 3.1.2 binary. ACME is installed locally under `.tools/` when needed.
@@ -38,6 +41,10 @@ the gameplay vectors; and writes discoverable local paths to the gitignored
 `make setup-nes` verifies or installs the `cc65` NES toolchain, creates the
 `ports/nes/` workspace layout, and writes toolchain paths to the gitignored
 `.context/nes-toolchain.env` file.
+
+`make nes-test` checks the portable C rules implementation on the host, and
+`make nes` builds the rough playable ROM at
+`ports/nes/build/sixies-nes.nes`. `make run-nes` opens that ROM in Nestopia UE.
 
 `make crunch` uses `exomizer` from `PATH` when available. Set `EXOMIZER=/path/to/exomizer` to use a specific binary; the bundled Albert path remains a fallback for this development machine.
 
