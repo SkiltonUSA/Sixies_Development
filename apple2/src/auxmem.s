@@ -11,6 +11,8 @@
 .export _invert_dhgr_tile_main
 .export _draw_merge_effect_aux
 .export _draw_merge_effect_main
+.export _save_merge_effect_background
+.export _restore_merge_effect_background
 .export _xor_merge_star
 .export _xor_score_digit
 .import _dhgr_transfer_buffer
@@ -35,13 +37,19 @@
 
 RAMWRT_MAIN = $C004
 RAMWRT_AUX  = $C005
+RAMRD_MAIN  = $C002
+RAMRD_AUX   = $C003
 EIGHTY_STORE_OFF = $C000
 EIGHTY_STORE_ON  = $C001
 PAGE1 = $C054
 PAGE2 = $C055
 MERGE_EFFECT_ROW_BYTES = 20
 MERGE_EFFECT_HEIGHT = 48
+MERGE_EFFECT_BANK_BYTES = MERGE_EFFECT_ROW_BYTES * MERGE_EFFECT_HEIGHT
+MERGE_EFFECT_BACKUP = $4000
 MERGE_STAR_ROW_BYTES = 8
+
+.assert MERGE_EFFECT_BACKUP + MERGE_EFFECT_BANK_BYTES * 2 <= $6000, error, "merge save-under exceeds auxiliary HGR Page 2"
 
 .segment "CODE"
 
@@ -360,6 +368,114 @@ opaque_source_ready:
 .segment "LC"
 
 .include "score_digits.inc"
+
+; Preserve both planes beneath the opaque callout in otherwise unused
+; auxiliary HGR Page 2. Keeping this code in the language card allows the
+; auxiliary read switch to remain active while copying the saved bytes back.
+.proc _save_merge_effect_background
+    sta EIGHTY_STORE_OFF
+    sta PAGE1
+    sta RAMRD_MAIN
+    sta RAMWRT_AUX
+    lda #<MERGE_EFFECT_BACKUP
+    sta ptr3
+    lda #>MERGE_EFFECT_BACKUP
+    sta ptr3+1
+    jsr save_merge_effect_bank
+
+    sta EIGHTY_STORE_ON
+    sta PAGE2
+    jsr save_merge_effect_bank
+
+    sta EIGHTY_STORE_OFF
+    sta PAGE1
+    sta RAMRD_MAIN
+    sta RAMWRT_MAIN
+    rts
+.endproc
+
+save_merge_effect_bank:
+    ldx #0
+save_merge_background_row:
+    lda _merge_effect_row_low,x
+    clc
+    adc _merge_effect_byte_offset
+    sta ptr2
+    lda _merge_effect_row_high,x
+    adc #0
+    sta ptr2+1
+    ldy #0
+save_merge_background_byte:
+    lda (ptr2),y
+    sta (ptr3),y
+    iny
+    cpy #MERGE_EFFECT_ROW_BYTES
+    bne save_merge_background_byte
+
+    clc
+    lda ptr3
+    adc #MERGE_EFFECT_ROW_BYTES
+    sta ptr3
+    bcc save_merge_background_ready
+    inc ptr3+1
+save_merge_background_ready:
+    inx
+    cpx #MERGE_EFFECT_HEIGHT
+    bne save_merge_background_row
+    rts
+
+.proc _restore_merge_effect_background
+    sta EIGHTY_STORE_OFF
+    sta PAGE1
+    sta RAMWRT_MAIN
+    lda #<MERGE_EFFECT_BACKUP
+    sta ptr3
+    lda #>MERGE_EFFECT_BACKUP
+    sta ptr3+1
+    jsr restore_merge_effect_bank
+
+    sta EIGHTY_STORE_ON
+    sta PAGE2
+    jsr restore_merge_effect_bank
+
+    sta RAMRD_MAIN
+    sta RAMWRT_MAIN
+    sta EIGHTY_STORE_OFF
+    sta PAGE1
+    rts
+.endproc
+
+restore_merge_effect_bank:
+    ldx #0
+restore_merge_background_row:
+    sta RAMRD_MAIN
+    lda _merge_effect_row_low,x
+    clc
+    adc _merge_effect_byte_offset
+    sta ptr2
+    lda _merge_effect_row_high,x
+    adc #0
+    sta ptr2+1
+    sta RAMRD_AUX
+    ldy #0
+restore_merge_background_byte:
+    lda (ptr3),y
+    sta (ptr2),y
+    iny
+    cpy #MERGE_EFFECT_ROW_BYTES
+    bne restore_merge_background_byte
+
+    clc
+    lda ptr3
+    adc #MERGE_EFFECT_ROW_BYTES
+    sta ptr3
+    bcc restore_merge_background_ready
+    inc ptr3+1
+restore_merge_background_ready:
+    inx
+    cpx #MERGE_EFFECT_HEIGHT
+    bne restore_merge_background_row
+    rts
 
 ; XOR one pre-rendered digit at one of the five fixed score positions. Each
 ; position touches at most one byte in each DHGR bank on ten screen rows.

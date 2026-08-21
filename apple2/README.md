@@ -171,6 +171,8 @@ Static full-screen graphics are stored as disk-backed DHGR pages. The game strea
 
 `generate_score_digits.py` precomputes the auxiliary/main masks for all eight possible 3-bit glyph rows at each of the five fixed score positions. A score change compares the old and new five-digit values and blits only changed positions, so gameplay performs no sprite construction, alignment division, or modulo operations.
 
+Opaque merge callouts save their covered main/auxiliary Page 1 rectangle into unused auxiliary HGR Page 2. A language-card assembly copy restores those 1,920 bytes immediately after the flash, avoiding the former 16 KB grid reload and complete scene redraw.
+
 The executable begins at `$4000`, so HGR Page 2 is not available for page flipping. Low-frequency game logic remains in C; auxiliary-memory copies and rendering loops are implemented in 6502 assembly. The `$0300` software stack preserves enough heap for repeated ProDOS asset reads.
 
 More implementation detail is available in [Apple II implementation notes](docs/apple2-implementation-notes.md).

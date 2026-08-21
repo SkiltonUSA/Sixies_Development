@@ -97,6 +97,8 @@ extern void invert_dhgr_tile_aux(void);
 extern void invert_dhgr_tile_main(void);
 extern void draw_merge_effect_aux(void);
 extern void draw_merge_effect_main(void);
+extern void save_merge_effect_background(void);
+extern void restore_merge_effect_background(void);
 extern void xor_merge_star(void);
 extern void xor_score_digit(void);
 
@@ -1311,42 +1313,19 @@ static void prepare_merge_effect_position(void) {
     }
 }
 
-static void restore_game_after_flash(void) {
-    unsigned char row;
-    unsigned char col;
-    unsigned char value;
-
-    if (!load_a2fm_grid()) {
-        render_game();
-        return;
-    }
-    for (row = 0; row < BOARD_SIZE; ++row) {
-        for (col = 0; col < BOARD_SIZE; ++col) {
-            value = board_value(col, row);
-            if (value != 0) {
-                draw_die(col, row, value, 0);
-            }
-        }
-    }
-    if (!game_over) {
-        draw_current_piece_preview();
-    }
-    draw_score_value(displayed_score);
-    draw_piece_sidebar();
-    set_double_hires(0);
-}
-
 static unsigned char show_merge_flash(unsigned char effect) {
     if (effect >= MERGE_EFFECT_COUNT) {
         return 0;
     }
     run_merge_star_burst();
     prepare_merge_effect_position();
+    save_merge_effect_background();
     if (!draw_merge_effect(effect)) {
+        restore_merge_effect_background();
         return 0;
     }
     wait_merge_flash();
-    restore_game_after_flash();
+    restore_merge_effect_background();
     drain_pending_input();
     return 1;
 }
