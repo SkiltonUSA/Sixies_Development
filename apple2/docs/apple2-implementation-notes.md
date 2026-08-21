@@ -23,7 +23,7 @@
 
 ## Title Artwork
 
-- `assets/presents_master.ppm` is converted to full-screen 16-color DHGR and RLE-packed as `PRESENTS.RLE`. The 8,395-byte stream fits both banks in the not-yet-used dice buffer; startup expands it in 1 KB chunks to Page 1, shows it for 300 NTSC vertical blanks, clears input accumulated during the non-skippable five-second pause, then hides graphics while loading the title page to avoid a visible bank-by-bank transition.
+- `assets/presents_master.ppm` is converted to the title screen's full-screen 560x192 one-bit DHGR layout and RLE-packed as `PRESENTS.RLE`. The stream fits both banks in the not-yet-used dice buffer; startup expands it in 1 KB chunks to Page 1, shows it for 300 NTSC vertical blanks, clears input accumulated during the non-skippable five-second pause, then hides graphics while loading the title page to avoid a visible bank-by-bank transition.
 - `assets/title_dhgr_mono_master.a2fm` is the supplied 16 KB b2d monochrome DHGR title. It is imported without re-quantizing or changing its screen bytes.
 - The A2FM layout stores the 8 KB auxiliary page first and the 8 KB main page second. `scripts/import_a2fm_asset.py` splits those banks into the existing `TITLE.AUX` and `TITLE.MAIN` runtime files.
 - The importer decodes a 560x384 preview and verifies every monochrome pixel against `assets/title_dhgr_mono_reference.png` during the build.

@@ -2,7 +2,7 @@
 
 SIXIES is a native Apple II port of the repository's C64 dice-merging puzzle game. Place single or paired dice on a 5x5 board, connect three or more equal values, and create chain reactions while keeping space available.
 
-The port is written in C and 6502 assembly with cc65. A color DHGR Studio313 presentation card introduces the game; its title, board, dice, mascot, score display, merge fireworks, and comic callouts use monochrome Apple II double-hi-resolution graphics. Generated binaries and downloaded tools are intentionally excluded from Git; the documented build recreates the complete bootable disk from source.
+The port is written in C and 6502 assembly with cc65. Its Studio313 presentation card, title, board, dice, mascot, score display, merge fireworks, and comic callouts use monochrome Apple II double-hi-resolution graphics. Generated binaries and downloaded tools are intentionally excluded from Git; the documented build recreates the complete bootable disk from source.
 
 ## Apple II Specifications
 
@@ -11,7 +11,7 @@ The port is written in C and 6502 assembly with cc65. A color DHGR Studio313 pre
 | Machine | Enhanced Apple IIe or compatible emulator |
 | Memory | 128 KB with auxiliary memory |
 | CPU | 6502-compatible; tested with the enhanced Apple IIe model |
-| Display | 80-column-capable DHGR, 140-color-block intro and 560x192 monochrome game art |
+| Display | 80-column-capable DHGR, 560x192 monochrome |
 | Video page | DHGR Page 1 in main and auxiliary RAM |
 | Storage | Bootable ProDOS-order `.po` disk image |
 | Operating system | ProDOS 2.4.3 disk template |
@@ -21,12 +21,12 @@ The port is written in C and 6502 assembly with cc65. A color DHGR Studio313 pre
 | Software stack | `$0300` bytes |
 | Language card | Merge sprite and score rendering code at `$D400` |
 
-The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots 2, 3, and 4. The RGB setting preserves the presentation card's DHGR palette and displays the one-bit game art as stable black and white rather than composite artifact colors.
+The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots 2, 3, and 4. The RGB setting displays the one-bit DHGR art as stable black and white rather than composite artifact colors.
 
 ## Game Features
 
 - A 5x5 pre-rendered DHGR grid that remains in place during movement and placement.
-- A five-second color DHGR Studio313 presentation card before the title screen.
+- A five-second monochrome DHGR Studio313 presentation card before the title screen.
 - Random single or paired dice, with four-way rotation for pairs.
 - Occupied targets shown with per-die diagonal hatching.
 - Three-or-more edge-connected dice merge into the next value.

@@ -81,7 +81,7 @@ $(TITLE_STAMP): $(TITLE_MASTER) $(TITLE_REFERENCE) scripts/import_a2fm_asset.py 
 		--reference "$(TITLE_REFERENCE)"
 	touch "$@"
 
-$(PRESENTS_STAMP): $(PRESENTS_MASTER) scripts/generate_presents.py scripts/convert_dhgr_asset.py | $(ASSET_DIR) $(PREVIEW_DIR) $(GENERATED_DIR)
+$(PRESENTS_STAMP): $(PRESENTS_MASTER) scripts/generate_presents.py scripts/import_a2fm_asset.py | $(ASSET_DIR) $(PREVIEW_DIR) $(GENERATED_DIR)
 	@if [ ! -x "$(PYTHON)" ]; then ./scripts/setup-tools.sh; fi
 	"$(PYTHON)" scripts/generate_presents.py \
 		--input "$(PRESENTS_MASTER)" \

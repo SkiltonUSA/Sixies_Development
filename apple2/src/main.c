@@ -188,19 +188,6 @@ static void set_double_hires(unsigned char mixed) {
     activate_soft_switch(DHIRES_ON);
 }
 
-static void set_double_hires_color(void) {
-    activate_soft_switch(EIGHTY_STORE_OFF);
-    activate_soft_switch(RAMWRT_MAIN);
-    activate_soft_switch(GRAPHICS_ON);
-    activate_soft_switch(FULL_GRAPHICS);
-    activate_soft_switch(PAGE1);
-    activate_soft_switch(HIRES_ON);
-
-    /* RGB card mode 13 is the graphics-mode reset state. */
-    activate_soft_switch(COL80_ON);
-    activate_soft_switch(DHIRES_ON);
-}
-
 static void hgr_clear_page(void) {
     memset(HGR_PAGE, 0, 8192);
 }
@@ -529,7 +516,7 @@ static unsigned char load_presents_screen(void) {
     if (!unpack_presents_page(&source, packed_end, 0) || source != packed_end) {
         return 0;
     }
-    set_double_hires_color();
+    set_double_hires(0);
     return 1;
 }
 

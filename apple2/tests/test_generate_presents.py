@@ -23,21 +23,29 @@ class PresentsGenerationTests(unittest.TestCase):
         self.assertEqual(GENERATOR.unpack_rle(packed, len(source)), source)
 
     def test_presents_master_fits_startup_dice_buffer(self) -> None:
-        indexed = GENERATOR.CONVERTER.render_source(
-            MASTER,
-            GENERATOR.CONVERTER.PAGE_HEIGHT,
-            "none",
-        )
-        main, auxiliary = GENERATOR.CONVERTER.to_pages(indexed)
+        monochrome = GENERATOR.render_mono_source(MASTER)
+        main, auxiliary = GENERATOR.to_mono_pages(monochrome)
         packed_auxiliary = GENERATOR.pack_rle(auxiliary)
         packed_main = GENERATOR.pack_rle(main)
 
-        self.assertEqual(len(packed_auxiliary), 4188)
-        self.assertEqual(len(packed_main), 4207)
         self.assertLessEqual(
             len(packed_auxiliary) + len(packed_main),
             GENERATOR.MAX_PACKED_BYTES,
         )
+
+    def test_presents_uses_title_compatible_monochrome_layout(self) -> None:
+        monochrome = GENERATOR.render_mono_source(MASTER)
+        main, auxiliary = GENERATOR.to_mono_pages(monochrome)
+        decoded = GENERATOR.A2FM.decode_mono(main, auxiliary)
+        split_main, split_auxiliary = GENERATOR.A2FM.split_a2fm(auxiliary + main)
+
+        self.assertEqual(
+            monochrome.size,
+            (GENERATOR.A2FM.SCREEN_WIDTH, GENERATOR.A2FM.SCREEN_HEIGHT),
+        )
+        self.assertEqual(set(monochrome.tobytes()), {0, 255})
+        self.assertEqual(decoded.tobytes(), monochrome.tobytes())
+        self.assertEqual((split_main, split_auxiliary), (main, auxiliary))
 
 
 if __name__ == "__main__":
