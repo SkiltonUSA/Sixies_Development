@@ -72,8 +72,8 @@ xcode-select --install
 Clone the repository and run all commands from its root directory:
 
 ```sh
-git clone https://github.com/SkiltonUSA/c64u.git
-cd c64u
+git clone https://github.com/SkiltonUSA/Sixies_Development.git
+cd Sixies_Development
 make -C apple2 setup-tools
 make -C apple2 doctor
 make -C apple2 run
