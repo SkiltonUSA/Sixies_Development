@@ -10,6 +10,7 @@ from PIL import Image
 
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "convert_dhgr_asset.py"
+PRESENTS_MASTER = Path(__file__).parents[1] / "assets" / "presents_master.ppm"
 SPEC = importlib.util.spec_from_file_location("convert_dhgr_asset", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 CONVERTER = importlib.util.module_from_spec(SPEC)
@@ -58,6 +59,25 @@ class DhgrPackingTests(unittest.TestCase):
         self.assertEqual(CONVERTER.nearest_palette_color((210, 75, 95)), 11)
         self.assertEqual(CONVERTER.nearest_palette_color((110, 110, 110)), 5)
         self.assertEqual(CONVERTER.nearest_palette_color((235, 235, 115)), 13)
+
+    def test_presents_master_builds_as_full_screen_color_dhgr(self) -> None:
+        indexed = CONVERTER.render_source(
+            PRESENTS_MASTER,
+            CONVERTER.PAGE_HEIGHT,
+            "none",
+        )
+        main, auxiliary = CONVERTER.to_pages(indexed)
+        colors = {
+            color
+            for color, count in enumerate(indexed.histogram())
+            if count != 0
+        }
+
+        self.assertEqual(indexed.size, (CONVERTER.PAGE_WIDTH, CONVERTER.PAGE_HEIGHT))
+        self.assertEqual(len(main), CONVERTER.PAGE_BYTES)
+        self.assertEqual(len(auxiliary), CONVERTER.PAGE_BYTES)
+        self.assertTrue(colors - {0, 5, 10, 15})
+        self.assertIn(15, colors)
 
 
 if __name__ == "__main__":

@@ -19,6 +19,7 @@ ASM_SRC := $(APPLE2_DIR)/src/auxmem.s
 
 TITLE_MASTER := $(APPLE2_DIR)/assets/title_dhgr_mono_master.a2fm
 TITLE_REFERENCE := $(APPLE2_DIR)/assets/title_dhgr_mono_reference.png
+PRESENTS_MASTER := $(APPLE2_DIR)/assets/presents_master.ppm
 GAME_OVER_MASTER := $(ROOT)/src/assets/game_over_logo_flat_master.png
 GRID_MASTER := $(APPLE2_DIR)/assets/game_grid_dhgr_mono_master.a2fm
 GRID_REFERENCE := $(APPLE2_DIR)/assets/game_grid_dhgr_mono_reference.png
@@ -43,10 +44,13 @@ MERGE_MASTERS := $(MERGE_AWESOME_MASTER) $(MERGE_BOOM_MASTER) $(MERGE_DANG_MASTE
 
 TITLE_MAIN := $(ASSET_DIR)/TITLE.MAIN
 TITLE_AUX := $(ASSET_DIR)/TITLE.AUX
+PRESENTS_RLE := $(ASSET_DIR)/PRESENTS.RLE
+PRESENTS_HEADER := $(GENERATED_DIR)/presents_assets.h
 GAME_OVER_MAIN := $(ASSET_DIR)/GAMEOVER.MAIN
 GAME_OVER_AUX := $(ASSET_DIR)/GAMEOVER.AUX
 GRID_A2FM := $(ASSET_DIR)/GRID.A2FM
 TITLE_STAMP := $(ASSET_DIR)/title.stamp
+PRESENTS_STAMP := $(ASSET_DIR)/presents.stamp
 GAME_OVER_STAMP := $(ASSET_DIR)/game_over.stamp
 GRID_STAMP := $(ASSET_DIR)/grid.stamp
 DICE_STAMP := $(ASSET_DIR)/dice.stamp
@@ -75,6 +79,15 @@ $(TITLE_STAMP): $(TITLE_MASTER) $(TITLE_REFERENCE) scripts/import_a2fm_asset.py 
 		--aux "$(TITLE_AUX)" \
 		--preview "$(PREVIEW_DIR)/title_logo.png" \
 		--reference "$(TITLE_REFERENCE)"
+	touch "$@"
+
+$(PRESENTS_STAMP): $(PRESENTS_MASTER) scripts/generate_presents.py scripts/convert_dhgr_asset.py | $(ASSET_DIR) $(PREVIEW_DIR) $(GENERATED_DIR)
+	@if [ ! -x "$(PYTHON)" ]; then ./scripts/setup-tools.sh; fi
+	"$(PYTHON)" scripts/generate_presents.py \
+		--input "$(PRESENTS_MASTER)" \
+		--output "$(PRESENTS_RLE)" \
+		--header "$(PRESENTS_HEADER)" \
+		--preview "$(PREVIEW_DIR)/presents.png"
 	touch "$@"
 
 $(GAME_OVER_STAMP): $(GAME_OVER_MASTER) scripts/convert_dhgr_asset.py | $(ASSET_DIR) $(PREVIEW_DIR)
@@ -134,12 +147,12 @@ $(SCORE_DIGITS_INC): scripts/generate_score_digits.py | $(GENERATED_DIR)
 	@if [ ! -x "$(PYTHON)" ]; then ./scripts/setup-tools.sh; fi
 	"$(PYTHON)" scripts/generate_score_digits.py --output "$@"
 
-assets: $(TITLE_STAMP) $(GAME_OVER_STAMP) $(GRID_STAMP) $(DICE_STAMP) $(MERGE_EFFECT_STAMP)
+assets: $(PRESENTS_STAMP) $(TITLE_STAMP) $(GAME_OVER_STAMP) $(GRID_STAMP) $(DICE_STAMP) $(MERGE_EFFECT_STAMP)
 
 test: setup-tools
 	"$(PYTHON)" -m unittest discover -s tests -p 'test_*.py'
 
-$(TARGET): Makefile $(SRC) $(ASM_SRC) $(DICE_STAMP) $(MERGE_EFFECT_STAMP) $(SCORE_DIGITS_INC) | $(BUILD_DIR)
+$(TARGET): Makefile $(SRC) $(ASM_SRC) $(PRESENTS_STAMP) $(DICE_STAMP) $(MERGE_EFFECT_STAMP) $(SCORE_DIGITS_INC) | $(BUILD_DIR)
 	@if [ -z "$(CC65)" ]; then echo "cl65 was not found on PATH."; exit 1; fi
 	cl65 -t apple2 -Oirs --codesize 500 --start-addr 0x4000 -I "$(GENERATED_DIR)" \
 		--asm-include-dir "$(GENERATED_DIR)" \

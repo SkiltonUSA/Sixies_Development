@@ -8,6 +8,11 @@
 
 #include "dice_assets.h"
 #include "merge_effects.h"
+#include "presents_assets.h"
+
+#if PRESENTS_PACKED_BYTES > DICE_BLITS_BYTES
+#error "packed presentation does not fit the startup dice buffer"
+#endif
 
 #define HGR_PAGE ((unsigned char*) 0x2000)
 #define TEXT_PAGE ((unsigned char*) 0x0400)
@@ -45,6 +50,8 @@
 #define MERGE_EFFECT_FIVES 3u
 #define MERGE_EFFECT_SIXIES 5u
 #define SCORE_DIGITS 5u
+#define INTRO_SECONDS 5u
+#define NTSC_FRAMES_PER_SECOND 60u
 
 static unsigned char board[BOARD_CELLS];
 static unsigned char placement_board_before[BOARD_CELLS];
@@ -177,6 +184,19 @@ static void set_double_hires(unsigned char mixed) {
     activate_soft_switch(DHIRES_OFF);
     activate_soft_switch(DHIRES_ON);
     activate_soft_switch(DHIRES_OFF);
+    activate_soft_switch(COL80_ON);
+    activate_soft_switch(DHIRES_ON);
+}
+
+static void set_double_hires_color(void) {
+    activate_soft_switch(EIGHTY_STORE_OFF);
+    activate_soft_switch(RAMWRT_MAIN);
+    activate_soft_switch(GRAPHICS_ON);
+    activate_soft_switch(FULL_GRAPHICS);
+    activate_soft_switch(PAGE1);
+    activate_soft_switch(HIRES_ON);
+
+    /* RGB card mode 13 is the graphics-mode reset state. */
     activate_soft_switch(COL80_ON);
     activate_soft_switch(DHIRES_ON);
 }
@@ -421,6 +441,97 @@ static unsigned char read_exact(int fd, unsigned char* destination, unsigned cou
 }
 
 #pragma code-name (push, "LC")
+
+static unsigned char unpack_presents_page(
+    unsigned char** source,
+    unsigned char* end,
+    unsigned char auxiliary
+) {
+    unsigned char* cursor = *source;
+    unsigned char* destination = HGR_PAGE;
+    unsigned char token = 0;
+    unsigned char pending = 0;
+    unsigned char repeat = 0;
+    unsigned char value = 0;
+    unsigned char chunk;
+    unsigned output;
+
+    for (chunk = 0; chunk < DHGR_BANK_SIZE / DHGR_TRANSFER_SIZE; ++chunk) {
+        for (output = 0; output < DHGR_TRANSFER_SIZE; ++output) {
+            if (pending == 0) {
+                if (cursor >= end) {
+                    return 0;
+                }
+                token = *cursor++;
+                pending = (unsigned char) ((token & 0x7Fu) + 1u);
+                repeat = token & 0x80u;
+                if (repeat != 0) {
+                    if (cursor >= end) {
+                        return 0;
+                    }
+                    value = *cursor++;
+                }
+            }
+            if (repeat != 0) {
+                dhgr_transfer_buffer[output] = value;
+            } else {
+                if (cursor >= end) {
+                    return 0;
+                }
+                dhgr_transfer_buffer[output] = *cursor++;
+            }
+            --pending;
+        }
+        if (auxiliary) {
+            copy_buffer_to_aux(destination);
+        } else {
+            memcpy(destination, dhgr_transfer_buffer, DHGR_TRANSFER_SIZE);
+        }
+        destination += DHGR_TRANSFER_SIZE;
+    }
+    if (pending != 0) {
+        return 0;
+    }
+    *source = cursor;
+    return 1;
+}
+
+static unsigned char load_presents_screen(void) {
+    int fd;
+    unsigned i;
+    unsigned checksum = 0;
+    unsigned char* source;
+    unsigned char* auxiliary_end;
+    unsigned char* packed_end;
+
+    fd = open("PRESENTS.RLE", O_RDONLY);
+    if (fd < 0) {
+        return 0;
+    }
+    if (!read_exact(fd, dice_blits, PRESENTS_PACKED_BYTES)) {
+        close(fd);
+        return 0;
+    }
+    close(fd);
+    for (i = 0; i < PRESENTS_PACKED_BYTES; ++i) {
+        checksum += dice_blits[i];
+    }
+    if (checksum != PRESENTS_PACKED_CHECKSUM) {
+        return 0;
+    }
+
+    source = dice_blits;
+    auxiliary_end = dice_blits + PRESENTS_AUX_PACKED_BYTES;
+    packed_end = dice_blits + PRESENTS_PACKED_BYTES;
+    if (!unpack_presents_page(&source, auxiliary_end, 1) || source != auxiliary_end) {
+        return 0;
+    }
+    if (!unpack_presents_page(&source, packed_end, 0) || source != packed_end) {
+        return 0;
+    }
+    set_double_hires_color();
+    return 1;
+}
 
 static void xor_merge_star_at(int x, int y) {
     int screen_y = y + MERGE_STAR_ACTIVE_TOP;
@@ -1539,6 +1650,22 @@ static char read_input(void) {
     return ch;
 }
 
+static void presents_screen(void) {
+    unsigned char second;
+
+    if (!load_presents_screen()) {
+        clrscr();
+        gotoxy(11, 10);
+        cprintf("STUDIO313 PRESENTS");
+    }
+    for (second = 0; second < INTRO_SECONDS; ++second) {
+        wait_animation_frames(NTSC_FRAMES_PER_SECOND);
+    }
+    set_text();
+    clrscr();
+    drain_pending_input();
+}
+
 static void title_screen(void) {
     char ch;
 
@@ -1689,6 +1816,7 @@ void main(void) {
     srand((unsigned) PEEK(0x4E) | ((unsigned) PEEK(0x4F) << 8));
     set_text();
 
+    presents_screen();
     title_screen();
     while (1) {
         begin_new_game();
