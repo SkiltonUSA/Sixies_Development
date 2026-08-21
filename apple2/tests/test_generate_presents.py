@@ -29,8 +29,8 @@ class PresentsGenerationTests(unittest.TestCase):
         packed_main = GENERATOR.pack_rle(main)
 
         self.assertLessEqual(
-            len(packed_auxiliary) + len(packed_main),
-            GENERATOR.MAX_PACKED_BYTES,
+            max(len(packed_auxiliary), len(packed_main)),
+            GENERATOR.MAX_PACKED_BANK_BYTES,
         )
 
     def test_presents_uses_title_compatible_monochrome_layout(self) -> None:

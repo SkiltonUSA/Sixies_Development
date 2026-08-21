@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""Generate the pre-rendered monochrome DHGR instruction screen."""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+from pathlib import Path
+
+from PIL import Image, ImageDraw
+
+
+SCRIPT_DIR = Path(__file__).parent
+GENERATOR_SPEC = importlib.util.spec_from_file_location(
+    "generate_presents", SCRIPT_DIR / "generate_presents.py"
+)
+assert GENERATOR_SPEC is not None and GENERATOR_SPEC.loader is not None
+GENERATOR = importlib.util.module_from_spec(GENERATOR_SPEC)
+GENERATOR_SPEC.loader.exec_module(GENERATOR)
+
+FONT = {
+    " ": (0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00),
+    "(": (0x04, 0x08, 0x10, 0x10, 0x10, 0x08, 0x04),
+    ")": (0x04, 0x02, 0x01, 0x01, 0x01, 0x02, 0x04),
+    "-": (0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00),
+    ".": (0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C),
+    "0": (0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E),
+    "1": (0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E),
+    "2": (0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F),
+    "3": (0x1E, 0x01, 0x01, 0x0E, 0x01, 0x01, 0x1E),
+    "4": (0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02),
+    "5": (0x1F, 0x10, 0x10, 0x1E, 0x01, 0x01, 0x1E),
+    "6": (0x0E, 0x10, 0x10, 0x1E, 0x11, 0x11, 0x0E),
+    "7": (0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08),
+    "8": (0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E),
+    "9": (0x0E, 0x11, 0x11, 0x0F, 0x01, 0x01, 0x0E),
+    "A": (0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11),
+    "B": (0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E),
+    "C": (0x0F, 0x10, 0x10, 0x10, 0x10, 0x10, 0x0F),
+    "D": (0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E),
+    "E": (0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F),
+    "F": (0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10),
+    "G": (0x0F, 0x10, 0x10, 0x17, 0x11, 0x11, 0x0F),
+    "H": (0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11),
+    "I": (0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E),
+    "J": (0x07, 0x02, 0x02, 0x02, 0x12, 0x12, 0x0C),
+    "K": (0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11),
+    "L": (0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F),
+    "M": (0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11),
+    "N": (0x11, 0x19, 0x19, 0x15, 0x13, 0x13, 0x11),
+    "O": (0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E),
+    "P": (0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10),
+    "Q": (0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D),
+    "R": (0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11),
+    "S": (0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E),
+    "T": (0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04),
+    "U": (0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E),
+    "V": (0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04),
+    "W": (0x11, 0x11, 0x11, 0x15, 0x15, 0x1B, 0x11),
+    "X": (0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11),
+    "Y": (0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04),
+    "Z": (0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F),
+}
+
+CELL_WIDTH = 11
+PIXEL_WIDTH = 2
+
+HEADER_LINES = (
+    "SIXIES APPLE II  (C) 2026 D. SKILTON",
+    "BUILT FOR THE 128K ENHANCED APPLE IIE",
+)
+RULE_LINES = (
+    "PLACE ONE OR TWO DICE ON THE 5 X 5 GRID.",
+    "MATCH 3 EDGE-TOUCHING DICE OF THE SAME VALUE.",
+    "THEY MERGE INTO THE NEXT NUMBER.",
+    "THREE SIXES CLEAR FOR A 50 POINT BONUS.",
+    "CHAIN REACTIONS BUILD YOUR SCORE.",
+    "A FULL GRID ENDS THE GAME.",
+)
+CONTROL_LINES = (
+    "WASD OR ARROWS MOVE   Q OR R ROTATE",
+    "SPACE OR RETURN PLACE   N STARTS NEW GAME",
+)
+
+
+def draw_text(image: Image.Image, text: str, y: int) -> None:
+    width = len(text) * CELL_WIDTH - 1
+    x = (GENERATOR.A2FM.SCREEN_WIDTH - width) // 2
+    pixels = image.load()
+    for character in text:
+        rows = FONT[character]
+        for row, bits in enumerate(rows):
+            for column in range(5):
+                if bits & (1 << (4 - column)):
+                    pixel_x = x + column * PIXEL_WIDTH
+                    pixels[pixel_x, y + row] = 255
+                    pixels[pixel_x + 1, y + row] = 255
+        x += CELL_WIDTH
+
+
+def draw_double_box(
+    draw: ImageDraw.ImageDraw,
+    left: int,
+    top: int,
+    right: int,
+    bottom: int,
+) -> None:
+    draw.rectangle((left, top, right, bottom), outline=255)
+    draw.rectangle((left + 2, top + 2, right - 2, bottom - 2), outline=255)
+
+
+def render_instructions() -> Image.Image:
+    image = Image.new(
+        "L",
+        (GENERATOR.A2FM.SCREEN_WIDTH, GENERATOR.A2FM.SCREEN_HEIGHT),
+        0,
+    )
+    draw = ImageDraw.Draw(image)
+
+    draw_double_box(draw, 16, 6, 543, 29)
+    draw_text(image, HEADER_LINES[0], 10)
+    draw_text(image, HEADER_LINES[1], 19)
+
+    draw_double_box(draw, 174, 36, 385, 51)
+    draw_text(image, "HOW TO PLAY", 41)
+
+    for index, line in enumerate(RULE_LINES):
+        draw_text(image, line, 61 + index * 10)
+
+    draw_double_box(draw, 15, 128, 544, 160)
+    draw_text(image, "CONTROLS", 133)
+    draw_text(image, CONTROL_LINES[0], 142)
+    draw_text(image, CONTROL_LINES[1], 151)
+
+    draw_double_box(draw, 112, 170, 447, 187)
+    draw_text(image, "PRESS SPACE OR RETURN TO PLAY", 175)
+    return image
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--header", required=True, type=Path)
+    parser.add_argument("--preview", required=True, type=Path)
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    image = render_instructions()
+    main_page, auxiliary_page = GENERATOR.to_mono_pages(image)
+    GENERATOR.write_packed_screen(
+        main_page,
+        auxiliary_page,
+        args.output,
+        args.header,
+        args.preview,
+        "INSTRUCTIONS",
+    )
+
+
+if __name__ == "__main__":
+    main()

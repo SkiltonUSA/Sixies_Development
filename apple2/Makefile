@@ -44,13 +44,19 @@ MERGE_MASTERS := $(MERGE_AWESOME_MASTER) $(MERGE_BOOM_MASTER) $(MERGE_DANG_MASTE
 
 TITLE_MAIN := $(ASSET_DIR)/TITLE.MAIN
 TITLE_AUX := $(ASSET_DIR)/TITLE.AUX
+TITLE_A2FM := $(ASSET_DIR)/TITLE.A2FM
 PRESENTS_RLE := $(ASSET_DIR)/PRESENTS.RLE
 PRESENTS_HEADER := $(GENERATED_DIR)/presents_assets.h
+INSTRUCTIONS_RLE := $(ASSET_DIR)/INSTRUCT.RLE
+INSTRUCTIONS_HEADER := $(GENERATED_DIR)/instructions_assets.h
 GAME_OVER_MAIN := $(ASSET_DIR)/GAMEOVER.MAIN
 GAME_OVER_AUX := $(ASSET_DIR)/GAMEOVER.AUX
+GAME_OVER_RLE := $(ASSET_DIR)/GAMEOVER.RLE
+GAME_OVER_HEADER := $(GENERATED_DIR)/game_over_assets.h
 GRID_A2FM := $(ASSET_DIR)/GRID.A2FM
 TITLE_STAMP := $(ASSET_DIR)/title.stamp
 PRESENTS_STAMP := $(ASSET_DIR)/presents.stamp
+INSTRUCTIONS_STAMP := $(ASSET_DIR)/instructions.stamp
 GAME_OVER_STAMP := $(ASSET_DIR)/game_over.stamp
 GRID_STAMP := $(ASSET_DIR)/grid.stamp
 DICE_STAMP := $(ASSET_DIR)/dice.stamp
@@ -79,6 +85,7 @@ $(TITLE_STAMP): $(TITLE_MASTER) $(TITLE_REFERENCE) scripts/import_a2fm_asset.py 
 		--aux "$(TITLE_AUX)" \
 		--preview "$(PREVIEW_DIR)/title_logo.png" \
 		--reference "$(TITLE_REFERENCE)"
+	cp "$(TITLE_MASTER)" "$(TITLE_A2FM)"
 	touch "$@"
 
 $(PRESENTS_STAMP): $(PRESENTS_MASTER) scripts/generate_presents.py scripts/import_a2fm_asset.py | $(ASSET_DIR) $(PREVIEW_DIR) $(GENERATED_DIR)
@@ -90,7 +97,15 @@ $(PRESENTS_STAMP): $(PRESENTS_MASTER) scripts/generate_presents.py scripts/impor
 		--preview "$(PREVIEW_DIR)/presents.png"
 	touch "$@"
 
-$(GAME_OVER_STAMP): $(GAME_OVER_MASTER) scripts/convert_dhgr_asset.py | $(ASSET_DIR) $(PREVIEW_DIR)
+$(INSTRUCTIONS_STAMP): scripts/generate_instructions.py scripts/generate_presents.py scripts/import_a2fm_asset.py | $(ASSET_DIR) $(PREVIEW_DIR) $(GENERATED_DIR)
+	@if [ ! -x "$(PYTHON)" ]; then ./scripts/setup-tools.sh; fi
+	"$(PYTHON)" scripts/generate_instructions.py \
+		--output "$(INSTRUCTIONS_RLE)" \
+		--header "$(INSTRUCTIONS_HEADER)" \
+		--preview "$(PREVIEW_DIR)/instructions.png"
+	touch "$@"
+
+$(GAME_OVER_STAMP): $(GAME_OVER_MASTER) scripts/convert_dhgr_asset.py scripts/pack_dhgr_banks.py scripts/generate_presents.py | $(ASSET_DIR) $(PREVIEW_DIR) $(GENERATED_DIR)
 	@if [ ! -x "$(PYTHON)" ]; then ./scripts/setup-tools.sh; fi
 	"$(PYTHON)" scripts/convert_dhgr_asset.py \
 		--input "$(GAME_OVER_MASTER)" \
@@ -98,6 +113,12 @@ $(GAME_OVER_STAMP): $(GAME_OVER_MASTER) scripts/convert_dhgr_asset.py | $(ASSET_
 		--aux "$(GAME_OVER_AUX)" \
 		--preview "$(PREVIEW_DIR)/game_over_logo.png" \
 		--height 160
+	"$(PYTHON)" scripts/pack_dhgr_banks.py \
+		--aux "$(GAME_OVER_AUX)" \
+		--main "$(GAME_OVER_MAIN)" \
+		--output "$(GAME_OVER_RLE)" \
+		--header "$(GAME_OVER_HEADER)" \
+		--prefix GAME_OVER
 	touch "$@"
 
 $(GRID_STAMP): $(GRID_MASTER) $(GRID_REFERENCE) $(MASCOT_MASTER) scripts/import_a2fm_grid.py scripts/import_a2fm_asset.py | $(ASSET_DIR) $(PREVIEW_DIR)
@@ -147,12 +168,12 @@ $(SCORE_DIGITS_INC): scripts/generate_score_digits.py | $(GENERATED_DIR)
 	@if [ ! -x "$(PYTHON)" ]; then ./scripts/setup-tools.sh; fi
 	"$(PYTHON)" scripts/generate_score_digits.py --output "$@"
 
-assets: $(PRESENTS_STAMP) $(TITLE_STAMP) $(GAME_OVER_STAMP) $(GRID_STAMP) $(DICE_STAMP) $(MERGE_EFFECT_STAMP)
+assets: $(PRESENTS_STAMP) $(TITLE_STAMP) $(INSTRUCTIONS_STAMP) $(GAME_OVER_STAMP) $(GRID_STAMP) $(DICE_STAMP) $(MERGE_EFFECT_STAMP)
 
 test: setup-tools
 	"$(PYTHON)" -m unittest discover -s tests -p 'test_*.py'
 
-$(TARGET): Makefile $(SRC) $(ASM_SRC) $(PRESENTS_STAMP) $(DICE_STAMP) $(MERGE_EFFECT_STAMP) $(SCORE_DIGITS_INC) | $(BUILD_DIR)
+$(TARGET): Makefile $(SRC) $(ASM_SRC) $(PRESENTS_STAMP) $(INSTRUCTIONS_STAMP) $(GAME_OVER_STAMP) $(DICE_STAMP) $(MERGE_EFFECT_STAMP) $(SCORE_DIGITS_INC) | $(BUILD_DIR)
 	@if [ -z "$(CC65)" ]; then echo "cl65 was not found on PATH."; exit 1; fi
 	cl65 -t apple2 -Oirs --codesize 500 --start-addr 0x4000 -I "$(GENERATED_DIR)" \
 		--asm-include-dir "$(GENERATED_DIR)" \

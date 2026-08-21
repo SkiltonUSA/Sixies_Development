@@ -7,11 +7,18 @@
 #include <unistd.h>
 
 #include "dice_assets.h"
+#include "game_over_assets.h"
+#include "instructions_assets.h"
 #include "merge_effects.h"
 #include "presents_assets.h"
 
-#if PRESENTS_PACKED_BYTES > DICE_BLITS_BYTES
-#error "packed presentation does not fit the startup dice buffer"
+#if PRESENTS_AUX_PACKED_BYTES > DICE_BLITS_BYTES \
+    || PRESENTS_MAIN_PACKED_BYTES > DICE_BLITS_BYTES \
+    || INSTRUCTIONS_AUX_PACKED_BYTES > DICE_BLITS_BYTES \
+    || INSTRUCTIONS_MAIN_PACKED_BYTES > DICE_BLITS_BYTES \
+    || GAME_OVER_AUX_PACKED_BYTES > DICE_BLITS_BYTES \
+    || GAME_OVER_MAIN_PACKED_BYTES > DICE_BLITS_BYTES
+#error "packed DHGR bank does not fit the startup dice buffer"
 #endif
 
 #define HGR_PAGE ((unsigned char*) 0x2000)
@@ -315,40 +322,7 @@ static unsigned text_row_offset(unsigned char row) {
     return ((unsigned) (row & 0x07u) << 7) + (unsigned) (row >> 3) * 40u;
 }
 
-static unsigned char load_dhgr_bank(const char* filename, unsigned char auxiliary) {
-    int fd;
-    int count;
-    unsigned remaining = DHGR_BANK_SIZE;
-    unsigned char* destination = HGR_PAGE;
-
-    activate_soft_switch(EIGHTY_STORE_OFF);
-    activate_soft_switch(PAGE1);
-    activate_soft_switch(RAMWRT_MAIN);
-    fd = open(filename, O_RDONLY);
-    if (fd < 0) {
-        return 0;
-    }
-
-    while (remaining != 0) {
-        count = read(fd, dhgr_transfer_buffer, DHGR_TRANSFER_SIZE);
-        if (count != DHGR_TRANSFER_SIZE) {
-            close(fd);
-            return 0;
-        }
-        if (auxiliary) {
-            copy_buffer_to_aux(destination);
-        } else {
-            memcpy(destination, dhgr_transfer_buffer, DHGR_TRANSFER_SIZE);
-        }
-        destination += DHGR_TRANSFER_SIZE;
-        remaining -= DHGR_TRANSFER_SIZE;
-    }
-
-    close(fd);
-    return 1;
-}
-
-static unsigned char load_a2fm_grid(void) {
+static unsigned char load_a2fm_screen(const char* filename) {
     int fd;
     int count;
     unsigned char bank;
@@ -358,7 +332,7 @@ static unsigned char load_a2fm_grid(void) {
     activate_soft_switch(EIGHTY_STORE_OFF);
     activate_soft_switch(PAGE1);
     activate_soft_switch(RAMWRT_MAIN);
-    fd = open("GRID.A2FM", O_RDONLY);
+    fd = open(filename, O_RDONLY);
     if (fd < 0) {
         return 0;
     }
@@ -429,12 +403,12 @@ static unsigned char read_exact(int fd, unsigned char* destination, unsigned cou
 
 #pragma code-name (push, "LC")
 
-static unsigned char unpack_presents_page(
-    unsigned char** source,
+static unsigned char unpack_dhgr_page(
+    unsigned char* source,
     unsigned char* end,
     unsigned char auxiliary
 ) {
-    unsigned char* cursor = *source;
+    unsigned char* cursor = source;
     unsigned char* destination = HGR_PAGE;
     unsigned char token = 0;
     unsigned char pending = 0;
@@ -479,44 +453,51 @@ static unsigned char unpack_presents_page(
     if (pending != 0) {
         return 0;
     }
-    *source = cursor;
-    return 1;
+    return cursor == end;
 }
 
-static unsigned char load_presents_screen(void) {
+static unsigned char load_rle_dhgr_screen(
+    const char* filename,
+    unsigned auxiliary_bytes,
+    unsigned main_bytes,
+    unsigned expected_checksum,
+    unsigned char mixed
+) {
     int fd;
     unsigned i;
     unsigned checksum = 0;
-    unsigned char* source;
-    unsigned char* auxiliary_end;
-    unsigned char* packed_end;
 
-    fd = open("PRESENTS.RLE", O_RDONLY);
+    fd = open(filename, O_RDONLY);
     if (fd < 0) {
         return 0;
     }
-    if (!read_exact(fd, dice_blits, PRESENTS_PACKED_BYTES)) {
+    if (!read_exact(fd, dice_blits, auxiliary_bytes)) {
+        close(fd);
+        return 0;
+    }
+    for (i = 0; i < auxiliary_bytes; ++i) {
+        checksum += dice_blits[i];
+    }
+    if (!unpack_dhgr_page(dice_blits, dice_blits + auxiliary_bytes, 1)) {
+        close(fd);
+        return 0;
+    }
+
+    if (!read_exact(fd, dice_blits, main_bytes)) {
         close(fd);
         return 0;
     }
     close(fd);
-    for (i = 0; i < PRESENTS_PACKED_BYTES; ++i) {
+    for (i = 0; i < main_bytes; ++i) {
         checksum += dice_blits[i];
     }
-    if (checksum != PRESENTS_PACKED_CHECKSUM) {
+    if (checksum != expected_checksum) {
         return 0;
     }
-
-    source = dice_blits;
-    auxiliary_end = dice_blits + PRESENTS_AUX_PACKED_BYTES;
-    packed_end = dice_blits + PRESENTS_PACKED_BYTES;
-    if (!unpack_presents_page(&source, auxiliary_end, 1) || source != auxiliary_end) {
+    if (!unpack_dhgr_page(dice_blits, dice_blits + main_bytes, 0)) {
         return 0;
     }
-    if (!unpack_presents_page(&source, packed_end, 0) || source != packed_end) {
-        return 0;
-    }
-    set_double_hires(0);
+    set_double_hires(mixed);
     return 1;
 }
 
@@ -679,19 +660,6 @@ static unsigned char draw_merge_effect(unsigned char effect) {
     }
     draw_merge_effect_main();
     close(fd);
-    return 1;
-}
-
-static unsigned char dhgr_show_screen(
-    const char* main_file,
-    const char* aux_file,
-    unsigned char mixed
-) {
-    if (!load_dhgr_bank(main_file, 0) || !load_dhgr_bank(aux_file, 1)) {
-        set_text();
-        return 0;
-    }
-    set_double_hires(mixed);
     return 1;
 }
 
@@ -1298,7 +1266,7 @@ static void render_game(void) {
     unsigned char col;
     unsigned value;
 
-    dhgr_grid_active = load_dice_blits() && load_a2fm_grid();
+    dhgr_grid_active = load_dice_blits() && load_a2fm_screen("GRID.A2FM");
     if (!dhgr_grid_active) {
         set_graphics(1);
         hgr_clear_page();
@@ -1640,7 +1608,13 @@ static char read_input(void) {
 static void presents_screen(void) {
     unsigned char second;
 
-    if (!load_presents_screen()) {
+    if (!load_rle_dhgr_screen(
+        "PRESENTS.RLE",
+        PRESENTS_AUX_PACKED_BYTES,
+        PRESENTS_MAIN_PACKED_BYTES,
+        PRESENTS_PACKED_CHECKSUM,
+        0
+    )) {
         clrscr();
         gotoxy(11, 10);
         cprintf("STUDIO313 PRESENTS");
@@ -1656,7 +1630,7 @@ static void presents_screen(void) {
 static void title_screen(void) {
     char ch;
 
-    if (!dhgr_show_screen("TITLE.MAIN", "TITLE.AUX", 0)) {
+    if (!load_a2fm_screen("TITLE.A2FM")) {
         clrscr();
         gotoxy(10, 8);
         cprintf("SIXIES FOR APPLE II");
@@ -1664,6 +1638,8 @@ static void title_screen(void) {
         cprintf("DHGR TITLE FILES NOT FOUND");
         write_bottom_line(22, "SPACE OR RETURN STARTS");
         write_bottom_line(23, "N ALSO STARTS A NEW GAME");
+    } else {
+        set_double_hires(0);
     }
     while (1) {
         ch = read_input();
@@ -1671,6 +1647,41 @@ static void title_screen(void) {
             break;
         }
     }
+}
+
+static void instructions_screen(void) {
+    char ch;
+
+    set_text();
+    clrscr();
+    if (!load_rle_dhgr_screen(
+        "INSTRUCT.RLE",
+        INSTRUCTIONS_AUX_PACKED_BYTES,
+        INSTRUCTIONS_MAIN_PACKED_BYTES,
+        INSTRUCTIONS_PACKED_CHECKSUM,
+        0
+    )) {
+        clrscr();
+        gotoxy(14, 5);
+        cprintf("HOW TO PLAY");
+        gotoxy(3, 8);
+        cprintf("MATCH 3 TOUCHING DICE TO MERGE");
+        gotoxy(3, 10);
+        cprintf("WASD MOVE  Q OR R ROTATE");
+        gotoxy(3, 12);
+        cprintf("SPACE OR RETURN PLACES DICE");
+        write_bottom_line(20, "SPACE OR RETURN STARTS");
+    }
+    drain_pending_input();
+    while (1) {
+        ch = read_input();
+        if (ch == ' ' || ch == CH_ENTER || ch == 'N') {
+            break;
+        }
+    }
+    set_text();
+    clrscr();
+    drain_pending_input();
 }
 
 static void show_game_over(void) {
@@ -1682,7 +1693,15 @@ static void show_game_over(void) {
     strcpy(score_line, "FINAL SCORE ");
     strcat(score_line, digits);
 
-    if (dhgr_show_screen("GAMEOVER.MAIN", "GAMEOVER.AUX", 1)) {
+    set_text();
+    clrscr();
+    if (load_rle_dhgr_screen(
+        "GAMEOVER.RLE",
+        GAME_OVER_AUX_PACKED_BYTES,
+        GAME_OVER_MAIN_PACKED_BYTES,
+        GAME_OVER_PACKED_CHECKSUM,
+        1
+    )) {
         dhgr_begin_text();
         dhgr_add_text_line(20, score_line);
         dhgr_add_text_line(21, "SPACE RETURN OR N STARTS A NEW GAME");
@@ -1805,6 +1824,7 @@ void main(void) {
 
     presents_screen();
     title_screen();
+    instructions_screen();
     while (1) {
         begin_new_game();
         game_loop();

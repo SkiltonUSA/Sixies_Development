@@ -18,7 +18,7 @@ assert IMPORTER_SPEC is not None and IMPORTER_SPEC.loader is not None
 A2FM = importlib.util.module_from_spec(IMPORTER_SPEC)
 IMPORTER_SPEC.loader.exec_module(A2FM)
 
-MAX_PACKED_BYTES = 8400
+MAX_PACKED_BANK_BYTES = 8400
 
 
 def render_mono_source(image_path: Path) -> Image.Image:
@@ -124,22 +124,71 @@ def unpack_rle(data: bytes, expected_size: int) -> bytes:
     return bytes(output)
 
 
-def format_header(auxiliary_size: int, main_size: int, checksum: int) -> str:
+def format_header(
+    prefix: str,
+    auxiliary_size: int,
+    main_size: int,
+    checksum: int,
+) -> str:
     total = auxiliary_size + main_size
+    guard = f"SIXIES_{prefix}_ASSETS_H"
     return "\n".join(
         (
-            "#ifndef SIXIES_PRESENTS_ASSETS_H",
-            "#define SIXIES_PRESENTS_ASSETS_H",
+            f"#ifndef {guard}",
+            f"#define {guard}",
             "",
-            f"#define PRESENTS_AUX_PACKED_BYTES {auxiliary_size}u",
-            f"#define PRESENTS_MAIN_PACKED_BYTES {main_size}u",
-            f"#define PRESENTS_PACKED_BYTES {total}u",
-            f"#define PRESENTS_PACKED_CHECKSUM {checksum}u",
+            f"#define {prefix}_AUX_PACKED_BYTES {auxiliary_size}u",
+            f"#define {prefix}_MAIN_PACKED_BYTES {main_size}u",
+            f"#define {prefix}_PACKED_BYTES {total}u",
+            f"#define {prefix}_PACKED_CHECKSUM {checksum}u",
             "",
             "#endif",
             "",
         )
     )
+
+
+def write_packed_screen(
+    main_page: bytes,
+    auxiliary_page: bytes,
+    output_path: Path,
+    header_path: Path,
+    preview_path: Path | None,
+    prefix: str,
+) -> None:
+    packed_auxiliary = pack_rle(auxiliary_page)
+    packed_main = pack_rle(main_page)
+    packed = packed_auxiliary + packed_main
+    if max(len(packed_auxiliary), len(packed_main)) > MAX_PACKED_BANK_BYTES:
+        raise ValueError(
+            "packed DHGR bank exceeds the startup dice buffer: "
+            f"auxiliary={len(packed_auxiliary)}, main={len(packed_main)}, "
+            f"limit={MAX_PACKED_BANK_BYTES}"
+        )
+    if unpack_rle(packed_auxiliary, A2FM.PAGE_BYTES) != auxiliary_page:
+        raise AssertionError("auxiliary presentation RLE did not round trip")
+    if unpack_rle(packed_main, A2FM.PAGE_BYTES) != main_page:
+        raise AssertionError("main presentation RLE did not round trip")
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    header_path.parent.mkdir(parents=True, exist_ok=True)
+    if preview_path is not None:
+        preview_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(packed)
+    header_path.write_text(
+        format_header(
+            prefix,
+            len(packed_auxiliary),
+            len(packed_main),
+            sum(packed) & 0xFFFF,
+        ),
+        encoding="ascii",
+    )
+    if preview_path is not None:
+        A2FM.decode_mono(main_page, auxiliary_page).resize(
+            (A2FM.SCREEN_WIDTH, A2FM.SCREEN_HEIGHT * 2),
+            Image.Resampling.NEAREST,
+        ).save(preview_path)
 
 
 def parse_args() -> argparse.Namespace:
@@ -155,30 +204,14 @@ def main() -> None:
     args = parse_args()
     monochrome = render_mono_source(args.input)
     main_page, auxiliary_page = to_mono_pages(monochrome)
-    packed_auxiliary = pack_rle(auxiliary_page)
-    packed_main = pack_rle(main_page)
-    packed = packed_auxiliary + packed_main
-    if len(packed) > MAX_PACKED_BYTES:
-        raise ValueError(
-            f"packed presentation is {len(packed)} bytes; limit is {MAX_PACKED_BYTES}"
-        )
-    if unpack_rle(packed_auxiliary, A2FM.PAGE_BYTES) != auxiliary_page:
-        raise AssertionError("auxiliary presentation RLE did not round trip")
-    if unpack_rle(packed_main, A2FM.PAGE_BYTES) != main_page:
-        raise AssertionError("main presentation RLE did not round trip")
-
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.header.parent.mkdir(parents=True, exist_ok=True)
-    args.preview.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_bytes(packed)
-    args.header.write_text(
-        format_header(len(packed_auxiliary), len(packed_main), sum(packed) & 0xFFFF),
-        encoding="ascii",
+    write_packed_screen(
+        main_page,
+        auxiliary_page,
+        args.output,
+        args.header,
+        args.preview,
+        "PRESENTS",
     )
-    A2FM.decode_mono(main_page, auxiliary_page).resize(
-        (A2FM.SCREEN_WIDTH, A2FM.SCREEN_HEIGHT * 2),
-        Image.Resampling.NEAREST,
-    ).save(args.preview)
 
 
 if __name__ == "__main__":
