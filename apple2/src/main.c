@@ -86,7 +86,7 @@ static unsigned char next_piece_b;
 static unsigned char orientation;
 static unsigned char single_mode;
 static unsigned char game_over;
-static unsigned char merge_effect_pending;
+static unsigned char merge_effect_index;
 static unsigned char merge_effect_x;
 static unsigned char merge_effect_y;
 static unsigned int displayed_score;
@@ -129,6 +129,7 @@ extern void xor_score_digit(void);
 
 static void replace_dhgr_source(unsigned char* source, unsigned char col, unsigned char row);
 static void redraw_board_cell_at(unsigned char col, unsigned char row);
+static void redraw_board_changes(void);
 static void wait_animation_frames(unsigned char frames);
 static void append_u16(char* buffer, unsigned int value);
 
@@ -1491,18 +1492,14 @@ static unsigned char merge_at(unsigned char x, unsigned char y) {
     }
     score += points;
     if (value == 6) {
-        merge_effect_pending = MERGE_EFFECT_SIXIES + 1u;
-        merge_effect_x = x;
-        merge_effect_y = y;
-    } else if (value == 5 && merge_effect_pending != MERGE_EFFECT_SIXIES + 1u) {
-        merge_effect_pending = MERGE_EFFECT_FIVES + 1u;
-        merge_effect_x = x;
-        merge_effect_y = y;
-    } else if (merge_effect_pending == 0) {
-        merge_effect_pending = general_merge_effects[rand() % 8u] + 1u;
-        merge_effect_x = x;
-        merge_effect_y = y;
+        merge_effect_index = MERGE_EFFECT_SIXIES;
+    } else if (value == 5) {
+        merge_effect_index = MERGE_EFFECT_FIVES;
+    } else {
+        merge_effect_index = general_merge_effects[rand() % 8u];
     }
+    merge_effect_x = x;
+    merge_effect_y = y;
     keep = cell_index(x, y);
     for (i = 0; i < count; ++i) {
         board[flood_list[i]] = 0;
@@ -1514,7 +1511,19 @@ static unsigned char merge_at(unsigned char x, unsigned char y) {
 }
 
 static void resolve_at(unsigned char x, unsigned char y) {
-    while (board_value(x, y) != 0 && merge_at(x, y)) {
+    while (board_value(x, y) != 0) {
+        memcpy(placement_board_before, board, sizeof(board));
+        if (!merge_at(x, y)) {
+            break;
+        }
+        redraw_board_changes();
+        if (dhgr_grid_active) {
+            run_merge_grid_ripple(merge_effect_x, merge_effect_y);
+            update_score_display();
+            show_merge_flash(merge_effect_index);
+        } else {
+            status_text();
+        }
     }
 }
 
@@ -1539,72 +1548,35 @@ static void begin_new_game(void) {
     drain_pending_input();
 }
 
-static unsigned char place_piece(void) {
-    unsigned char x1 = 0;
-    unsigned char y1 = 0;
-    unsigned char x2 = 0;
-    unsigned char y2 = 0;
-
-    if (!placement_cells(&x1, &y1, &x2, &y2)) {
+static unsigned char place_piece(
+    unsigned char* x1,
+    unsigned char* y1,
+    unsigned char* x2,
+    unsigned char* y2
+) {
+    if (!placement_cells(x1, y1, x2, y2)) {
         return 0;
     }
 
-    merge_effect_pending = 0;
-    board_set(x1, y1, piece_a);
+    board_set(*x1, *y1, piece_a);
     if (piece_count == 2) {
-        board_set(x2, y2, piece_b);
+        board_set(*x2, *y2, piece_b);
     }
-    resolve_merges(x1, y1, x2, y2);
-
-    if (!single_mode && !has_adjacent_empty_pair()) {
-        single_mode = 1;
-    }
-    advance_piece_queue();
     return 1;
 }
 
-static void redraw_after_placement(
-    unsigned char old_x,
-    unsigned char old_y,
-    unsigned char old_orientation,
-    unsigned char old_piece_count
-) {
+static void redraw_board_changes(void) {
     unsigned char row;
     unsigned char col;
     unsigned char cell;
-    signed char second_x = -1;
-    signed char second_y = -1;
-
-    if (old_piece_count == 2) {
-        second_x = (signed char) old_x + orient_dx[old_orientation & 3u];
-        second_y = (signed char) old_y + orient_dy[old_orientation & 3u];
-        if (second_x < 0 || second_y < 0 || second_x >= BOARD_SIZE || second_y >= BOARD_SIZE) {
-            second_x = -1;
-            second_y = -1;
-        }
-    }
 
     for (row = 0; row < BOARD_SIZE; ++row) {
         for (col = 0; col < BOARD_SIZE; ++col) {
             cell = cell_index(col, row);
-            if (
-                placement_board_before[cell] != board[cell]
-                || (col == old_x && row == old_y)
-                || (col == (unsigned char) second_x && row == (unsigned char) second_y)
-            ) {
+            if (placement_board_before[cell] != board[cell]) {
                 redraw_board_cell_at(col, row);
             }
         }
-    }
-
-    if (!game_over) {
-        draw_current_piece_preview();
-    }
-    if (dhgr_grid_active) {
-        draw_piece_sidebar();
-    }
-    if (!dhgr_grid_active) {
-        status_text();
     }
 }
 
@@ -1777,16 +1749,18 @@ static void game_loop(void) {
     unsigned char old_x;
     unsigned char old_y;
     unsigned char old_orientation;
-    unsigned char old_piece_count;
     unsigned char preview_changed;
     unsigned char placement_changed;
+    unsigned char placed_x1;
+    unsigned char placed_y1;
+    unsigned char placed_x2;
+    unsigned char placed_y2;
 
     while (!game_over) {
         ch = read_input();
         old_x = cursor_x;
         old_y = cursor_y;
         old_orientation = orientation;
-        old_piece_count = piece_count;
         preview_changed = 0;
         placement_changed = 0;
         switch (ch) {
@@ -1846,18 +1820,31 @@ static void game_loop(void) {
             case ' ':
             case CH_ENTER:
                 memcpy(placement_board_before, board, sizeof(board));
-                placement_changed = place_piece();
+                placement_changed = place_piece(
+                    &placed_x1,
+                    &placed_y1,
+                    &placed_x2,
+                    &placed_y2
+                );
                 break;
             case 'N':
                 begin_new_game();
                 continue;
         }
         if (placement_changed) {
-            redraw_after_placement(old_x, old_y, old_orientation, old_piece_count);
-            if (merge_effect_pending != 0 && dhgr_grid_active) {
-                run_merge_grid_ripple(merge_effect_x, merge_effect_y);
-                update_score_display();
-                show_merge_flash((unsigned char) (merge_effect_pending - 1u));
+            redraw_board_changes();
+            resolve_merges(placed_x1, placed_y1, placed_x2, placed_y2);
+            if (!single_mode && !has_adjacent_empty_pair()) {
+                single_mode = 1;
+            }
+            advance_piece_queue();
+            if (!game_over) {
+                draw_current_piece_preview();
+            }
+            if (dhgr_grid_active) {
+                draw_piece_sidebar();
+            } else {
+                status_text();
             }
         } else if (preview_changed) {
             redraw_preview_transition(old_x, old_y, old_orientation);

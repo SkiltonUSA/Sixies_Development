@@ -59,7 +59,7 @@
 - Horizontal lines set whole seven-pixel HGR bytes between masked edge bytes, vertical lines calculate `x / 7` once, and filled rectangles reuse the byte-oriented horizontal routine. Avoiding per-pixel 16-bit divide/modulo makes the initial grid appear substantially faster.
 - A real one-piece queue promotes the displayed `NEXT` piece after every valid placement, then generates a replacement. Entering single mode normalizes the promoted piece to one die.
 - Sidebar slots are opaque fixed-position assembly blits. Missing second dice are replaced with black sprite planes, so pair-to-single transitions cannot leave stale pips or outlines.
-- Placement snapshots all 25 logical cells before merge resolution, then makes one pass over the union of changed cells and old preview cells. Each affected interior is cleared and blitted at most once; the bitmap grid is never cleared during normal play.
+- Placement snapshots all 25 logical cells and redraws the committed dice first. Merge resolution then snapshots and redraws only the cells changed by one connected group at a time; the bitmap grid is never cleared during normal play.
 - An off-board second die is represented with an explicit sentinel. It must not inherit zero-initialized coordinates and mark board cell `(0,0)` as invalid.
 - New-game rendering drains any pending keyboard latch before entering the game loop, preventing the title's start key from immediately placing a piece or starting another redraw.
 - A later pass can unroll the four- and five-byte assembly loops if cycle measurements show a remaining input-path bottleneck.
@@ -68,13 +68,13 @@
 
 ## Merge Callouts
 
-- A merge awards the face value times the number of consumed dice. Removing sixes also awards a 50-point bonus, making a three-six merge worth 68 points. Chain-reaction awards accumulate before presentation.
+- A merge awards the face value times the number of consumed dice. Removing sixes also awards a 50-point bonus, making a three-six merge worth 68 points. Every chain-reaction step updates the score and completes its own presentation before the next group is evaluated.
 - The total uses a compact doubled 3x5 font. `generate_score_digits.py` emits position-specific auxiliary/main masks for its five fixed digit cells, and a language-card assembly blitter updates only digits that changed. Runtime score updates require no sprite construction, phase generation, division, or modulo operations; score travel animation is intentionally omitted to keep merges responsive.
 
 - Ten supplied comic callouts are preserved as source masters under `assets/merge_*_master.png`. `scripts/generate_merge_effects.py` corrects for DHGR pixel aspect ratio, reduces them to one-bit art, and emits deterministic previews.
 - Each effect is restored to its original 280-signal by 48-scanline size. Its aligned auxiliary and main planes are 960 bytes each, so one plane fits the existing 1 KB transfer buffer and all ten effects consume 19.2 KB on disk.
 - A successful merge chooses one callout and places its opaque rectangle in the screen quadrant opposite the merged cell. Horizontal and vertical sides are both inverted, guaranteeing that even a center-column merge is never covered. Before drawing it, a language-card routine saves the 1,920-byte background rectangle in unused auxiliary HGR Page 2. After 24 vertical blanks, a direct assembly copy restores both planes; no grid file reads or C-level die redraws occur while the display is live.
-- `FIVES` is reserved for merges of face value 5 and `SIXIES` for merges of face value 6; neither appears in the eight-effect general random pool. During a chain reaction, a five/six callout replaces a generic selection, and `SIXIES` has final priority.
+- `FIVES` is reserved for merges of face value 5 and `SIXIES` for merges of face value 6; neither appears in the eight-effect general random pool. Because merges are presented separately, each step selects the callout for its own consumed face value.
 - Before the callout, the Apple II reproduces the C64 merge cross: four inverted 24x24 cell interiors travel along the destination row and column from the grid edges, clamp at the merged cell over five steps, and hold for two VBL frames per step. Duplicate cells at the destination are inverted only once, and a second XOR pass restores every underlying die and grid pixel exactly.
 - When the cross reaches its destination, a DHGR conversion of the C64 four-point firework sprite ignites over the resolved die. Three particles follow the original nine-frame side and center trajectories: they rise, spread 16 pixels to each side, reverse, and finish 32 scanlines below the merge before the callout appears.
 - `MERGESTAR` stores seven signal-aligned phases of the sprite's 11 active rows in 616 bytes. A language-card XOR blitter at `$D400` draws and erases the particles at arbitrary DHGR coordinates, preserving every underlying die and grid signal without a save-under buffer.
