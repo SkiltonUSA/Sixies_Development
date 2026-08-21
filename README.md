@@ -6,6 +6,10 @@ A 5x5 hi-res puzzle game written in 6510 assembly for ACME. Place random single 
 
 This repository also contains a native Apple II version built with C and 6502 assembly. It targets an enhanced 128 KB Apple IIe, uses monochrome double-hi-resolution graphics, and runs from a bootable ProDOS disk image.
 
+![SIXIES gameplay on an enhanced Apple IIe](apple2/docs/images/sixies-gameplay.png)
+
+*Current Apple II gameplay: persistent DHGR grid, placed and hovering dice, mascot and score on the left, and current/next dice on the right.*
+
 ```sh
 make -C apple2 setup-tools
 make -C apple2 doctor
@@ -14,7 +18,7 @@ make -C apple2 run
 
 The macOS setup installs the workspace-local emulator, disk tools, and asset-conversion dependencies. Complete machine specifications, GitHub setup instructions, emulator configuration, build targets, controls, and troubleshooting are in the [Apple II README](apple2/README.md).
 
-The main grid screen includes a purple-and-white Sixies mascot in the left sidebar below the score. The upcoming single or double dice preview is positioned beneath the mascot so both remain visible.
+The main grid screen keeps the monochrome Sixies mascot in the left sidebar below the score. Current and next single or paired dice are shown in the right sidebar so the board remains unobstructed.
 
 The Sixies font is reproduced from the supplied 1536x1024 reference sheet during the build, at two sizes. Every glyph on the sheet is a flat colored body inside a white outline, so only the body is sampled; the outline is discarded because it anti-aliases through the same gray that fills `D`, `J`, `P`, `V`, `2` and `8`, and would otherwise fatten every letter by a pixel. Each alphabet row contributes its own cap line and baseline, so the whole set shares one vertical rhythm.
 

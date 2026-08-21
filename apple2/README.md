@@ -4,6 +4,10 @@ SIXIES is a native Apple II port of the repository's C64 dice-merging puzzle gam
 
 The port is written in C and 6502 assembly with cc65. Its Studio313 presentation card, title, board, dice, mascot, score display, merge fireworks, and comic callouts use monochrome Apple II double-hi-resolution graphics. Generated binaries and downloaded tools are intentionally excluded from Git; the documented build recreates the complete bootable disk from source.
 
+![SIXIES gameplay on an enhanced Apple IIe](docs/images/sixies-gameplay.png)
+
+*Current gameplay captured directly from izapple2's emulated framebuffer.*
+
 ## Apple II Specifications
 
 | Component | Requirement |
