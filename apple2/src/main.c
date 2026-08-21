@@ -82,9 +82,6 @@ static unsigned char cursor_y;
 static unsigned char piece_count;
 static unsigned char piece_a;
 static unsigned char piece_b;
-static unsigned char next_piece_count;
-static unsigned char next_piece_a;
-static unsigned char next_piece_b;
 static unsigned char orientation;
 static unsigned char single_mode;
 static unsigned char game_over;
@@ -814,17 +811,13 @@ static void reset_piece_position(void) {
     game_over = !has_any_placement();
 }
 
-static void initialize_piece_queue(void) {
+static void initialize_piece(void) {
     generate_piece(&piece_count, &piece_a, &piece_b);
-    generate_piece(&next_piece_count, &next_piece_a, &next_piece_b);
     reset_piece_position();
 }
 
-static void advance_piece_queue(void) {
-    piece_count = single_mode ? 1 : next_piece_count;
-    piece_a = next_piece_a;
-    piece_b = next_piece_b;
-    generate_piece(&next_piece_count, &next_piece_a, &next_piece_b);
+static void advance_piece(void) {
+    generate_piece(&piece_count, &piece_a, &piece_b);
     reset_piece_position();
 }
 
@@ -877,17 +870,6 @@ static void status_text(void) {
     if (piece_count == 2) {
         line2[pos++] = '-';
         line2[pos++] = (char) ('0' + piece_b);
-    }
-    line2[pos++] = ' ';
-    line2[pos++] = 'N';
-    line2[pos++] = 'E';
-    line2[pos++] = 'X';
-    line2[pos++] = 'T';
-    line2[pos++] = ' ';
-    line2[pos++] = (char) ('0' + next_piece_a);
-    if (next_piece_count == 2) {
-        line2[pos++] = '-';
-        line2[pos++] = (char) ('0' + next_piece_b);
     }
     line2[pos] = '\0';
 
@@ -1053,8 +1035,6 @@ static void draw_piece_sidebar(void) {
     memset(dhgr_transfer_buffer, 0, DICE_BLIT_BANK_BYTES);
     draw_sidebar_die(0, piece_a);
     draw_sidebar_die(1, piece_count == 2 ? piece_b : 0);
-    draw_sidebar_die(2, next_piece_a);
-    draw_sidebar_die(3, next_piece_count == 2 ? next_piece_b : 0);
     set_double_hires(0);
 }
 
@@ -1573,7 +1553,7 @@ static void begin_new_game(void) {
     displayed_score = 0;
     single_mode = 0;
     game_over = 0;
-    initialize_piece_queue();
+    initialize_piece();
     render_game();
     drain_pending_input();
 }
@@ -1890,7 +1870,7 @@ static void game_loop(void) {
             if (!single_mode && !has_adjacent_empty_pair()) {
                 single_mode = 1;
             }
-            advance_piece_queue();
+            advance_piece();
             if (!game_over) {
                 draw_current_piece_preview();
             }

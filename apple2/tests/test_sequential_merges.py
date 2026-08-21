@@ -70,15 +70,23 @@ class SequentialMergeTests(unittest.TestCase):
         self.assertIsNotNone(match)
         self.assertEqual(match.group("body").strip(), "1, 2, 4, 6, 7, 8, 9,")
 
-    def test_piece_queue_advances_after_merge_resolution(self) -> None:
+    def test_new_current_piece_is_generated_after_merge_resolution(self) -> None:
         body = function_body("game_loop(void)")
         resolve = body.index(
             "resolve_merges(placed_x1, placed_y1, placed_x2, placed_y2);"
         )
-        advance = body.index("advance_piece_queue();", resolve)
+        advance = body.index("advance_piece();", resolve)
         preview = body.index("draw_current_piece_preview();", advance)
         self.assertLess(resolve, advance)
         self.assertLess(advance, preview)
+
+    def test_next_piece_queue_and_sidebar_preview_are_removed(self) -> None:
+        self.assertNotIn("next_piece_", SOURCE)
+        sidebar = function_body("draw_piece_sidebar(void)")
+        self.assertIn("draw_sidebar_die(0, piece_a);", sidebar)
+        self.assertIn("draw_sidebar_die(1, piece_count == 2 ? piece_b : 0);", sidebar)
+        self.assertNotIn("draw_sidebar_die(2", sidebar)
+        self.assertNotIn("draw_sidebar_die(3", sidebar)
 
 
 if __name__ == "__main__":

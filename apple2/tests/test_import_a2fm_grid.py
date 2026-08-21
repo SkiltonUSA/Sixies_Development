@@ -55,6 +55,7 @@ class A2fmGridImportTests(unittest.TestCase):
 
         self.assertEqual(len(runtime_main), IMPORTER.PAGE_BYTES)
         self.assertEqual(len(runtime_auxiliary), IMPORTER.PAGE_BYTES)
+        self.assertEqual(IMPORTER.SIDEBAR_LABELS, (("CUR", 459, 15),))
         for text, x, y in IMPORTER.SIDEBAR_LABELS:
             self.assertTrue(any(image.crop((458, y, 545, y + 10)).tobytes()))
         for top in IMPORTER.DIE_TOPS[:4]:

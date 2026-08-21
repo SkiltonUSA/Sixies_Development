@@ -33,12 +33,12 @@ The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots
 - A timed monochrome DHGR attract loop with Studio313 presentation, title, and instruction screens.
 - The initial title remains for ten seconds; subsequent attract screens rotate every five seconds.
 - Random single or paired dice, with four-way rotation for pairs.
-- The board-placement dice invert while waiting for input, without flashing the sidebar queue.
+- The board-placement dice invert while waiting for input, without flashing the current-dice sidebar.
 - Occupied targets shown with per-die diagonal hatching.
 - Three-or-more edge-connected dice merge into the next value.
 - Connected sixes are removed from the board.
 - Chain reactions resolve one merge at a time so every board change remains visible.
-- The current and next placement dice appear in the right panel.
+- Only the current placement dice appear in the right panel; the next-piece preview is omitted to conserve memory.
 - The mascot and persistent five-digit score appear in the left panel.
 - Multiple merges resolve as separate visual events with an immediate score update for each one.
 - Grid ripples, flashing merged dice, falling star sprites, and comic callouts accompany merges.
