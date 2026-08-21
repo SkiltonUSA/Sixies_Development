@@ -1,74 +1,225 @@
-# Sixies for Apple II
+# SIXIES for Apple II
 
-This directory contains an Apple II port track for `SIXIES` that mirrors the original repo's workflow: source art stays in the main `src/assets/` tree, generated assets are rebuilt from scripts, and the Apple II target has its own build and setup path.
+SIXIES is a native Apple II port of the repository's C64 dice-merging puzzle game. Place single or paired dice on a 5x5 board, connect three or more equal values, and create chain reactions while keeping space available.
 
-The Apple II version is a native `cc65` target. Gameplay uses mixed-mode hi-res, the title uses full-screen double hi-res, and game over uses mixed-mode double hi-res on an enhanced Apple IIe with auxiliary memory. It keeps the core rules of the C64 game:
+The port is written in C and 6502 assembly with cc65. Its title, board, dice, mascot, score animation, merge fireworks, and comic callouts use monochrome Apple II double-hi-resolution graphics. Generated binaries and downloaded tools are intentionally excluded from Git; the documented build recreates the complete bootable disk from source.
 
-- a 5x5 board
-- random single or double dice
-- rotating doubles
-- merge-on-3 rules
-- chain merges
-- score by consumed face value, plus a 50-point bonus when sixes are removed
-- C64-derived three-star merge fireworks and randomized monochrome comic callouts
-- forced single-die mode once no adjacent empty pair remains
-- game over when the last empty cell is filled in single-die mode
+## Apple II Specifications
 
-The Apple II graphics are rebuilt from the existing source images instead of copying C64 bitmap data directly. The asset converter quantizes the title and game-over art to the DHGR palette, serializes each scanline across main and auxiliary memory, and writes preview PNGs so the reduction can be reviewed without booting an emulator.
+| Component | Requirement |
+| --- | --- |
+| Machine | Enhanced Apple IIe or compatible emulator |
+| Memory | 128 KB with auxiliary memory |
+| CPU | 6502-compatible; tested with the enhanced Apple IIe model |
+| Display | 80-column-capable DHGR, 560x192 monochrome |
+| Video page | DHGR Page 1 in main and auxiliary RAM |
+| Storage | Bootable ProDOS-order `.po` disk image |
+| Operating system | ProDOS 2.4.3 disk template |
+| Input | Apple II keyboard |
+| Source language | C and 6502 assembly, compiled by cc65 |
+| Program address | `$4000`, with high memory limited to `$BF00` |
+| Software stack | `$0300` bytes |
+| Language card | Merge sprite and score rendering code at `$D400` |
 
-## Build
+The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots 2, 3, and 4. The RGB setting displays the one-bit DHGR art as stable black and white rather than composite artifact colors.
+
+## Game Features
+
+- A 5x5 pre-rendered DHGR grid that remains in place during movement and placement.
+- Random single or paired dice, with four-way rotation for pairs.
+- Occupied targets shown with per-die diagonal hatching.
+- Three-or-more edge-connected dice merge into the next value.
+- Connected sixes are removed from the board.
+- Chain reactions resolve immediately.
+- The current and next placement dice appear in the right panel.
+- The mascot and persistent five-digit score appear in the left panel.
+- Merge points appear over the resolved die and travel to the score panel.
+- Grid ripples, flashing merged dice, falling star sprites, and comic callouts accompany merges.
+- `FIVES` is reserved for value-5 merges and `SIXIES` for value-6 merges.
+- Single-die mode begins when no adjacent empty pair remains.
+- Filling the final empty cell ends the game.
+
+## Scoring
+
+A merge awards the face value multiplied by the number of consumed dice. Three ones score 3 points, three twos score 6, three fives score 15, and larger connected groups score all consumed dice.
+
+Removing sixes adds a 50-point bonus. A merge of three sixes therefore scores `3 x 6 + 50 = 68` points. Chain-reaction awards accumulate before the animated total reaches the scoreboard.
+
+## Host Requirements
+
+The automated setup currently targets macOS on Apple silicon or Intel. Internet access is required the first time it downloads tools and the ProDOS template.
+
+To play an already-built `sixies.po`, no compiler or asset tools are required. You only need an enhanced Apple IIe emulator configured as described in the [Emulator](#emulator) section. A source checkout does not include generated build products, so building the disk from GitHub requires the tools below.
+
+Install these host prerequisites before running the setup:
+
+| Host tool | Purpose |
+| --- | --- |
+| Git | Clone and update the repository |
+| GNU Make | Run the build targets |
+| Python 3 with `venv` | Run asset generators and tests |
+| Homebrew | Install cc65 and OpenJDK when missing |
+| `curl`, `tar`, and `shasum` | Download and verify workspace tools |
+
+Homebrew can be installed from [brew.sh](https://brew.sh/). On a new Mac, the Xcode command-line tools provide Git and Make:
 
 ```sh
+xcode-select --install
+```
+
+## Quick Start from GitHub
+
+Clone the repository and run all commands from its root directory:
+
+```sh
+git clone https://github.com/SkiltonUSA/c64u.git
+cd c64u
 make -C apple2 setup-tools
-make -C apple2
-make -C apple2 disk
+make -C apple2 doctor
 make -C apple2 run
 ```
 
-The normal build creates:
+`setup-tools` installs or downloads the development environment. `doctor` builds the program and verifies the emulator configuration. `run` creates the disk image, copies it to a disposable emulator directory, and boots SIXIES.
 
-- `apple2/build/SIXIES`: Apple II binary
-- `apple2/build/sixies.po`: bootable ProDOS-order disk image
-- `apple2/build/assets/*.MAIN`: generated DHGR main-memory pages
-- `apple2/build/assets/*.AUX`: generated DHGR auxiliary-memory pages
-- `apple2/build/previews/*.png`: nominal-color DHGR conversion previews
+Windows and Linux setup is not currently automated. On those hosts, install cc65, Python 3 with Pillow, Java, AppleCommander, a ProDOS disk template, and a compatible Apple II emulator manually before using the Makefile as a reference.
 
-The packaged disk contains `SIXIES.SYSTEM`, `SIXIES`, and the four title/game-over DHGR bank files. In a ProDOS-aware Apple II emulator, launch `SIXIES.SYSTEM`.
+## Installed Tools
 
-`make -C apple2 run` builds the disk and boots it as drive 1 in an enhanced Apple IIe. The launcher copies the image to `apple2/build/emulator/` first, so emulator writes never alter the packaged build artifact.
+The setup script keeps downloaded dependencies under the ignored `.tools/` directory so they do not modify the repository or need to be committed.
 
-## Tooling
+| Tool | Installation | Purpose |
+| --- | --- | --- |
+| cc65 / `cl65` | Homebrew when absent | Compile C and 6502 assembly for the Apple II |
+| Python virtual environment | `.tools/apple2-venv` | Isolate asset-generation packages |
+| Pillow | Installed in the virtual environment | Convert and validate source artwork |
+| AppleCommander | `.tools/applecommander` | Create and populate the ProDOS disk image |
+| izapple2 2.4.0 | `.tools/izapple2` | Run the enhanced Apple IIe emulator |
+| ProDOS 2.4.3 template | `.tools/apple2-prodos` | Supply the bootable disk filesystem |
+| OpenJDK | Homebrew when absent | Run AppleCommander |
 
-`make -C apple2 setup-tools` prepares workspace-local tooling under `.tools/`:
+izapple2 and the ProDOS template are checksum-verified by `scripts/setup-tools.sh`. AppleCommander is downloaded from its current GitHub release.
 
-- `.tools/apple2-venv`: Python environment with Pillow for asset conversion
-- `.tools/applecommander`: AppleCommander jar for disk-image packaging
-- `.tools/izapple2`: pinned universal macOS Apple IIe emulator
-- `.tools/apple2-prodos`: pinned ProDOS 2.4.3 boot template
-- Homebrew `openjdk` when the AppleCommander CLI needs a Java runtime and the keg is not already installed
+## Build Commands
 
-The Apple II compiler tools come from `cc65`. This workspace already has `cc65` on `PATH`, but the Makefile checks it explicitly so the failure mode is direct.
+Run these commands from the repository root:
 
-## Development Loop
+| Command | Result |
+| --- | --- |
+| `make -C apple2 setup-tools` | Install and verify required tools |
+| `make -C apple2` | Compile the `SIXIES` Apple II binary |
+| `make -C apple2 assets` | Regenerate graphics, sprites, and previews |
+| `make -C apple2 test` | Run the Python asset and renderer tests |
+| `make -C apple2 disk` | Build the bootable `sixies.po` image |
+| `make -C apple2 run` | Build and boot the game in izapple2 |
+| `make -C apple2 debug` | Boot with ProDOS MLI tracing in the terminal |
+| `make -C apple2 doctor` | Build and verify the complete environment |
+| `make -C apple2 clean` | Remove generated Apple II build files |
+
+The principal generated files are:
+
+| Path | Description |
+| --- | --- |
+| `apple2/build/SIXIES` | Native Apple II executable |
+| `apple2/build/sixies.po` | Bootable ProDOS-order disk image |
+| `apple2/build/sixies.map` | cc65 linker memory map |
+| `apple2/build/assets/` | Runtime DHGR pages, dice, stars, and callouts |
+| `apple2/build/generated/` | Generated C headers for asset geometry |
+| `apple2/build/previews/` | PNG previews of converted Apple II artwork |
+
+The disk contains `SIXIES.SYSTEM`, `SIXIES`, title and game-over banks, `GRID.A2FM`, `DICE.BLITS`, `MERGESTAR`, and the ten `FX00` through `FX09` callout files. Booting the disk launches `SIXIES.SYSTEM`, which loads the game.
+
+## Emulator
+
+`make -C apple2 run` launches the workspace copy of izapple2 with the equivalent configuration:
 
 ```sh
-make -C apple2 doctor  # verify compiler, packaging tools, and emulator
-make -C apple2 run     # rebuild, package, and boot SIXIES
-make -C apple2 debug   # boot with ProDOS MLI tracing in the terminal
-make -C apple2 clean   # remove generated program, disk, and converted art
+.tools/izapple2/izapple2 \
+  -model=2enh \
+  -rgb \
+  -s2=empty \
+  -s3=empty \
+  -s4=empty \
+  apple2/build/sixies.po
 ```
 
-Inside izapple2, press `F1` for emulator help, `F4` to toggle CPU tracing, `F5` to toggle full speed, `F6` to cycle display modes, and `F12` to save `snapshot.png`. The emulator boots a stock-style enhanced Apple IIe configuration with unnecessary expansion cards disabled.
+The launcher first copies the packaged disk to `apple2/build/emulator/sixies-run.po`. Emulator writes therefore do not modify `apple2/build/sixies.po`.
+
+To use another Apple II emulator, configure an enhanced Apple IIe with 128 KB RAM, auxiliary memory, 80-column/DHGR support, and the `.po` image in drive 1. RGB or monochrome output is recommended. Boot the disk and run `SIXIES.SYSTEM` if the emulator does not launch it automatically.
+
+izapple2 shortcuts used during development:
+
+| Key | Emulator action |
+| --- | --- |
+| `F1` | Show emulator help |
+| `F4` | Toggle CPU tracing |
+| `F5` | Toggle full-speed execution |
+| `F6` | Cycle display modes |
+| `F12` | Save `snapshot.png` |
 
 ## Controls
 
-- Arrow keys or `W`, `A`, `S`, `D`: move the cursor
-- `R` or `Q`: rotate a double piece
-- `Space` or `Return`: place the current piece
-- `N`: start a new game
+| Key | Game action |
+| --- | --- |
+| Arrow keys or `W`, `A`, `S`, `D` | Move the placement dice |
+| `R` or `Q` | Rotate a paired piece |
+| `Space` or `Return` | Place the current piece |
+| `N` | Clear the board and start a new game |
 
-The Apple II build currently prioritizes a playable core rules port and source-art reduction pipeline over C64-specific presentation effects such as raster animation, SID playback, and attract-mode page rotation.
+## Graphics and Runtime Design
 
-A merge scores the face value of every consumed die: three ones score 3, three twos score 6, and so on. A six merge removes the dice and adds a 50-point bonus, so three sixes score 68. The earned points appear over the merge, travel to the left score panel, and then update its persistent five-digit total.
+Static full-screen graphics are stored as disk-backed DHGR pages. The game streams main and auxiliary banks into Page 1, then updates only dirty cell interiors. Dice use fixed-position opaque assembly blits, while moving score and star effects use pre-shifted XOR sprites that restore the pixels beneath them.
 
-Technical notes collected from the Apple II graphics, game-development, and sound references used by this port are in [`docs/apple2-implementation-notes.md`](docs/apple2-implementation-notes.md).
+The executable begins at `$4000`, so HGR Page 2 is not available for page flipping. Low-frequency game logic remains in C; auxiliary-memory copies and rendering loops are implemented in 6502 assembly. The `$0300` software stack preserves enough heap for repeated ProDOS asset reads.
+
+More implementation detail is available in [Apple II implementation notes](docs/apple2-implementation-notes.md).
+
+## Troubleshooting
+
+### `cl65 was not found on PATH`
+
+Install cc65 and rerun setup:
+
+```sh
+brew install cc65
+make -C apple2 setup-tools
+```
+
+### Python cannot create the virtual environment
+
+Install a current Python and rerun setup:
+
+```sh
+brew install python
+make -C apple2 setup-tools
+```
+
+### AppleCommander reports that Java is missing
+
+Install OpenJDK. If Java is in a nonstandard location, pass it to the disk build explicitly:
+
+```sh
+brew install openjdk
+JAVA_BIN="$(brew --prefix openjdk)/bin/java" make -C apple2 disk
+```
+
+### The emulator shows the wrong colors or no DHGR screen
+
+Use the enhanced Apple IIe model with 128 KB, auxiliary memory, and 80-column support. With izapple2, use `make -C apple2 run` so the required `-model=2enh` and `-rgb` options are applied.
+
+### Generated graphics or the disk appear stale
+
+Remove the build directory and recreate every asset:
+
+```sh
+make -C apple2 clean
+make -C apple2 test
+make -C apple2 disk
+```
+
+### Verify the complete installation
+
+```sh
+make -C apple2 doctor
+```
+
+The doctor target reports the compiler, disk image, and emulator configuration, and exits on a missing dependency or failed build step.
