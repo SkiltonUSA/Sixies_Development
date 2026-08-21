@@ -23,11 +23,11 @@
 
 ## Title Artwork
 
-- `assets/presents_master.ppm` is converted to the title screen's full-screen 560x192 one-bit DHGR layout and RLE-packed as `PRESENTS.RLE`. The stream fits both banks in the not-yet-used dice buffer; startup expands it in 1 KB chunks to Page 1, shows it for 300 NTSC vertical blanks, clears input accumulated during the non-skippable five-second pause, then hides graphics while loading the title page to avoid a visible bank-by-bank transition.
+- `assets/presents_master.ppm` is converted to the title screen's full-screen 560x192 one-bit DHGR layout and RLE-packed as `PRESENTS.RLE`. The stream fits both banks in the not-yet-used dice buffer; startup expands it in 1 KB chunks to Page 1. The presentation displays for 300 NTSC vertical blanks, the initial title for 600, and subsequent presentation/title/instruction pages for 300 each. Graphics are hidden while loading the next page to avoid a visible bank-by-bank transition.
 - `assets/title_dhgr_mono_master.a2fm` is the supplied 16 KB b2d monochrome DHGR title. It is imported without re-quantizing or changing its screen bytes.
 - The A2FM layout stores the 8 KB auxiliary page first and the 8 KB main page second. `scripts/import_a2fm_asset.py` verifies every pixel against `assets/title_dhgr_mono_reference.png`; the runtime packages the original bytes as one `TITLE.A2FM` file and streams both banks through one ProDOS open, sharing the grid's loader.
 - `scripts/generate_instructions.py` pre-renders the framed 560x192 monochrome instruction page from a deterministic 5x7 pixel font and packages it as `INSTRUCT.RLE`. It describes the Apple II controls and game rules rather than retaining the reference image's C64-specific joystick text.
-- The title start key is drained after the instruction page finishes loading. This prevents one keypress from dismissing both screens; a deliberate second `Space`, `Return`, or `N` hides graphics while the normal grid assets load.
+- The attract loop polls the keyboard once per vertical blank. `Space`, `Return`, or `N` starts from any page; if no start key arrives, the initial title advances to instructions after ten seconds and presentation/title/instruction pages then rotate every five seconds. Pending repeats are drained only after startup exits, before the normal grid assets load.
 - To preserve the title's fast raw-bank load, `scripts/pack_dhgr_banks.py` instead reduces the less time-sensitive game-over banks from 16,384 bytes to 5,880 bytes as `GAMEOVER.RLE`. The shared RLE loader expands the intro, instructions, and game-over screen one bank at a time through the existing dice buffer.
 
 ## Pre-rendered Grid Prototype

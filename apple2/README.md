@@ -30,8 +30,8 @@ The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots
 ## Game Features
 
 - A 5x5 pre-rendered DHGR grid that remains in place during movement and placement.
-- A five-second monochrome DHGR Studio313 presentation card before the title screen.
-- A pre-rendered monochrome instruction page between the title and gameplay.
+- A timed monochrome DHGR attract loop with Studio313 presentation, title, and instruction screens.
+- The initial title remains for ten seconds; subsequent attract screens rotate every five seconds.
 - Random single or paired dice, with four-way rotation for pairs.
 - Occupied targets shown with per-die diagonal hatching.
 - Three-or-more edge-connected dice merge into the next value.
@@ -175,7 +175,7 @@ izapple2 shortcuts used during development:
 
 Static full-screen graphics are stored as disk-backed DHGR pages. The game streams main and auxiliary banks into Page 1, then updates only dirty cell interiors. Dice and score digits use fixed-position opaque or XOR assembly blits, while moving star effects use pre-shifted XOR sprites that restore the pixels beneath them.
 
-The Studio313 intro, generated instruction page, and game-over screen are RLE-packed so the new page fits the 140 KB ProDOS disk while the supplied title retains its faster raw A2FM loader. The title and grid share a single-open A2FM streamer; the compressed-screen loader reads one bank at a time into the reusable dice buffer and expands it through the 1 KB transfer buffer. Title input is drained after the instruction page appears, so a deliberate second `Space` or `Return` starts gameplay; the normal dice load then reuses the same memory.
+The Studio313 intro, generated instruction page, and game-over screen are RLE-packed so the new page fits the 140 KB ProDOS disk while the supplied title retains its faster raw A2FM loader. The title and grid share a single-open A2FM streamer; the compressed-screen loader reads one bank at a time into the reusable dice buffer and expands it through the 1 KB transfer buffer. Startup shows the presentation for five seconds and the initial title for ten seconds, then rotates instructions, presentation, and title at five seconds each. `Space`, `Return`, or `N` starts immediately from any attract screen; the normal dice load then reuses the same memory.
 
 `generate_score_digits.py` precomputes the auxiliary/main masks for all eight possible 3-bit glyph rows at each of the five fixed score positions. A score change compares the old and new five-digit values and blits only changed positions, so gameplay performs no sprite construction, alignment division, or modulo operations.
 

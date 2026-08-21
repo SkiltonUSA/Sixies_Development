@@ -67,7 +67,8 @@
 #define MERGE_EFFECT_FIVES 3u
 #define MERGE_EFFECT_SIXIES 5u
 #define SCORE_DIGITS 5u
-#define INTRO_SECONDS 5u
+#define ATTRACT_SCREEN_SECONDS 5u
+#define INITIAL_TITLE_SECONDS 10u
 #define NTSC_FRAMES_PER_SECOND 60u
 
 static unsigned char board[BOARD_CELLS];
@@ -1615,9 +1616,25 @@ static char read_input(void) {
     return ch;
 }
 
-static void presents_screen(void) {
-    unsigned char second;
+static unsigned char wait_for_start_or_timeout(unsigned frames) {
+    char ch;
 
+    while (frames != 0) {
+        if (kbhit()) {
+            ch = read_input();
+            if (ch == ' ' || ch == CH_ENTER || ch == 'N') {
+                return 1;
+            }
+        }
+        wait_animation_frames(1);
+        --frames;
+    }
+    return 0;
+}
+
+static void presents_screen(void) {
+    set_text();
+    clrscr();
     if (!load_rle_dhgr_screen(
         "PRESENTS.RLE",
         PRESENTS_AUX_PACKED_BYTES,
@@ -1629,17 +1646,11 @@ static void presents_screen(void) {
         gotoxy(11, 10);
         cprintf("STUDIO313 PRESENTS");
     }
-    for (second = 0; second < INTRO_SECONDS; ++second) {
-        wait_animation_frames(NTSC_FRAMES_PER_SECOND);
-    }
-    set_text();
-    clrscr();
-    drain_pending_input();
 }
 
 static void title_screen(void) {
-    char ch;
-
+    set_text();
+    clrscr();
     if (!load_a2fm_screen("TITLE.A2FM")) {
         clrscr();
         gotoxy(10, 8);
@@ -1651,17 +1662,9 @@ static void title_screen(void) {
     } else {
         set_double_hires(0);
     }
-    while (1) {
-        ch = read_input();
-        if (ch == ' ' || ch == CH_ENTER || ch == 'N') {
-            break;
-        }
-    }
 }
 
 static void instructions_screen(void) {
-    char ch;
-
     set_text();
     clrscr();
     if (!load_rle_dhgr_screen(
@@ -1682,13 +1685,47 @@ static void instructions_screen(void) {
         cprintf("SPACE OR RETURN PLACES DICE");
         write_bottom_line(20, "SPACE OR RETURN STARTS");
     }
-    drain_pending_input();
+}
+
+static void startup_attract_loop(void) {
+    presents_screen();
+    if (wait_for_start_or_timeout(
+        ATTRACT_SCREEN_SECONDS * NTSC_FRAMES_PER_SECOND
+    )) {
+        goto start_game;
+    }
+
+    title_screen();
+    if (wait_for_start_or_timeout(
+        INITIAL_TITLE_SECONDS * NTSC_FRAMES_PER_SECOND
+    )) {
+        goto start_game;
+    }
+
     while (1) {
-        ch = read_input();
-        if (ch == ' ' || ch == CH_ENTER || ch == 'N') {
+        instructions_screen();
+        if (wait_for_start_or_timeout(
+            ATTRACT_SCREEN_SECONDS * NTSC_FRAMES_PER_SECOND
+        )) {
+            break;
+        }
+
+        presents_screen();
+        if (wait_for_start_or_timeout(
+            ATTRACT_SCREEN_SECONDS * NTSC_FRAMES_PER_SECOND
+        )) {
+            break;
+        }
+
+        title_screen();
+        if (wait_for_start_or_timeout(
+            ATTRACT_SCREEN_SECONDS * NTSC_FRAMES_PER_SECOND
+        )) {
             break;
         }
     }
+
+start_game:
     set_text();
     clrscr();
     drain_pending_input();
@@ -1832,9 +1869,7 @@ void main(void) {
     srand((unsigned) PEEK(0x4E) | ((unsigned) PEEK(0x4F) << 8));
     set_text();
 
-    presents_screen();
-    title_screen();
-    instructions_screen();
+    startup_attract_loop();
     while (1) {
         begin_new_game();
         game_loop();
