@@ -83,9 +83,9 @@ class SequentialMergeTests(unittest.TestCase):
     def test_next_piece_queue_and_sidebar_preview_are_removed(self) -> None:
         self.assertNotIn("next_piece_", SOURCE)
         sidebar = function_body("draw_piece_sidebar(void)")
-        self.assertIn("draw_sidebar_die(0, piece_a);", sidebar)
-        self.assertIn("draw_sidebar_die(1, piece_count == 2 ? piece_b : 0);", sidebar)
-        self.assertNotIn("draw_sidebar_die(2", sidebar)
+        self.assertIn("draw_sidebar_die(1, piece_count == 2 ? piece_a : 0);", sidebar)
+        self.assertIn("draw_sidebar_die(2, piece_count == 2 ? piece_b : piece_a);", sidebar)
+        self.assertNotIn("draw_sidebar_die(0", sidebar)
         self.assertNotIn("draw_sidebar_die(3", sidebar)
 
 

@@ -125,7 +125,9 @@ class HgrDiceTests(unittest.TestCase):
         self.assertEqual(len(addresses), GENERATOR.BOARD_SIZE * GENERATOR.BLIT_ROWS)
         self.assertTrue(all(0x2000 <= address < 0x4000 for address in addresses))
 
-    def test_sidebar_reuses_center_column_sprite_phase(self) -> None:
+    def test_sidebar_is_centered_with_an_existing_sprite_phase(self) -> None:
+        self.assertEqual(GENERATOR.SIDEBAR_DIE_LEFT, 238)
+        self.assertEqual(GENERATOR.SIDEBAR_SOURCE_COLUMN, 0)
         column = GENERATOR.SIDEBAR_SOURCE_COLUMN
         for auxiliary in (True, False):
             _, source_count = GENERATOR.bank_span(column, auxiliary)
@@ -133,7 +135,7 @@ class HgrDiceTests(unittest.TestCase):
                 GENERATOR.SIDEBAR_DIE_LEFT,
                 auxiliary,
             )
-            self.assertEqual(target_offset, 35)
+            self.assertEqual(target_offset, 34)
             self.assertEqual(target_count, source_count)
             self.assertEqual(
                 GENERATOR.bank_masks_at(GENERATOR.SIDEBAR_DIE_LEFT, auxiliary),

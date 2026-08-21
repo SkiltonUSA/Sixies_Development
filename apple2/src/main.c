@@ -1033,8 +1033,8 @@ static void draw_sidebar_die(unsigned char row, unsigned char value) {
 
 static void draw_piece_sidebar(void) {
     memset(dhgr_transfer_buffer, 0, DICE_BLIT_BANK_BYTES);
-    draw_sidebar_die(0, piece_a);
-    draw_sidebar_die(1, piece_count == 2 ? piece_b : 0);
+    draw_sidebar_die(1, piece_count == 2 ? piece_a : 0);
+    draw_sidebar_die(2, piece_count == 2 ? piece_b : piece_a);
     set_double_hires(0);
 }
 

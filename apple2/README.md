@@ -38,7 +38,7 @@ The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots
 - Three-or-more edge-connected dice merge into the next value.
 - Connected sixes are removed from the board.
 - Chain reactions resolve one merge at a time so every board change remains visible.
-- Only the current placement dice appear in the right panel; the next-piece preview is omitted to conserve memory.
+- Only the current placement dice appear centered in the right panel; labels and the next-piece preview are omitted to conserve memory.
 - The mascot and persistent five-digit score appear in the left panel.
 - Multiple merges resolve as separate visual events with an immediate score update for each one.
 - Grid ripples, flashing merged dice, falling star sprites, and comic callouts accompany merges.
