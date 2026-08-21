@@ -59,6 +59,13 @@ class A2fmGridImportTests(unittest.TestCase):
             self.assertTrue(any(image.crop((458, y, 545, y + 10)).tobytes()))
         for top in IMPORTER.DIE_TOPS[:4]:
             self.assertFalse(any(image.crop((494, top, 542, top + 24)).tobytes()))
+        score_left, score_top, score_right, score_bottom = IMPORTER.SCORE_CLEAR_BOX
+        self.assertFalse(any(image.crop((
+            score_left,
+            score_top,
+            score_right + 1,
+            score_bottom + 1,
+        )).tobytes()))
         mascot_left, mascot_top, mascot_width, mascot_height = IMPORTER.MASCOT_BOX
         self.assertTrue(any(image.crop((
             mascot_left,

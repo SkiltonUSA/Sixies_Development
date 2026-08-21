@@ -9,7 +9,7 @@ The Apple II version is a native `cc65` target. Gameplay uses mixed-mode hi-res,
 - rotating doubles
 - merge-on-3 rules
 - chain merges
-- score by consumed face value
+- score by consumed face value, plus a 50-point bonus when sixes are removed
 - C64-derived three-star merge fireworks and randomized monochrome comic callouts
 - forced single-die mode once no adjacent empty pair remains
 - game over when the last empty cell is filled in single-die mode
@@ -68,5 +68,7 @@ Inside izapple2, press `F1` for emulator help, `F4` to toggle CPU tracing, `F5` 
 - `N`: start a new game
 
 The Apple II build currently prioritizes a playable core rules port and source-art reduction pipeline over C64-specific presentation effects such as raster animation, SID playback, and attract-mode page rotation.
+
+A merge scores the face value of every consumed die: three ones score 3, three twos score 6, and so on. A six merge removes the dice and adds a 50-point bonus, so three sixes score 68. The earned points appear over the merge, travel to the left score panel, and then update its persistent five-digit total.
 
 Technical notes collected from the Apple II graphics, game-development, and sound references used by this port are in [`docs/apple2-implementation-notes.md`](docs/apple2-implementation-notes.md).

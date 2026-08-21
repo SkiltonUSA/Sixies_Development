@@ -32,7 +32,7 @@
 - `assets/game_grid_dhgr_mono_master.a2fm` and its reference PNG preserve the supplied full-screen 560-pixel monochrome layout. `scripts/import_a2fm_grid.py` verifies every source pixel, then replaces only the old reminder panel interior with static `CUR` and `NEXT` labels before packing `GRID.A2FM`.
 - The importer creates `build/previews/grid_dhgr.png` and verifies that the exact dynamic rectangle selected inside every cell is black in both banks. The supplied artwork has one-pixel phase differences in its last columns and rows, so those rectangles use generated per-column and per-row origins instead of assuming a perfectly uniform pitch.
 - Each column begins at a different DHGR byte phase. Auxiliary/main byte offsets and edge masks are generated from the exact 24x24 cell interiors.
-- The supplied score panel remains part of the static bitmap. The right panel has four verified-black 24x24 wells: current dice occupy its first two rows and the queued next dice occupy the two rows below.
+- The supplied `SCORE` and `TOTAL` labels remain in the static bitmap, but the baked five-digit value is cleared by the importer. Runtime digits are XOR-blitted into that well so every grid reload can restore the current total. The right panel has four verified-black 24x24 wells: current dice occupy its first two rows and the queued next dice occupy the two rows below.
 - The high-resolution C64 mascot master is aspect-corrected to 88x55 DHGR signals and reduced to monochrome at build time. It replaces the decorative `ROUND/MOVES/NEXT` block beneath the left score while remaining part of the static grid page.
 - `GRID.A2FM` is packaged on the ProDOS image. A new game streams its auxiliary and main halves to HGR Page 1; movement, rotation, placement, and merges clear only affected black cell interiors without clearing or procedurally rebuilding the grid.
 - The emulator launches with its AppleColor-compatible RGB card enabled. Every DHGR screen selects RGB mode 11 with the standard AN3/80COL sequence, displaying the supplied 560x192 one-bit pages as black and white instead of passing their edges through NTSC artifact-color decoding.
@@ -61,9 +61,12 @@
 - New-game rendering drains any pending keyboard latch before entering the game loop, preventing the title's start key from immediately placing a piece or starting another redraw.
 - A later pass can unroll the four- and five-byte assembly loops if cycle measurements show a remaining input-path bottleneck.
 - Page flipping is unavailable until the executable is moved out of HGR Page 2 at `$4000-$5FFF`.
-- The linker reserves a 1 KB cc65 software stack. Large game arrays and transfer buffers are static, and the smaller stack preserves enough heap for ProDOS asset opens below `$BF00`.
+- The linker reserves a `$0300`-byte cc65 software stack. Large game arrays and transfer buffers are static, and the smaller stack preserves enough heap for ProDOS asset opens below `$BF00`.
 
 ## Merge Callouts
+
+- A merge awards the face value times the number of consumed dice. Removing sixes also awards a 50-point bonus, making a three-six merge worth 68 points. Chain-reaction awards accumulate before presentation.
+- The award uses a compact doubled 3x5 font built into the shared 616-byte arbitrary-position sprite buffer. It appears over the resolved merge cell, travels to the left score well in six XOR-restored steps, then replaces the persistent total before the star burst and comic callout.
 
 - Ten supplied comic callouts are preserved as source masters under `assets/merge_*_master.png`. `scripts/generate_merge_effects.py` corrects for DHGR pixel aspect ratio, reduces them to one-bit art, and emits deterministic previews.
 - Each effect is restored to its original 280-signal by 48-scanline size. Its aligned auxiliary and main planes are 960 bytes each, so one plane fits the existing 1 KB transfer buffer and all ten effects consume 19.2 KB on disk.

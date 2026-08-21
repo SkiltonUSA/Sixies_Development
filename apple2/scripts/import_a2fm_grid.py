@@ -32,6 +32,7 @@ DIE_LEFTS = (70, 98, 128, 158, 186)
 DIE_TOPS = (8, 38, 68, 99, 129)
 SIDEBAR_CLEAR_BOX = (458, 7, 544, 143)
 SIDEBAR_LABELS = (("CUR", 459, 15), ("NEXT", 459, 75))
+SCORE_CLEAR_BOX = (24, 43, 89, 54)
 MASCOT_CLEAR_BOX = (13, 52, 100, 143)
 MASCOT_BOX = (13, 59, 88, 55)
 
@@ -125,6 +126,10 @@ def build_runtime_grid(
             pixels[x, y] = 0
     for text, x, y in SIDEBAR_LABELS:
         draw_label(image, text, x, y)
+    left, top, right, bottom = SCORE_CLEAR_BOX
+    for y in range(top, bottom + 1):
+        for x in range(left, right + 1):
+            pixels[x, y] = 0
     left, top, right, bottom = MASCOT_CLEAR_BOX
     for y in range(top, bottom + 1):
         for x in range(left, right + 1):
