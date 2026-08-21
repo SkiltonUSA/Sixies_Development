@@ -32,14 +32,19 @@ DIE_LEFTS = (70, 98, 128, 158, 186)
 DIE_TOPS = (8, 38, 68, 99, 129)
 SIDEBAR_CLEAR_BOX = (458, 7, 544, 143)
 SIDEBAR_LABELS = (("CUR", 459, 15), ("NEXT", 459, 75))
+SCORE_LABEL_CLEAR_BOX = (32, 34, 77, 40)
+SCORE_LABEL = ("TOTAL", 36, 35)
 SCORE_CLEAR_BOX = (24, 43, 89, 54)
 MASCOT_CLEAR_BOX = (13, 52, 100, 143)
 MASCOT_BOX = (13, 59, 88, 55)
 
 FONT = {
+    "A": ("010", "101", "111", "101", "101"),
     "C": ("111", "100", "100", "100", "111"),
     "E": ("111", "100", "110", "100", "111"),
+    "L": ("100", "100", "100", "100", "111"),
     "N": ("101", "111", "111", "111", "101"),
+    "O": ("111", "101", "101", "101", "111"),
     "R": ("110", "101", "110", "101", "101"),
     "T": ("111", "010", "010", "010", "010"),
     "U": ("101", "101", "101", "101", "111"),
@@ -79,7 +84,16 @@ def pack_hgr(image: Image.Image) -> bytearray:
     return page
 
 
-def draw_label(image: Image.Image, text: str, x: int, y: int, scale: int = 2) -> None:
+def draw_label(
+    image: Image.Image,
+    text: str,
+    x: int,
+    y: int,
+    scale_x: int = 2,
+    scale_y: int | None = None,
+) -> None:
+    if scale_y is None:
+        scale_y = scale_x
     pixels = image.load()
     cursor = x
     for character in text:
@@ -87,13 +101,13 @@ def draw_label(image: Image.Image, text: str, x: int, y: int, scale: int = 2) ->
             for column, bit in enumerate(bits):
                 if bit == "0":
                     continue
-                for offset_y in range(scale):
-                    for offset_x in range(scale):
+                for offset_y in range(scale_y):
+                    for offset_x in range(scale_x):
                         pixels[
-                            cursor + column * scale + offset_x,
-                            y + row * scale + offset_y,
+                            cursor + column * scale_x + offset_x,
+                            y + row * scale_y + offset_y,
                         ] = 255
-        cursor += 4 * scale
+        cursor += 4 * scale_x
 
 
 def draw_mascot(image: Image.Image, mascot_path: Path) -> None:
@@ -126,6 +140,12 @@ def build_runtime_grid(
             pixels[x, y] = 0
     for text, x, y in SIDEBAR_LABELS:
         draw_label(image, text, x, y)
+    left, top, right, bottom = SCORE_LABEL_CLEAR_BOX
+    for y in range(top, bottom + 1):
+        for x in range(left, right + 1):
+            pixels[x, y] = 0
+    text, x, y = SCORE_LABEL
+    draw_label(image, text, x, y, scale_x=2, scale_y=1)
     left, top, right, bottom = SCORE_CLEAR_BOX
     for y in range(top, bottom + 1):
         for x in range(left, right + 1):
