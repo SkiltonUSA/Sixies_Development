@@ -66,7 +66,7 @@
 ## Merge Callouts
 
 - A merge awards the face value times the number of consumed dice. Removing sixes also awards a 50-point bonus, making a three-six merge worth 68 points. Chain-reaction awards accumulate before presentation.
-- The award uses a compact doubled 3x5 font built into the shared 616-byte arbitrary-position sprite buffer. It appears over the resolved merge cell, travels to the left score well in six XOR-restored steps, then replaces the persistent total before the star burst and comic callout.
+- The award uses a compact doubled 3x5 font built into the shared 616-byte arbitrary-position sprite buffer. The old total is erased, the award travels from the left score well to the resolved merge cell in six XOR-restored steps, and the updated persistent total is drawn before the star burst and comic callout.
 
 - Ten supplied comic callouts are preserved as source masters under `assets/merge_*_master.png`. `scripts/generate_merge_effects.py` corrects for DHGR pixel aspect ratio, reduces them to one-bit art, and emits deterministic previews.
 - Each effect is restored to its original 280-signal by 48-scanline size. Its aligned auxiliary and main planes are 960 bytes each, so one plane fits the existing 1 KB transfer buffer and all ten effects consume 19.2 KB on disk.

@@ -33,7 +33,7 @@ The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots
 - Chain reactions resolve immediately.
 - The current and next placement dice appear in the right panel.
 - The mascot and persistent five-digit score appear in the left panel.
-- Merge points appear over the resolved die and travel to the score panel.
+- Merge points leave the score panel and travel to the resolved die.
 - Grid ripples, flashing merged dice, falling star sprites, and comic callouts accompany merges.
 - `FIVES` is reserved for value-5 merges and `SIXIES` for value-6 merges.
 - Single-die mode begins when no adjacent empty pair remains.
@@ -43,7 +43,7 @@ The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots
 
 A merge awards the face value multiplied by the number of consumed dice. Three ones score 3 points, three twos score 6, three fives score 15, and larger connected groups score all consumed dice.
 
-Removing sixes adds a 50-point bonus. A merge of three sixes therefore scores `3 x 6 + 50 = 68` points. Chain-reaction awards accumulate before the animated total reaches the scoreboard.
+Removing sixes adds a 50-point bonus. A merge of three sixes therefore scores `3 x 6 + 50 = 68` points. Chain-reaction awards accumulate before leaving the scoreboard and traveling to the resolved die.
 
 ## Host Requirements
 

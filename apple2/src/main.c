@@ -547,8 +547,8 @@ static void draw_score_value(unsigned int value) {
 }
 
 static void animate_merge_score(void) {
-    int start_x;
-    int start_top;
+    int destination_x;
+    int destination_top;
     int x;
     int top;
     unsigned char step;
@@ -556,20 +556,20 @@ static void animate_merge_score(void) {
     if (merge_score_pending == 0) {
         return;
     }
-    start_x = BOARD_LEFT + (int) merge_effect_x * CELL_PITCH_X + 5;
-    start_top = BOARD_TOP + (int) merge_effect_y * CELL_PITCH_Y + 7;
+    destination_x = BOARD_LEFT + (int) merge_effect_x * CELL_PITCH_X + 5;
+    destination_top = BOARD_TOP + (int) merge_effect_y * CELL_PITCH_Y + 7;
+    draw_score_value(displayed_score);
     build_score_text_sprite(merge_score_pending, 0, 1);
     for (step = 0; step <= SCORE_TRAVEL_STEPS; ++step) {
-        x = start_x
-            + (SCORE_TEXT_X - start_x) * step / SCORE_TRAVEL_STEPS;
-        top = start_top
-            + (SCORE_TEXT_TOP - start_top) * step / SCORE_TRAVEL_STEPS;
+        x = SCORE_TEXT_X
+            + (destination_x - SCORE_TEXT_X) * step / SCORE_TRAVEL_STEPS;
+        top = SCORE_TEXT_TOP
+            + (destination_top - SCORE_TEXT_TOP) * step / SCORE_TRAVEL_STEPS;
         xor_score_text_at(x, top);
         wait_animation_frames(step == 0 ? 6 : 2);
         xor_score_text_at(x, top);
     }
 
-    draw_score_value(displayed_score);
     displayed_score = score;
     draw_score_value(displayed_score);
     merge_score_pending = 0;
