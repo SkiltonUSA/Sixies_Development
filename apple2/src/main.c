@@ -123,6 +123,7 @@ extern void clear_dhgr_tile_aux(void);
 extern void clear_dhgr_tile_main(void);
 extern void invert_dhgr_tile_aux(void);
 extern void invert_dhgr_tile_main(void);
+extern void run_merge_grid_shake(void);
 extern void draw_merge_effect_aux(void);
 extern void draw_merge_effect_main(void);
 extern void save_merge_effect_background(void);
@@ -161,9 +162,13 @@ static unsigned hgr_row_address(unsigned y) {
     return 0x2000u + ((y & 0x07u) << 10) + (((y >> 3) & 0x07u) << 7) + ((y >> 6) * 0x28u);
 }
 
+#pragma code-name (push, "LC")
+
 static void activate_soft_switch(unsigned address) {
     *((volatile unsigned char*) address) = 0;
 }
+
+#pragma code-name (pop)
 
 static void set_graphics(unsigned char mixed) {
     activate_soft_switch(EIGHTY_STORE_OFF);
@@ -1518,7 +1523,7 @@ static unsigned char merge_at(unsigned char x, unsigned char y) {
     } else {
         merge_effect_index = first_merge_effects[rand() % 7u];
     }
-    ++turn_merge_count;
+    turn_merge_count = count == 3u ? value : 1u;
     merge_effect_x = x;
     merge_effect_y = y;
     keep = cell_index(x, y);
@@ -1539,6 +1544,9 @@ static void resolve_at(unsigned char x, unsigned char y) {
         }
         redraw_board_changes();
         if (dhgr_grid_active) {
+            if (turn_merge_count >= 5u) {
+                run_merge_grid_shake();
+            }
             run_merge_grid_ripple(merge_effect_x, merge_effect_y);
             update_score_display();
             show_merge_flash(merge_effect_index);
@@ -1869,7 +1877,11 @@ static void game_loop(void) {
                 );
                 break;
             case 'N':
+#ifdef SCREEN_SHAKE_DEMO
+                run_merge_grid_shake();
+#else
                 begin_new_game();
+#endif
                 continue;
         }
         if (placement_changed) {

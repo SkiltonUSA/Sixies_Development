@@ -9,6 +9,7 @@
 .export _clear_dhgr_tile_main
 .export _invert_dhgr_tile_aux
 .export _invert_dhgr_tile_main
+.export _run_merge_grid_shake
 .export _draw_merge_effect_aux
 .export _draw_merge_effect_main
 .export _save_merge_effect_background
@@ -48,6 +49,9 @@ MERGE_EFFECT_HEIGHT = 48
 MERGE_EFFECT_BANK_BYTES = MERGE_EFFECT_ROW_BYTES * MERGE_EFFECT_HEIGHT
 MERGE_EFFECT_BACKUP = $4000
 MERGE_STAR_ROW_BYTES = 8
+GRID_SHAKE_FIRST_BYTE = 9
+GRID_SHAKE_LAST_BYTE = 30
+GRID_SHAKE_ROWS = 120
 
 .assert MERGE_EFFECT_BACKUP + MERGE_EFFECT_BANK_BYTES * 2 <= $6000, error, "merge save-under exceeds auxiliary HGR Page 2"
 
@@ -368,6 +372,103 @@ opaque_source_ready:
 .segment "LC"
 
 .include "score_digits.inc"
+
+; Reuse the generated 120 board-interior scanlines so the complete C64-style
+; chain shake fits in the remaining language-card space.
+.proc _run_merge_grid_shake
+    lda #2
+shake_cycle:
+    pha
+    lda #1
+    jsr shift_grid_rows
+    jsr wait_shake_frame
+    lda #0
+    jsr shift_grid_rows
+    lda #0
+    jsr shift_grid_rows
+    jsr wait_shake_frame
+    lda #1
+    jsr shift_grid_rows
+    pla
+    sec
+    sbc #1
+    bne shake_cycle
+    rts
+.endproc
+
+shift_grid_rows:
+    sta tmp2
+    ldx #0
+shift_grid_row:
+    lda _dice_blit_row_low,x
+    sta ptr1
+    lda _dice_blit_row_high,x
+    sta ptr1+1
+    lda tmp2
+    beq shift_grid_left
+    jsr shift_row_right
+    jmp shift_grid_next
+shift_grid_left:
+    jsr shift_row_left
+shift_grid_next:
+    inx
+    cpx #GRID_SHAKE_ROWS
+    bne shift_grid_row
+    rts
+
+wait_shake_frame:
+    bit $C019
+    bpl wait_shake_frame
+wait_shake_frame_end:
+    bit $C019
+    bmi wait_shake_frame_end
+    rts
+
+shift_row_right:
+    sta EIGHTY_STORE_ON
+    sta PAGE2
+    jsr shift_row_right_bank
+    sta EIGHTY_STORE_OFF
+    sta PAGE1
+    ; Fall through to rotate the same main-bank row.
+shift_row_right_bank:
+    ldy #GRID_SHAKE_LAST_BYTE
+    lda (ptr1),y
+    sta tmp1
+shift_row_right_byte:
+    dey
+    lda (ptr1),y
+    iny
+    sta (ptr1),y
+    dey
+    cpy #GRID_SHAKE_FIRST_BYTE
+    bne shift_row_right_byte
+    lda tmp1
+    sta (ptr1),y
+    rts
+
+shift_row_left:
+    sta EIGHTY_STORE_ON
+    sta PAGE2
+    jsr shift_row_left_bank
+    sta EIGHTY_STORE_OFF
+    sta PAGE1
+    ; Fall through to rotate the same main-bank row.
+shift_row_left_bank:
+    ldy #GRID_SHAKE_FIRST_BYTE
+    lda (ptr1),y
+    sta tmp1
+shift_row_left_byte:
+    iny
+    lda (ptr1),y
+    dey
+    sta (ptr1),y
+    iny
+    cpy #GRID_SHAKE_LAST_BYTE
+    bne shift_row_left_byte
+    lda tmp1
+    sta (ptr1),y
+    rts
 
 ; Preserve both planes beneath the opaque callout in otherwise unused
 ; auxiliary HGR Page 2. Keeping this code in the language card allows the

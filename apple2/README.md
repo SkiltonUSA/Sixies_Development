@@ -42,6 +42,7 @@ The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots
 - The mascot and persistent five-digit score appear in the left panel.
 - Multiple merges resolve as separate visual events with an immediate score update for each one.
 - Grid ripples, flashing merged dice, falling star sprites, and comic callouts accompany merges.
+- Merges of exactly three fives or exactly three sixes shake the grid horizontally.
 - `FIVES` appears when fours merge into a five, and `SIXIES` when fives merge into a six.
 - `AWESOME` is reserved for the second and later generic merges in the same placement turn.
 - Single-die mode begins when no adjacent empty pair remains.

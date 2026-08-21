@@ -48,7 +48,7 @@ class SequentialMergeTests(unittest.TestCase):
         self.assertIn("else if (turn_merge_count != 0)", body)
         self.assertIn("merge_effect_index = MERGE_EFFECT_AWESOME;", body)
         self.assertIn("merge_effect_index = first_merge_effects[rand() % 7u];", body)
-        self.assertIn("++turn_merge_count;", body)
+        self.assertIn("turn_merge_count = count == 3u ? value : 1u;", body)
 
         resolve = function_body(
             "resolve_merges(unsigned char first_x, unsigned char first_y, "
