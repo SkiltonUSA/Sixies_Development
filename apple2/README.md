@@ -21,7 +21,7 @@ The port is written in C and 6502 assembly with cc65. Its Studio313 presentation
 | Operating system | ProDOS 2.4.3 disk template |
 | Input | Apple II keyboard |
 | Source language | C and 6502 assembly, compiled by cc65 |
-| Program address | `$4000`, with high memory limited to `$BF00` |
+| Program address | Exomizer SFX at `$080D`; game unpacked to `$4000`, with high memory limited to `$BF00` |
 | Software stack | `$0300` bytes |
 | Language card | Merge sprite and score rendering code at `$D400` |
 
@@ -33,6 +33,7 @@ The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots
 - A timed monochrome DHGR attract loop with Studio313 presentation, title, and instruction screens.
 - The initial title remains for ten seconds; subsequent attract screens rotate every five seconds.
 - Random single or paired dice, with four-way rotation for pairs.
+- The board-placement dice invert while waiting for input, without flashing the sidebar queue.
 - Occupied targets shown with per-die diagonal hatching.
 - Three-or-more edge-connected dice merge into the next value.
 - Connected sixes are removed from the board.
@@ -88,7 +89,7 @@ make -C apple2 run
 
 `setup-tools` installs or downloads the development environment. `doctor` builds the program and verifies the emulator configuration. `run` creates the disk image, copies it to a disposable emulator directory, and boots SIXIES.
 
-Windows and Linux setup is not currently automated. On those hosts, install cc65, Python 3 with Pillow, Java, AppleCommander, a ProDOS disk template, and a compatible Apple II emulator manually before using the Makefile as a reference.
+Windows and Linux setup is not currently automated. On those hosts, install cc65, Exomizer 3.1.2, Python 3 with Pillow, Java, AppleCommander, a ProDOS disk template, and a compatible Apple II emulator manually before using the Makefile as a reference.
 
 ## Installed Tools
 
@@ -97,6 +98,7 @@ The setup script keeps downloaded dependencies under the ignored `.tools/` direc
 | Tool | Installation | Purpose |
 | --- | --- | --- |
 | cc65 / `cl65` | Homebrew when absent | Compile C and 6502 assembly for the Apple II |
+| Exomizer 3.1.2 | Homebrew when absent | Build and verify the Apple II self-extracting executable |
 | Python virtual environment | `.tools/apple2-venv` | Isolate asset-generation packages |
 | Pillow | Installed in the virtual environment | Convert and validate source artwork |
 | AppleCommander | `.tools/applecommander` | Create and populate the ProDOS disk image |
@@ -114,6 +116,7 @@ Run these commands from the repository root:
 | --- | --- |
 | `make -C apple2 setup-tools` | Install and verify required tools |
 | `make -C apple2` | Compile the `SIXIES` Apple II binary |
+| `make -C apple2 crunch` | Create the verified Exomizer release payload |
 | `make -C apple2 assets` | Regenerate graphics, sprites, and previews |
 | `make -C apple2 test` | Run the Python asset and renderer tests |
 | `make -C apple2 disk` | Build the bootable `sixies.po` image |
@@ -126,14 +129,15 @@ The principal generated files are:
 
 | Path | Description |
 | --- | --- |
-| `apple2/build/SIXIES` | Native Apple II executable |
+| `apple2/build/SIXIES` | Native cc65 Apple II executable and debug input |
+| `apple2/build/SIXIES.EXO` | Verified Exomizer SFX machine-code payload |
 | `apple2/build/sixies.po` | Bootable ProDOS-order disk image |
 | `apple2/build/sixies.map` | cc65 linker memory map |
 | `apple2/build/assets/` | Runtime DHGR pages, dice, stars, and callouts |
 | `apple2/build/generated/` | Generated C headers for asset geometry |
 | `apple2/build/previews/` | PNG previews of converted Apple II artwork |
 
-The disk contains `SIXIES.SYSTEM`, `SIXIES`, compressed `PRESENTS.RLE`, `INSTRUCT.RLE`, and `GAMEOVER.RLE` screens, the original `TITLE.A2FM`, `GRID.A2FM`, `DICE.BLITS`, `MERGESTAR`, and the ten `FX00` through `FX09` callout files. Booting the disk launches `SIXIES.SYSTEM`, which loads the game.
+The disk contains `SIXIES.SYSTEM`, the crunched `SIXIES` ProDOS BIN, compressed `PRESENTS.RLE`, `INSTRUCT.RLE`, and `GAMEOVER.RLE` screens, the original `TITLE.A2FM`, `GRID.A2FM`, `DICE.BLITS`, `MERGESTAR`, and the ten `FX00` through `FX09` callout files. Booting the disk launches `SIXIES.SYSTEM`, which loads the SFX at `$080D`; it decrunches and starts the game at `$4000`.
 
 ## Emulator
 
@@ -175,6 +179,8 @@ izapple2 shortcuts used during development:
 ## Graphics and Runtime Design
 
 Static full-screen graphics are stored as disk-backed DHGR pages. The game streams main and auxiliary banks into Page 1, then updates only dirty cell interiors. Dice and score digits use fixed-position opaque or XOR assembly blits, while moving star effects use pre-shifted XOR sprites that restore the pixels beneath them.
+
+The release disk uses Exomizer 3.1.2's Apple II/IIe SFX target. `crunch_apple2_binary.py` validates cc65's AppleSingle metadata, converts the `$4000` data fork to PRG input, runs `sfx -t162`, verifies a complete `desfx` round trip, validates the generated BASIC launcher, and strips that launcher before ProDOS packaging at its `$080D` machine entry. The current 23.7 KB native program becomes an approximately 11.4 KB disk file, leaving 17 KB free on the 140 KB image; decompression does not change the game's runtime memory map.
 
 The Studio313 intro, generated instruction page, and game-over screen are RLE-packed so the new page fits the 140 KB ProDOS disk while the supplied title retains its faster raw A2FM loader. The title and grid share a single-open A2FM streamer; the compressed-screen loader reads one bank at a time into the reusable dice buffer and expands it through the 1 KB transfer buffer. Startup shows the presentation for five seconds and the initial title for ten seconds, then rotates instructions, presentation, and title at five seconds each. `Space`, `Return`, or `N` starts immediately from any attract screen; the normal dice load then reuses the same memory.
 

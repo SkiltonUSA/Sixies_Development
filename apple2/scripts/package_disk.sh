@@ -2,11 +2,11 @@
 set -euo pipefail
 
 if [[ $# -ne 3 ]]; then
-  echo "usage: package_disk.sh INPUT_BINARY OUTPUT_DSK ASSET_DIR" >&2
+  echo "usage: package_disk.sh CRUNCHED_BINARY OUTPUT_DSK ASSET_DIR" >&2
   exit 1
 fi
 
-INPUT_BINARY="$1"
+CRUNCHED_BINARY="$1"
 OUTPUT_DSK="$2"
 ASSET_DIR="$3"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -63,7 +63,7 @@ for filename in "${template_files[@]}"; do
 done
 "$JAVA_BIN" -jar "$APPLECOMMANDER_JAR" -n "$OUTPUT_DSK" SIXIES
 "$JAVA_BIN" -jar "$APPLECOMMANDER_JAR" -p "$OUTPUT_DSK" SIXIES.SYSTEM sys < "$LOADER_SYSTEM"
-"$JAVA_BIN" -jar "$APPLECOMMANDER_JAR" -as "$OUTPUT_DSK" SIXIES < "$INPUT_BINARY"
+"$JAVA_BIN" -jar "$APPLECOMMANDER_JAR" -p "$OUTPUT_DSK" SIXIES bin 0x080d < "$CRUNCHED_BINARY"
 
 for filename in PRESENTS.RLE TITLE.A2FM INSTRUCT.RLE GAMEOVER.RLE GRID.A2FM DICE.BLITS MERGESTAR \
   FX00 FX01 FX02 FX03 FX04 FX05 FX06 FX07 FX08 FX09; do

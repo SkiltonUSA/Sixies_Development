@@ -148,8 +148,8 @@ clear_last_ready:
     bne clear_row
     rts
 
-; Invert one 24-row cell interior for the monochrome merge ripple. Complete
-; bytes flip their seven signal bits; edge masks preserve adjacent grid data.
+; Invert one 24-row cell interior for the monochrome merge ripple and hover
+; flash. 80STORE/PAGE2 exposes auxiliary HGR without switching general writes.
 .proc _invert_dhgr_tile_aux
     sta EIGHTY_STORE_ON
     sta PAGE2

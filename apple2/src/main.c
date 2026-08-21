@@ -68,6 +68,7 @@
 #define MERGE_EFFECT_FIVES 3u
 #define MERGE_EFFECT_SIXIES 5u
 #define SCORE_DIGITS 5u
+#define HOVER_FLASH_FRAMES 18u
 #define ATTRACT_SCREEN_SECONDS 5u
 #define INITIAL_TITLE_SECONDS 10u
 #define NTSC_FRAMES_PER_SECOND 60u
@@ -1275,6 +1276,21 @@ static void redraw_preview_transition(
     draw_current_piece_preview();
 }
 
+static void invert_current_piece_preview(void) {
+    unsigned char x1 = 0;
+    unsigned char y1 = 0;
+    unsigned char x2 = 0;
+    unsigned char y2 = 0;
+
+    if (dhgr_grid_active) {
+        placement_cells(&x1, &y1, &x2, &y2);
+        invert_dhgr_board_tile(x1, y1);
+        if (piece_count == 2 && x2 < BOARD_SIZE && y2 < BOARD_SIZE) {
+            invert_dhgr_board_tile(x2, y2);
+        }
+    }
+}
+
 static void render_game(void) {
     unsigned char row;
     unsigned char col;
@@ -1594,6 +1610,25 @@ static char read_input(void) {
     return ch;
 }
 
+static char wait_for_game_input(void) {
+    unsigned char frames = 0;
+    unsigned char preview_inverted = 0;
+
+    while (!kbhit()) {
+        wait_animation_frames(1);
+        ++frames;
+        if (frames == HOVER_FLASH_FRAMES) {
+            invert_current_piece_preview();
+            preview_inverted = (unsigned char) !preview_inverted;
+            frames = 0;
+        }
+    }
+    if (preview_inverted) {
+        invert_current_piece_preview();
+    }
+    return read_input();
+}
+
 static unsigned char wait_for_start_or_timeout(unsigned frames) {
     char ch;
 
@@ -1763,7 +1798,7 @@ static void game_loop(void) {
     unsigned char placed_y2;
 
     while (!game_over) {
-        ch = read_input();
+        ch = wait_for_game_input();
         old_x = cursor_x;
         old_y = cursor_y;
         old_orientation = orientation;

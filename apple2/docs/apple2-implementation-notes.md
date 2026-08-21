@@ -20,6 +20,7 @@
 - Put auxiliary-memory copies, drawing inner loops, and cycle-sensitive routines in 6502 assembly.
 - Static DHGR pages are stored as ProDOS files and streamed through a 1 KB main-memory buffer. This keeps the executable clear of video memory and avoids embedding 32 KB of art.
 - Gameplay uses the supplied full-screen DHGR page directly. Dice update both auxiliary and main banks inside verified-black 24x24 cell interiors; the surrounding bitmap grid remains untouched.
+- Release disks package an Exomizer 3.1.2 Apple II/IIe SFX machine payload at `$080D`. The build validates the cc65 AppleSingle input and Exomizer launcher, then decrunches the result and compares it byte-for-byte with the original `$4000` PRG before accepting it. The native executable remains available for map/debug work, and runtime addresses are unchanged after decompression.
 
 ## Title Artwork
 
@@ -47,6 +48,7 @@
 - Runtime dice use monochrome white faces with black pips. Earlier artifact-color patterns were technically valid four-bit DHGR groups but produced severe vertical bands under izapple2's composite display path; monochrome keeps every value stable and readable across composite, RGB, and emulator output. The supplied colored masters remain preserved as source references.
 - Player-controlled dice use the same full opaque sprite as committed dice. Separate corner markers were removed because their second outline was visually confused with the die edge.
 - Invalid hover positions use a precomputed rounded die silhouette with diagonal hatching instead of an `X`. Each die in a pair is evaluated independently, so only the sprite directly overlapping an occupied cell is hatched; the normal dirty-cell path restores the committed die when the cursor moves away.
+- While gameplay waits for input, a VBL-driven 18-frame timer XOR-inverts only the active preview cell interiors. The existing assembly ripple primitive maps auxiliary HGR through `80STORE/PAGE2`, restores Page 1 immediately, and repeats the XOR to recover every underlying pixel exactly. A keypress restores the normal preview before movement, rotation, or placement is processed; the current/next sidebar dice never flash, occupied targets keep their per-die hatch rule, and the single-bank HGR fallback remains static.
 - The right panel reuses the center board-column sprite phase at HGR X 247. Generated offsets and masks prove the auxiliary/main alignment at build time, so current/next updates require no additional sprite bank or disk access.
 - `build/previews/dice_1_6.png` is a deterministic enlarged preview of all six reduced masks. The runtime verifies `DICE.BLITS` with a generated checksum before enabling the DHGR grid renderer.
 

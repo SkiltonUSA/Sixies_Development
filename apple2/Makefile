@@ -10,8 +10,10 @@ PYTHON := $(APPLE2_VENV)/bin/python
 CC65 := $(shell command -v cl65 2>/dev/null)
 APPLECOMMANDER_JAR := $(firstword $(wildcard $(TOOLS_DIR)/applecommander/AppleCommander-ac-*.jar))
 IZAPPLE2 := $(TOOLS_DIR)/izapple2/izapple2
+EXOMIZER ?= $(shell command -v exomizer 2>/dev/null)
 
 TARGET := $(BUILD_DIR)/SIXIES
+CRUNCHED_TARGET := $(BUILD_DIR)/SIXIES.EXO
 DISK := $(BUILD_DIR)/sixies.po
 MAP := $(BUILD_DIR)/sixies.map
 SRC := $(APPLE2_DIR)/src/main.c
@@ -67,7 +69,7 @@ MERGE_EFFECT_HEADER := $(GENERATED_DIR)/merge_effects.h
 MERGE_EFFECT_FILES := $(addprefix $(ASSET_DIR)/,MERGESTAR FX00 FX01 FX02 FX03 FX04 FX05 FX06 FX07 FX08 FX09)
 SCORE_DIGITS_INC := $(GENERATED_DIR)/score_digits.inc
 
-.PHONY: all setup-tools assets test disk run debug emulator-check doctor clean
+.PHONY: all setup-tools assets test crunch disk run debug emulator-check doctor clean
 
 all: $(TARGET)
 
@@ -183,11 +185,20 @@ $(TARGET): Makefile $(SRC) $(ASM_SRC) $(PRESENTS_STAMP) $(INSTRUCTIONS_STAMP) $(
 		"$(SRC)" "$(ASM_SRC)"
 	rm -f "$(APPLE2_DIR)/src/main.o" "$(APPLE2_DIR)/src/auxmem.o"
 
+crunch: $(CRUNCHED_TARGET)
+
+$(CRUNCHED_TARGET): $(TARGET) scripts/crunch_apple2_binary.py | $(BUILD_DIR)
+	@if [ -z "$(EXOMIZER)" ]; then echo "Exomizer 3.1.2 was not found on PATH."; exit 1; fi
+	"$(PYTHON)" scripts/crunch_apple2_binary.py \
+		--input "$(TARGET)" \
+		--output "$@" \
+		--exomizer "$(EXOMIZER)"
+
 disk: $(DISK)
 
-$(DISK): $(TARGET) assets setup-tools | $(BUILD_DIR)
+$(DISK): $(CRUNCHED_TARGET) assets setup-tools | $(BUILD_DIR)
 	@if [ -z "$(APPLECOMMANDER_JAR)" ]; then echo "AppleCommander jar not found under $(TOOLS_DIR)/applecommander"; exit 1; fi
-	./scripts/package_disk.sh "$(TARGET)" "$@" "$(ASSET_DIR)"
+	./scripts/package_disk.sh "$(CRUNCHED_TARGET)" "$@" "$(ASSET_DIR)"
 
 run: $(DISK) setup-tools
 	./scripts/run-emulator.sh "$(DISK)"
@@ -201,6 +212,7 @@ emulator-check: setup-tools
 doctor: $(DISK) emulator-check
 	@echo "Apple II development environment is ready."
 	@echo "  compiler: $$(cl65 --version 2>&1 | head -n 1)"
+	@echo "  compressor: $$($(EXOMIZER) -v 2>&1 | head -n 1)"
 	@echo "  disk image: $(DISK)"
 	@echo "  run: make -C apple2 run"
 	@echo "  debug: make -C apple2 debug"

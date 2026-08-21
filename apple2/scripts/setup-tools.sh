@@ -21,6 +21,22 @@ if ! command -v cl65 >/dev/null 2>&1; then
   fi
 fi
 
+if ! command -v exomizer >/dev/null 2>&1; then
+  if command -v brew >/dev/null 2>&1; then
+    brew install exomizer
+  fi
+fi
+
+if ! command -v exomizer >/dev/null 2>&1; then
+  echo "Exomizer 3.1.2 was not found on PATH and could not be installed." >&2
+  exit 1
+fi
+
+if ! exomizer -v 2>&1 | grep -q "Exomizer v3.1.2"; then
+  echo "SIXIES requires Exomizer 3.1.2." >&2
+  exit 1
+fi
+
 if ! command -v cl65 >/dev/null 2>&1; then
   echo "cc65 was not found on PATH and could not be installed." >&2
   exit 1
@@ -106,6 +122,7 @@ fi
 
 echo "Apple II tools ready:"
 echo "  cc65: $(command -v cl65)"
+echo "  exomizer: $(command -v exomizer) (v3.1.2)"
 echo "  python: $VENV_DIR/bin/python"
 echo "  pillow: installed in $VENV_DIR"
 echo "  applecommander: $(ls "$APPLECOMMANDER_DIR"/AppleCommander-ac-*.jar | head -n 1)"
