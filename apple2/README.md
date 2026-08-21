@@ -2,7 +2,7 @@
 
 SIXIES is a native Apple II port of the repository's C64 dice-merging puzzle game. Place single or paired dice on a 5x5 board, connect three or more equal values, and create chain reactions while keeping space available.
 
-The port is written in C and 6502 assembly with cc65. Its title, board, dice, mascot, score animation, merge fireworks, and comic callouts use monochrome Apple II double-hi-resolution graphics. Generated binaries and downloaded tools are intentionally excluded from Git; the documented build recreates the complete bootable disk from source.
+The port is written in C and 6502 assembly with cc65. Its title, board, dice, mascot, score display, merge fireworks, and comic callouts use monochrome Apple II double-hi-resolution graphics. Generated binaries and downloaded tools are intentionally excluded from Git; the documented build recreates the complete bootable disk from source.
 
 ## Apple II Specifications
 
@@ -33,7 +33,7 @@ The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots
 - Chain reactions resolve immediately.
 - The current and next placement dice appear in the right panel.
 - The mascot and persistent five-digit score appear in the left panel.
-- Merge points leave the score panel and travel to the resolved die.
+- The persistent score updates immediately after a merge.
 - Grid ripples, flashing merged dice, falling star sprites, and comic callouts accompany merges.
 - `FIVES` is reserved for value-5 merges and `SIXIES` for value-6 merges.
 - Single-die mode begins when no adjacent empty pair remains.
@@ -43,7 +43,7 @@ The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots
 
 A merge awards the face value multiplied by the number of consumed dice. Three ones score 3 points, three twos score 6, three fives score 15, and larger connected groups score all consumed dice.
 
-Removing sixes adds a 50-point bonus. A merge of three sixes therefore scores `3 x 6 + 50 = 68` points. Chain-reaction awards accumulate before leaving the scoreboard and traveling to the resolved die.
+Removing sixes adds a 50-point bonus. A merge of three sixes therefore scores `3 x 6 + 50 = 68` points. Chain-reaction awards accumulate into one immediate scoreboard update.
 
 ## Host Requirements
 
@@ -167,7 +167,7 @@ izapple2 shortcuts used during development:
 
 ## Graphics and Runtime Design
 
-Static full-screen graphics are stored as disk-backed DHGR pages. The game streams main and auxiliary banks into Page 1, then updates only dirty cell interiors. Dice use fixed-position opaque assembly blits, while moving score and star effects use pre-shifted XOR sprites that restore the pixels beneath them.
+Static full-screen graphics are stored as disk-backed DHGR pages. The game streams main and auxiliary banks into Page 1, then updates only dirty cell interiors. Dice and score digits use fixed-position opaque or XOR assembly blits, while moving star effects use pre-shifted XOR sprites that restore the pixels beneath them.
 
 The executable begins at `$4000`, so HGR Page 2 is not available for page flipping. Low-frequency game logic remains in C; auxiliary-memory copies and rendering loops are implemented in 6502 assembly. The `$0300` software stack preserves enough heap for repeated ProDOS asset reads.
 
