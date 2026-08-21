@@ -1,4 +1,4 @@
-# Dice Merge for Commodore 64
+# Dice Merge for Apple //
 
 A 5x5 hi-res puzzle game written in 6510 assembly for ACME. Place random single or double dice, merge connected matching values, and keep space available on the board.
 
