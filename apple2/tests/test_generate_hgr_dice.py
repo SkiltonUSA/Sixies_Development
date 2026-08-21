@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 
 APPLE2_DIR = Path(__file__).parents[1]
@@ -138,6 +139,24 @@ class HgrDiceTests(unittest.TestCase):
                 GENERATOR.bank_masks_at(GENERATOR.SIDEBAR_DIE_LEFT, auxiliary),
                 GENERATOR.bank_masks(column, auxiliary),
             )
+
+    def test_every_assembly_blit_span_has_first_and_last_bytes(self) -> None:
+        byte_counts = [
+            GENERATOR.bank_span(column, auxiliary)[1]
+            for column in range(GENERATOR.BOARD_SIZE)
+            for auxiliary in (True, False)
+        ]
+        byte_counts.extend(
+            GENERATOR.bank_span_at(GENERATOR.SIDEBAR_DIE_LEFT, auxiliary)[1]
+            for auxiliary in (True, False)
+        )
+
+        self.assertGreaterEqual(min(byte_counts), GENERATOR.MIN_BLIT_BANK_BYTES)
+
+    def test_generator_rejects_a_one_byte_bank_span(self) -> None:
+        with patch.object(GENERATOR, "SPRITE_SIZE", 1):
+            with self.assertRaisesRegex(AssertionError, "require at least 2"):
+                GENERATOR.bank_span_at(0, True)
 
     def test_blit_rows_touch_only_the_selected_board_cell_span(self) -> None:
         masks = [GENERATOR.build_dhgr_face_mask(value) for value in range(1, 7)]

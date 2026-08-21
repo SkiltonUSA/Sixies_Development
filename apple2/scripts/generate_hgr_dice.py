@@ -26,6 +26,7 @@ BLIT_ROWS = SPRITE_SIZE
 BLIT_ROW_BYTES = 5
 BLIT_BANK_BYTES = BLIT_ROWS * BLIT_ROW_BYTES
 BLIT_VARIANT_BYTES = BLIT_BANK_BYTES * 2
+MIN_BLIT_BANK_BYTES = 2
 DIE_NAMES = ("one", "two", "three", "four", "five", "six")
 DIE_COLORS = (
     (245, 245, 245),
@@ -161,6 +162,12 @@ def bank_span_at(origin_x: int, auxiliary: bool) -> tuple[int, int]:
     parity = 0 if auxiliary else 1
     sequence_bytes = [byte for byte in range(first, last + 1) if byte & 1 == parity]
     offsets = [byte // 2 for byte in sequence_bytes]
+    if len(offsets) < MIN_BLIT_BANK_BYTES:
+        bank = "auxiliary" if auxiliary else "main"
+        raise AssertionError(
+            f"DHGR {bank} span at x={origin_x} contains {len(offsets)} byte(s); "
+            f"assembly blitters require at least {MIN_BLIT_BANK_BYTES}"
+        )
     return min(offsets), len(offsets)
 
 
@@ -346,6 +353,15 @@ def write_header(
 ) -> None:
     blits = build_blits(dhgr_masks)
     edge_pool, edge_offsets = compact_edge_restores(grid)
+    aux_byte_counts = [bank_span(column, True)[1] for column in range(BOARD_SIZE)]
+    main_byte_counts = [bank_span(column, False)[1] for column in range(BOARD_SIZE)]
+    sidebar_aux_byte_count = bank_span_at(SIDEBAR_DIE_LEFT, True)[1]
+    sidebar_main_byte_count = bank_span_at(SIDEBAR_DIE_LEFT, False)[1]
+    minimum_byte_count = min(
+        aux_byte_counts
+        + main_byte_counts
+        + [sidebar_aux_byte_count, sidebar_main_byte_count]
+    )
     row_addresses = [
         hgr_address(DIE_TOPS[board_row] + line)
         for board_row in range(BOARD_SIZE)
@@ -360,6 +376,7 @@ def write_header(
         f"#define DICE_BLIT_ROWS {BLIT_ROWS}",
         f"#define DICE_BLIT_ROW_BYTES {BLIT_ROW_BYTES}",
         f"#define DICE_BLIT_BANK_BYTES {BLIT_BANK_BYTES}",
+        f"#define DICE_MIN_BLIT_BYTE_COUNT {minimum_byte_count}",
         f"#define DICE_BLIT_VARIANT_BYTES {BLIT_VARIANT_BYTES}",
         f"#define DICE_FACE_BLITS_BYTES {FACE_BLIT_BYTES}",
         f"#define DICE_INVALID_BLIT_OFFSET {INVALID_BLIT_OFFSET}",
@@ -369,8 +386,8 @@ def write_header(
         f"#define DICE_SIDEBAR_SOURCE_COLUMN {SIDEBAR_SOURCE_COLUMN}",
         f"#define DICE_SIDEBAR_AUX_BYTE_OFFSET {bank_span_at(SIDEBAR_DIE_LEFT, True)[0]}",
         f"#define DICE_SIDEBAR_MAIN_BYTE_OFFSET {bank_span_at(SIDEBAR_DIE_LEFT, False)[0]}",
-        f"#define DICE_SIDEBAR_AUX_BYTE_COUNT {bank_span_at(SIDEBAR_DIE_LEFT, True)[1]}",
-        f"#define DICE_SIDEBAR_MAIN_BYTE_COUNT {bank_span_at(SIDEBAR_DIE_LEFT, False)[1]}",
+        f"#define DICE_SIDEBAR_AUX_BYTE_COUNT {sidebar_aux_byte_count}",
+        f"#define DICE_SIDEBAR_MAIN_BYTE_COUNT {sidebar_main_byte_count}",
         "",
     ]
     for name, mask in zip(DIE_NAMES, masks):
@@ -393,7 +410,7 @@ def write_header(
         "",
         format_array(
             "dice_aux_byte_counts",
-            [bank_span(column, True)[1] for column in range(BOARD_SIZE)],
+            aux_byte_counts,
         ),
         "",
         format_array(
@@ -413,7 +430,7 @@ def write_header(
         "",
         format_array(
             "dice_main_byte_counts",
-            [bank_span(column, False)[1] for column in range(BOARD_SIZE)],
+            main_byte_counts,
         ),
         "",
         format_array(

@@ -43,6 +43,16 @@
 #define DHGR_SIGNAL_WIDTH 560u
 #define DHGR_SCANLINES 192u
 
+#if DICE_MIN_BLIT_BYTE_COUNT < 2u
+#error "DHGR assembly blitters require at least two bytes per bank span"
+#endif
+
+#if MERGE_STAR_BYTES > DHGR_TRANSFER_SIZE \
+    || MERGE_EFFECT_BANK_BYTES > DHGR_TRANSFER_SIZE \
+    || DICE_BLIT_BANK_BYTES > DHGR_TRANSFER_SIZE
+#error "generated asset does not fit the shared DHGR transfer buffer"
+#endif
+
 #define BOARD_SIZE 5
 #define BOARD_CELLS 25
 #define CELL_SIZE 24
@@ -509,7 +519,7 @@ static void xor_merge_star_at(int x, int y) {
     unsigned char row;
     unsigned address;
 
-    if (x < 0 || x + 24 > 280 || screen_y >= DHGR_SCANLINES) {
+    if (x < 0 || x + 24 > 280 || screen_y >= (int) DHGR_SCANLINES) {
         return;
     }
     if (screen_y < 0) {
