@@ -32,22 +32,32 @@ DIE_LEFTS = (70, 98, 128, 158, 186)
 DIE_TOPS = (8, 38, 68, 99, 129)
 SIDEBAR_CLEAR_BOX = (458, 7, 544, 143)
 SIDEBAR_LABELS = (("CUR", 459, 15), ("NEXT", 459, 75))
-SCORE_LABEL_CLEAR_BOX = (32, 34, 77, 40)
-SCORE_LABEL = ("TOTAL", 36, 35)
+PRE_RENDERED_LABELS = (
+    ("SCORE", 38, 14, (28, 12, 86, 19)),
+    ("TOTAL", 36, 35, (32, 34, 77, 40)),
+    ("NEW GAME", 44, 176, (28, 174, 122, 181)),
+    ("SETTINGS", 468, 176, (454, 174, 538, 181)),
+)
 SCORE_CLEAR_BOX = (24, 43, 89, 54)
 MASCOT_CLEAR_BOX = (13, 52, 100, 143)
 MASCOT_BOX = (13, 59, 88, 55)
 
 FONT = {
+    " ": ("000", "000", "000", "000", "000"),
     "A": ("010", "101", "111", "101", "101"),
     "C": ("111", "100", "100", "100", "111"),
     "E": ("111", "100", "110", "100", "111"),
+    "G": ("111", "100", "101", "101", "111"),
+    "I": ("111", "010", "010", "010", "111"),
     "L": ("100", "100", "100", "100", "111"),
+    "M": ("101", "111", "111", "101", "101"),
     "N": ("101", "111", "111", "111", "101"),
     "O": ("111", "101", "101", "101", "111"),
     "R": ("110", "101", "110", "101", "101"),
+    "S": ("111", "100", "111", "001", "111"),
     "T": ("111", "010", "010", "010", "010"),
     "U": ("101", "101", "101", "101", "111"),
+    "W": ("101", "101", "101", "111", "010"),
     "X": ("101", "101", "010", "101", "101"),
 }
 
@@ -140,12 +150,12 @@ def build_runtime_grid(
             pixels[x, y] = 0
     for text, x, y in SIDEBAR_LABELS:
         draw_label(image, text, x, y)
-    left, top, right, bottom = SCORE_LABEL_CLEAR_BOX
-    for y in range(top, bottom + 1):
-        for x in range(left, right + 1):
-            pixels[x, y] = 0
-    text, x, y = SCORE_LABEL
-    draw_label(image, text, x, y, scale_x=2, scale_y=1)
+    for text, x, y, clear_box in PRE_RENDERED_LABELS:
+        left, top, right, bottom = clear_box
+        for clear_y in range(top, bottom + 1):
+            for clear_x in range(left, right + 1):
+                pixels[clear_x, clear_y] = 0
+        draw_label(image, text, x, y, scale_x=2, scale_y=1)
     left, top, right, bottom = SCORE_CLEAR_BOX
     for y in range(top, bottom + 1):
         for x in range(left, right + 1):
