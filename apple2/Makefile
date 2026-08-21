@@ -55,6 +55,7 @@ DICE_BLITS := $(ASSET_DIR)/DICE.BLITS
 MERGE_EFFECT_STAMP := $(ASSET_DIR)/merge_effects.stamp
 MERGE_EFFECT_HEADER := $(GENERATED_DIR)/merge_effects.h
 MERGE_EFFECT_FILES := $(addprefix $(ASSET_DIR)/,MERGESTAR FX00 FX01 FX02 FX03 FX04 FX05 FX06 FX07 FX08 FX09)
+SCORE_DIGITS_INC := $(GENERATED_DIR)/score_digits.inc
 
 .PHONY: all setup-tools assets test disk run debug emulator-check doctor clean
 
@@ -129,14 +130,19 @@ $(MERGE_EFFECT_STAMP): $(MERGE_MASTERS) scripts/generate_merge_effects.py | $(AS
 		--header "$(MERGE_EFFECT_HEADER)"
 	touch "$@"
 
+$(SCORE_DIGITS_INC): scripts/generate_score_digits.py | $(GENERATED_DIR)
+	@if [ ! -x "$(PYTHON)" ]; then ./scripts/setup-tools.sh; fi
+	"$(PYTHON)" scripts/generate_score_digits.py --output "$@"
+
 assets: $(TITLE_STAMP) $(GAME_OVER_STAMP) $(GRID_STAMP) $(DICE_STAMP) $(MERGE_EFFECT_STAMP)
 
 test: setup-tools
 	"$(PYTHON)" -m unittest discover -s tests -p 'test_*.py'
 
-$(TARGET): Makefile $(SRC) $(ASM_SRC) $(DICE_STAMP) $(MERGE_EFFECT_STAMP) | $(BUILD_DIR)
+$(TARGET): Makefile $(SRC) $(ASM_SRC) $(DICE_STAMP) $(MERGE_EFFECT_STAMP) $(SCORE_DIGITS_INC) | $(BUILD_DIR)
 	@if [ -z "$(CC65)" ]; then echo "cl65 was not found on PATH."; exit 1; fi
 	cl65 -t apple2 -Oirs --codesize 500 --start-addr 0x4000 -I "$(GENERATED_DIR)" \
+		--asm-include-dir "$(GENERATED_DIR)" \
 		-Wl "-D__HIMEM__=0xBF00,-D__STACKSIZE__=0x0300" \
 		-m "$(MAP)" \
 		-o "$@" \

@@ -12,6 +12,7 @@
 .export _draw_merge_effect_aux
 .export _draw_merge_effect_main
 .export _xor_merge_star
+.export _xor_score_digit
 .import _dhgr_transfer_buffer
 .import _dhgr_blit_source
 .import _dhgr_blit_row_index
@@ -28,6 +29,8 @@
 .import _merge_effect_row_low
 .import _merge_effect_row_high
 .import _merge_effect_byte_offset
+.import _score_blit_position
+.import _score_blit_digit
 .importzp ptr1, ptr2, ptr3, ptr4, tmp1, tmp2, tmp3
 
 RAMWRT_MAIN = $C004
@@ -355,6 +358,105 @@ opaque_source_ready:
     rts
 
 .segment "LC"
+
+.include "score_digits.inc"
+
+; XOR one pre-rendered digit at one of the five fixed score positions. Each
+; position touches at most one byte in each DHGR bank on ten screen rows.
+.proc _xor_score_digit
+    lda _score_blit_digit
+    sta tmp3
+    asl
+    asl
+    clc
+    adc tmp3
+    sta tmp3
+
+    lda _score_blit_position
+    asl
+    asl
+    asl
+    sta ptr1
+    ldx #0
+
+score_digit_glyph_row:
+    txa
+    clc
+    adc tmp3
+    tay
+    lda score_glyph_rows,y
+    clc
+    adc ptr1
+    tay
+    lda score_aux_pattern_masks,y
+    sta tmp1
+    lda score_main_pattern_masks,y
+    sta tmp2
+
+    txa
+    asl
+    tay
+    jsr xor_score_scanline
+    txa
+    asl
+    tay
+    iny
+    jsr xor_score_scanline
+
+    inx
+    cpx #SCORE_GLYPH_HEIGHT
+    bne score_digit_glyph_row
+
+    sta EIGHTY_STORE_OFF
+    sta PAGE1
+    sta RAMWRT_MAIN
+    rts
+.endproc
+
+xor_score_scanline:
+    lda score_row_low,y
+    sta ptr3
+    lda score_row_high,y
+    sta ptr3+1
+
+    lda tmp1
+    beq score_digit_main
+    ldy _score_blit_position
+    lda ptr3
+    clc
+    adc score_aux_byte_offsets,y
+    sta ptr2
+    lda ptr3+1
+    adc #0
+    sta ptr2+1
+    sta EIGHTY_STORE_ON
+    sta PAGE2
+    ldy #0
+    lda (ptr2),y
+    eor tmp1
+    sta (ptr2),y
+
+score_digit_main:
+    sta EIGHTY_STORE_OFF
+    sta PAGE1
+    sta RAMWRT_MAIN
+    lda tmp2
+    beq score_digit_scanline_done
+    ldy _score_blit_position
+    lda ptr3
+    clc
+    adc score_main_byte_offsets,y
+    sta ptr2
+    lda ptr3+1
+    adc #0
+    sta ptr2+1
+    ldy #0
+    lda (ptr2),y
+    eor tmp2
+    sta (ptr2),y
+
+score_digit_scanline_done:
+    rts
 
 ; XOR one phase-aligned star at arbitrary DHGR coordinates. The source stores
 ; eight interleaved DHGR sequence bytes per active row; repeating the call

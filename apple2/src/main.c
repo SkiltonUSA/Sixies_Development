@@ -44,8 +44,7 @@
 
 #define MERGE_EFFECT_FIVES 3u
 #define MERGE_EFFECT_SIXIES 5u
-#define SCORE_TEXT_X 18
-#define SCORE_TEXT_TOP 43
+#define SCORE_DIGITS 5u
 
 static unsigned char board[BOARD_CELLS];
 static unsigned char placement_board_before[BOARD_CELLS];
@@ -83,6 +82,8 @@ unsigned char dhgr_blit_byte_count;
 unsigned char dhgr_blit_last_byte;
 unsigned char dhgr_blit_first_mask;
 unsigned char dhgr_blit_last_mask;
+unsigned char score_blit_position;
+unsigned char score_blit_digit;
 const unsigned char* dhgr_first_restore_source;
 const unsigned char* dhgr_last_restore_source;
 extern void __fastcall__ copy_buffer_to_aux(void* destination);
@@ -97,6 +98,7 @@ extern void invert_dhgr_tile_main(void);
 extern void draw_merge_effect_aux(void);
 extern void draw_merge_effect_main(void);
 extern void xor_merge_star(void);
+extern void xor_score_digit(void);
 
 static void replace_dhgr_source(unsigned char* source, unsigned char col, unsigned char row);
 static void redraw_board_cell_at(unsigned char col, unsigned char row);
@@ -115,19 +117,6 @@ static const unsigned char general_merge_effects[8] = {
 static const unsigned char firework_side_x[9] = {0, 2, 4, 6, 8, 10, 12, 14, 16};
 static const signed char firework_side_y[9] = {0, -5, -8, -10, -7, -2, 7, 19, 32};
 static const signed char firework_center_y[9] = {0, -7, -12, -15, -12, -5, 5, 18, 32};
-
-static const unsigned char score_glyph_rows[50] = {
-    7, 5, 5, 5, 7,
-    2, 6, 2, 2, 7,
-    7, 1, 7, 4, 7,
-    7, 1, 7, 1, 7,
-    5, 5, 7, 1, 1,
-    7, 4, 7, 1, 7,
-    7, 4, 7, 5, 7,
-    7, 1, 1, 1, 1,
-    7, 5, 7, 5, 7,
-    7, 5, 7, 1, 7,
-};
 
 static const signed char orient_dx[4] = {1, 0, -1, 0};
 static const signed char orient_dy[4] = {0, 1, 0, -1};
@@ -469,76 +458,64 @@ static void xor_merge_star_at(int x, int y) {
     xor_merge_star();
 }
 
-static void build_score_text_sprite(unsigned int value) {
-    char digits[6];
-    char text[6];
-    unsigned char digit_count;
-    unsigned char text_count = 0;
-    unsigned char phase;
-    unsigned char character;
-    unsigned char glyph;
-    unsigned char glyph_row;
-    unsigned char glyph_column;
-    unsigned char repeat;
-    unsigned char cursor;
-    unsigned char shifted_signal;
-    unsigned char* phase_data;
-
-    append_u16(digits, value);
-    digit_count = (unsigned char) strlen(digits);
-    while (text_count + digit_count < 5u) {
-        text[text_count++] = '0';
+static void score_value_digits(unsigned int value, unsigned char* digits) {
+    digits[0] = 0;
+    while (value >= 10000u) {
+        value -= 10000u;
+        ++digits[0];
     }
-    strcpy(text + text_count, digits);
-    text_count += digit_count;
-
-    memset(dhgr_transfer_buffer, 0, MERGE_STAR_BYTES);
-    for (phase = 0; phase < MERGE_STAR_PHASES; ++phase) {
-        phase_data = dhgr_transfer_buffer + (unsigned) phase * MERGE_STAR_PHASE_BYTES;
-        cursor = 0;
-        for (character = 0; character < text_count; ++character) {
-            glyph = (unsigned char) (text[character] - '0');
-            for (glyph_row = 0; glyph_row < 5; ++glyph_row) {
-                for (glyph_column = 0; glyph_column < 3; ++glyph_column) {
-                    if (!(score_glyph_rows[glyph * 5u + glyph_row] & (4u >> glyph_column))) {
-                        continue;
-                    }
-                    for (repeat = 0; repeat < 2; ++repeat) {
-                        shifted_signal = (unsigned char) (
-                            phase + (cursor + glyph_column) * 2u + repeat
-                        );
-                        phase_data[
-                            (unsigned) glyph_row * 2u * MERGE_STAR_SEQUENCE_BYTES
-                            + shifted_signal / 7u
-                        ] |= (unsigned char) (1u << (shifted_signal % 7u));
-                        phase_data[
-                            ((unsigned) glyph_row * 2u + 1u) * MERGE_STAR_SEQUENCE_BYTES
-                            + shifted_signal / 7u
-                        ] |= (unsigned char) (1u << (shifted_signal % 7u));
-                    }
-                }
-            }
-            cursor += 4;
-        }
+    digits[1] = 0;
+    while (value >= 1000u) {
+        value -= 1000u;
+        ++digits[1];
     }
+    digits[2] = 0;
+    while (value >= 100u) {
+        value -= 100u;
+        ++digits[2];
+    }
+    digits[3] = 0;
+    while (value >= 10u) {
+        value -= 10u;
+        ++digits[3];
+    }
+    digits[4] = (unsigned char) value;
 }
 
-static void xor_score_text_at(int x, int top) {
-    xor_merge_star_at(x, top - MERGE_STAR_ACTIVE_TOP);
+static void xor_score_digit_at(unsigned char position, unsigned char digit) {
+    score_blit_position = position;
+    score_blit_digit = digit;
+    xor_score_digit();
 }
 
 static void draw_score_value(unsigned int value) {
-    build_score_text_sprite(value);
-    xor_score_text_at(SCORE_TEXT_X, SCORE_TEXT_TOP);
+    unsigned char digits[SCORE_DIGITS];
+    unsigned char position;
+
+    score_value_digits(value, digits);
+    for (position = 0; position < SCORE_DIGITS; ++position) {
+        xor_score_digit_at(position, digits[position]);
+    }
 }
 
 static void update_score_display(void) {
+    unsigned char old_digits[SCORE_DIGITS];
+    unsigned char new_digits[SCORE_DIGITS];
+    unsigned char position;
+
     if (displayed_score == score) {
         return;
     }
-    draw_score_value(displayed_score);
+    score_value_digits(displayed_score, old_digits);
+    score_value_digits(score, new_digits);
+    for (position = 0; position < SCORE_DIGITS; ++position) {
+        if (old_digits[position] == new_digits[position]) {
+            continue;
+        }
+        xor_score_digit_at(position, old_digits[position]);
+        xor_score_digit_at(position, new_digits[position]);
+    }
     displayed_score = score;
-    draw_score_value(displayed_score);
 }
 
 static void xor_merge_firework_frame(unsigned char frame, int base_x, int base_y) {
@@ -1658,7 +1635,7 @@ static void game_loop(void) {
             case 'B':
                 merge_effect_demo_index = MERGE_EFFECT_SIXIES;
                 /* Fall through to exercise the six-removal score in one pass. */
-            case 'F':
+            case 'E':
                 merge_effect_x = cursor_x;
                 merge_effect_y = cursor_y;
                 score += merge_effect_demo_index == MERGE_EFFECT_SIXIES
