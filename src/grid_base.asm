@@ -88,6 +88,7 @@ ACTION_PLACE    = 6
 ACTION_NEW      = 7
 ACTION_DEBUG_FILL = 8
 ACTION_SETTINGS = 9
+ACTION_ROTATE_LEFT = 10
 
 ; Sprite coordinates include the VIC-II's 24-pixel left border. These values
 ; center each 24-pixel icon over its 64-pixel label.
@@ -169,6 +170,8 @@ MainLoop_GridAction:
     beq MainLoop_Down
     cmp #ACTION_ROTATE
     beq MainLoop_Rotate
+    cmp #ACTION_ROTATE_LEFT
+    beq MainLoop_RotateLeft
     cmp #ACTION_PLACE
     bne MainLoop_NoGridAction
     jmp MainLoop_Place
@@ -227,6 +230,10 @@ MainLoop_MoveDown:
     inc cursorY
     jsr PlayBounce
     jmp MainLoop_Update
+
+MainLoop_RotateLeft:
+    dec orientation
+    dec orientation
 
 MainLoop_Rotate:
     lda pieceCount
@@ -509,6 +516,7 @@ ResetGame_ClearBoard:
     sta gameOver
     sta singlesOnlyMode
     sta joystickLatch
+    sta joystickFireState
     sta settingsFocused
     sta newGameFocused
     sta ghostSuppressed
@@ -2559,6 +2567,7 @@ scoreGlyphOffset:  !byte 0
 scoreGlyphPage:    !byte 0
 action:            !byte 0
 joystickLatch:     !byte 0
+joystickFireState: !byte 0
 frameCounter:      !byte 0
 lastFrame:         !byte 0
 irqPhase:          !byte 0
@@ -2623,6 +2632,7 @@ packedValue:       !byte 0
 !source "src/assets/title_prompt.asm"
 !source "src/assets/score_four_digits.asm"
 !source "src/assets/merge_chain_sounds.asm"
+!source "src/assets/joystick_chord.asm"
 !source "src/assets/credits_mascot.asm"
 !source "src/assets/credits_font.asm"
 !source "src/assets/presents_screen.asm"

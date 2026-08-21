@@ -411,6 +411,7 @@ SettingsReleaseInput:
     bne SettingsReleaseInput
     lda #0
     sta joystickLatch
+    sta joystickFireState
     rts
 
 SettingsClose:

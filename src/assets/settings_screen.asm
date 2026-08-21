@@ -36,6 +36,8 @@ ReadAction_ReadKey:
     rts
 
 ReadAction_Joystick:
+    jmp PollGameplayJoystickChord
+ReadAction_Joystick_Normal:
     lda JOYSTICK2
     and #$1f
     cmp #$1f
@@ -252,7 +254,7 @@ SettingsLineHi:
     !byte >SettingsTextOptionHelp, >SettingsTextOptionClose
 SettingsLineLength:
     !byte 8,11,14,10,20,8
-    !byte 8,21,19,20,22,17,18,17
+    !byte 8,21,18,20,15,17,18,17
     !byte 11,21,21,20,16,17,23,17
     !byte 7,13,16,19,16
 SettingsLineRow:
@@ -262,7 +264,7 @@ SettingsLineRow:
     !byte 1,9,12,20,22
 SettingsLineColumn:
     !byte 11,12,12,12,10,16
-    !byte 11,9,10,10,9,11,10,11
+    !byte 11,9,11,10,12,11,10,11
     !byte 9,9,9,10,12,11,8,11
     !byte 11,13,12,10,11
 
@@ -277,9 +279,9 @@ SettingsTextMenuHelp:      !text "W/S SELECT FIRE OPEN"
 SettingsTextTabClose:      !text "X CLOSES"
 SettingsTextControls:      !text "CONTROLS"
 SettingsTextMove:          !text "WASD OR JOYSTICK MOVE"
-SettingsTextRotate:        !text "R OR Q ROTATES PAIR"
+SettingsTextRotate:        !text "R/Q; HOLD FIRE+L/R"
 SettingsTextPlaceKey:      !text "SPACE OR FIRE PLACES"
-SettingsTextBottom:        !text "DOWN OPENS BOTTOM MENU"
+SettingsTextBottom:        !text "DOWN OPENS MENU"
 SettingsTextNewGame:       !text "N STARTS NEW GAME"
 SettingsTextTabOpenClose:  !text "TAB OPENS SETTINGS"
 SettingsTextMenuReturn:    !text "M RETURNS TO MENU"

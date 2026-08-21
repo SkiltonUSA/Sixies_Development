@@ -11,6 +11,7 @@ SIXIES_MUSIC_RAW := build/sixies_rhythmic_grammar.bin
 SIXIES_MUSIC_SID := build/Sixies_Rhythmic_Grammar.sid
 SYSTEM_EXOMIZER := $(shell command -v exomizer 2>/dev/null)
 EXOMIZER ?= $(if $(SYSTEM_EXOMIZER),$(SYSTEM_EXOMIZER),/Applications/ALBERT.app/Contents/MacOS/exomizer)
+JOYDEV2 ?= 4
 SOURCE := src/grid_base.asm
 ASM_SOURCES := \
 	src/assets/title_screen.asm \
@@ -21,6 +22,7 @@ ASM_SOURCES := \
 	src/assets/title_prompt.asm \
 	src/assets/score_four_digits.asm \
 	src/assets/merge_chain_sounds.asm \
+	src/assets/joystick_chord.asm \
 	src/assets/credits_mascot.asm \
 	src/assets/credits_font.asm \
 	src/assets/font/SixiesFont_colors.asm \
@@ -129,13 +131,19 @@ BINARY_ASSETS := \
 	$(FONT_CHARSET16) \
 	$(MERGE_CALLOUT_PACKED)
 
-.PHONY: all crunch release music setup-acme setup-sidkit sidkit run clean FORCE
+.PHONY: all crunch release music test-porting setup-porting setup-acme setup-sidkit sidkit run clean FORCE
 
 all: $(TARGET)
 
 crunch release: $(CRUNCHED_TARGET)
 
 music: $(SIXIES_MUSIC_SID)
+
+test-porting:
+	python3 tests/porting/validate_vectors.py
+
+setup-porting:
+	./scripts/setup-porting-workspace.sh
 
 setup-acme:
 	./scripts/setup-acme.sh
@@ -251,11 +259,11 @@ $(CRUNCHED_TARGET): $(TARGET) | build
 
 run: $(TARGET)
 	@if command -v x64sc >/dev/null 2>&1; then \
-		x64sc -autostart "$(TARGET)"; \
+		x64sc -controlport2device 1 -joydev2 "$(JOYDEV2)" -autostart "$(TARGET)"; \
 	elif command -v x64 >/dev/null 2>&1; then \
-		x64 -autostart "$(TARGET)"; \
+		x64 -controlport2device 1 -joydev2 "$(JOYDEV2)" -autostart "$(TARGET)"; \
 	elif [ -x /Applications/vice-arm64-sdl2-3.9/bin/x64sc ]; then \
-		/Applications/vice-arm64-sdl2-3.9/bin/x64sc -autostart "$(TARGET)"; \
+		/Applications/vice-arm64-sdl2-3.9/bin/x64sc -controlport2device 1 -joydev2 "$(JOYDEV2)" -autostart "$(TARGET)"; \
 	else \
 		echo "VICE is not installed. Build succeeded; run $(TARGET) in your preferred C64 emulator."; \
 		exit 1; \

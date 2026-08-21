@@ -2,6 +2,27 @@
 
 A 5x5 hi-res puzzle game written in 6510 assembly for ACME. Place random single or double dice, merge connected matching values, and keep space available on the board.
 
+## Screenshots
+
+| Presentation | Title |
+| --- | --- |
+| ![Studio 313 presentation screen](docs/screenshots/01-presentation.png) | ![Sixies title screen](docs/screenshots/02-title.png) |
+
+| Gameplay | Settings |
+| --- | --- |
+| ![Sixies gameplay grid](docs/screenshots/03-gameplay.png) | ![Sixies settings menu](docs/screenshots/04-settings.png) |
+
+| High scores | Credits |
+| --- | --- |
+| ![Sixies high-score table](docs/screenshots/05-high-scores.png) | ![Sixies credits screen](docs/screenshots/06-credits.png) |
+
+![Sixies game-over screen](docs/screenshots/07-game-over.png)
+
+Exact platform-neutral behavior is specified in `docs/game-rules.md` and
+exercised by `tests/porting/gameplay-vectors.json`. Game Boy milestones and
+technical decisions are in `docs/porting-gameboy.md`; repository architecture
+and agent invariants are in `AGENTS.md`.
+
 The main grid screen includes a purple-and-white Sixies mascot in the left sidebar below the score. The upcoming single or double dice preview is positioned beneath the mascot so both remain visible.
 
 The Sixies font is reproduced from the supplied 1536x1024 reference sheet during the build, at two sizes. Every glyph on the sheet is a flat colored body inside a white outline, so only the body is sampled; the outline is discarded because it anti-aliases through the same gray that fills `D`, `J`, `P`, `V`, `2` and `8`, and would otherwise fatten every letter by a pixel. Each alphabet row contributes its own cap line and baseline, so the whole set shares one vertical rhythm.
@@ -10,7 +31,7 @@ The Sixies font is reproduced from the supplied 1536x1024 reference sheet during
 
 `SixiesFont_charset.bin` is the body-text cut: the same alphabet at 8x8 in a 2048-byte ASCII-indexed charset, used by the `GAME OVER` banner and the high-score page. Seven rows of cap height cannot hold the blobby `M` and `W` middles, the curled `C` and `G` terminals or the `K` arms without collapsing them into slabs that read as the wrong letter, so fifteen glyphs are hand drawn in `OVERRIDES_8X8`; the rest are resampled. `make` regenerates both cuts, their previews, and the derived banner and score tables.
 
-The game opens with a native C64 multicolor title screen using flat-color Sixies branding and solid outlines. While waiting, it rotates through the title, high-score, and credits pages every five seconds. The credits keep a light-green Sixies logo and dice mascot fixed while Designed By, Graphic Arts, Music, and 2026 cards fade in and out in sequence. Press `Space`, `Return`, or joystick fire from any attract screen to enter the hi-res game board.
+The game opens with a native C64 multicolor title screen using flat-color Sixies branding and solid outlines. While waiting, it rotates through the title, high-score, and credits pages every five seconds. The credits keep a light-green Sixies logo and dice mascot fixed while design/charset/bitmap, music, and Studio 313 Games copyright cards fade in and out in sequence. Press `Space`, `Return`, or joystick fire from any attract screen to enter the hi-res game board.
 
 ## Build and run
 
@@ -18,9 +39,20 @@ The game opens with a native C64 multicolor title screen using flat-color Sixies
 make
 make run
 make crunch
+make setup-porting
 ```
 
 The normal build creates `build/dice_merge.prg`. `make crunch` also creates the self-extracting release file `build/dice_merge-crunched.prg` using the installed Exomizer 3.1.2 binary. ACME is installed locally under `.tools/` when needed.
+
+`make setup-porting` bootstraps a newly created branch or Conductor workspace.
+It verifies the specifications, tests, screenshots, and source masters; runs
+the gameplay vectors; and writes discoverable local paths to the gitignored
+`.context/porting-paths.env` file.
+
+`make run` maps the first SDL controller (`JOYDEV2=4`) to C64 joystick port 2.
+Use `make run JOYDEV2=5` for the second detected controller. VICE reports
+`SDLJoystick: No joysticks found` when macOS has not exposed the controller;
+reconnect it before launching VICE in that case.
 
 `make crunch` uses `exomizer` from `PATH` when available. Set `EXOMIZER=/path/to/exomizer` to use a specific binary; the bundled Albert path remains a fallback for this development machine.
 
@@ -36,7 +68,7 @@ The assembler is run with `--strict-segments`; these fixed regions must not over
 | `$4400-$47e7` | VIC-II screen RAM |
 | `$6000-$7fff` | VIC-II bitmap RAM |
 | `$8000-$9fff` | Gameplay effects and UI code |
-| `$a000-$cdff` | SID music, credits, presentation, and asset data |
+| `$a000-$cfff` | SID music, credits, presentation, settings art, and asset data |
 
 The startup title and high-score attract screens play `Eternity #1 (intro)` by Przemyslaw Lewandowski (Sonix), 1995 Undying/Sun Designs. A dedicated raster IRQ keeps playback continuous while title and high-score graphics are copied. The music returns when game over begins and continues through the end title/high-score rotation. Its SID player is relocated to RAM at `$A000`, called at 50 Hz on both PAL and NTSC machines, and stopped before gameplay begins.
 
@@ -54,8 +86,10 @@ The command-line exporter is available at `.tools/c64SIDkit/.venv/bin/sid-sfx`.
 ## Controls
 
 - `W`, `A`, `S`, `D` or joystick port 2: move the current piece
-- `R` or `Q`: rotate a double piece
-- `Space`, `Return`, or joystick fire: place the piece
+- `R` or `Q`: rotate a double piece clockwise
+- Hold joystick fire and press Left/Right: rotate a double counterclockwise/clockwise
+- `Space` or `Return`: place the piece
+- Joystick fire: place the piece when the button is released without rotating
 - `N`: clear the board and start a new game
 - `C=`: open or close the Settings instructions
 - `N` while Settings is open: show the next instructions page
@@ -66,7 +100,7 @@ Moving a die between grid cells plays the three-frame c64SIDkit `bounce` effect.
 
 ## Rules
 
-Each turn normally produces one or two dice with values from 1 to 4. Once at least five value-5 dice are present on the board, each new piece has a 1-in-16 chance of containing one generated value-5 die. A double piece can never contain two value-4 dice. Double pieces rotate in four directions and must fit entirely inside empty grid cells.
+Each turn normally produces one or two dice with values from 1 to 4. Once at least five value-5 dice are present on the board, eligible spawned singles have a low chance of becoming a generated value-5 die. A double piece can never contain two value-4 dice. Double pieces rotate in four directions and must fit entirely inside empty grid cells. See `docs/game-rules.md` for the exact RNG call order and probability behavior.
 
 Valid targets show the dice normally. The current target uses a yellow marching-ants border, with two independently animated squares for a double die. Targets that overlap an occupied cell show the intended dice as gray dithered shadows and cannot be placed.
 
@@ -74,7 +108,7 @@ Three or more edge-connected equal dice merge at the placed die. Values progress
 
 The first merge in every chain plays a happy rising C-E-G-C pulse arpeggio synchronized with the start of the merge animation. Cascading merges do not replay the first-merge cue.
 
-When a score takes first place, its complete high-score row flashes yellow and white until the player enters all three initials.
+When a score enters the top five, its complete high-score row flashes yellow and white until the player enters all three initials.
 
 When no two edge-adjacent empty cells remain, the game switches permanently to single-die pieces. Filling the final empty cell ends the game.
 
