@@ -34,12 +34,41 @@ class SequentialMergeTests(unittest.TestCase):
         self.assertLess(ripple, score)
         self.assertLess(score, callout)
 
-    def test_each_merge_selects_its_own_effect(self) -> None:
+    def test_named_effects_describe_the_value_created(self) -> None:
         body = function_body("merge_at(unsigned char x, unsigned char y)")
+        fives_condition = body.index("if (value == 4)")
+        fives_effect = body.index("merge_effect_index = MERGE_EFFECT_FIVES;")
+        sixies_condition = body.index("else if (value == 5)")
         self.assertIn("merge_effect_index = MERGE_EFFECT_SIXIES;", body)
-        self.assertIn("merge_effect_index = MERGE_EFFECT_FIVES;", body)
-        self.assertIn("merge_effect_index = general_merge_effects[rand() % 8u];", body)
-        self.assertNotIn("merge_effect_pending", body)
+        self.assertLess(fives_condition, fives_effect)
+        self.assertLess(fives_effect, sixies_condition)
+
+    def test_awesome_is_reserved_for_later_merges_in_the_turn(self) -> None:
+        body = function_body("merge_at(unsigned char x, unsigned char y)")
+        self.assertIn("else if (turn_merge_count != 0)", body)
+        self.assertIn("merge_effect_index = MERGE_EFFECT_AWESOME;", body)
+        self.assertIn("merge_effect_index = first_merge_effects[rand() % 7u];", body)
+        self.assertIn("++turn_merge_count;", body)
+
+        resolve = function_body(
+            "resolve_merges(unsigned char first_x, unsigned char first_y, "
+            "unsigned char second_x, unsigned char second_y)"
+        )
+        reset = resolve.index("turn_merge_count = 0;")
+        first = resolve.index("resolve_at(first_x, first_y);")
+        second = resolve.index("resolve_at(second_x, second_y);")
+        self.assertLess(reset, first)
+        self.assertLess(first, second)
+
+    def test_first_merge_pool_excludes_reserved_words(self) -> None:
+        match = re.search(
+            r"static const unsigned char first_merge_effects\[7\] = \{"
+            r"(?P<body>.*?)\n\};",
+            SOURCE,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match)
+        self.assertEqual(match.group("body").strip(), "1, 2, 4, 6, 7, 8, 9,")
 
     def test_piece_queue_advances_after_merge_resolution(self) -> None:
         body = function_body("game_loop(void)")

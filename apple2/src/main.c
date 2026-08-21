@@ -64,6 +64,7 @@
 #define KEY_CURS_UP 0x0B
 #define KEY_CURS_DOWN 0x0A
 
+#define MERGE_EFFECT_AWESOME 0u
 #define MERGE_EFFECT_FIVES 3u
 #define MERGE_EFFECT_SIXIES 5u
 #define SCORE_DIGITS 5u
@@ -89,6 +90,7 @@ static unsigned char game_over;
 static unsigned char merge_effect_index;
 static unsigned char merge_effect_x;
 static unsigned char merge_effect_y;
+static unsigned char turn_merge_count;
 static unsigned int displayed_score;
 #ifdef MERGE_EFFECT_DEMO
 static unsigned char merge_effect_demo_index;
@@ -138,8 +140,8 @@ static const char merge_effect_files[MERGE_EFFECT_COUNT][5] = {
     "FX05", "FX06", "FX07", "FX08", "FX09",
 };
 
-static const unsigned char general_merge_effects[8] = {
-    0, 1, 2, 4, 6, 7, 8, 9,
+static const unsigned char first_merge_effects[7] = {
+    1, 2, 4, 6, 7, 8, 9,
 };
 
 static const unsigned char firework_side_x[9] = {0, 2, 4, 6, 8, 10, 12, 14, 16};
@@ -1491,13 +1493,16 @@ static unsigned char merge_at(unsigned char x, unsigned char y) {
         points += 50u;
     }
     score += points;
-    if (value == 6) {
-        merge_effect_index = MERGE_EFFECT_SIXIES;
-    } else if (value == 5) {
+    if (value == 4) {
         merge_effect_index = MERGE_EFFECT_FIVES;
+    } else if (value == 5) {
+        merge_effect_index = MERGE_EFFECT_SIXIES;
+    } else if (turn_merge_count != 0) {
+        merge_effect_index = MERGE_EFFECT_AWESOME;
     } else {
-        merge_effect_index = general_merge_effects[rand() % 8u];
+        merge_effect_index = first_merge_effects[rand() % 7u];
     }
+    ++turn_merge_count;
     merge_effect_x = x;
     merge_effect_y = y;
     keep = cell_index(x, y);
@@ -1528,6 +1533,7 @@ static void resolve_at(unsigned char x, unsigned char y) {
 }
 
 static void resolve_merges(unsigned char first_x, unsigned char first_y, unsigned char second_x, unsigned char second_y) {
+    turn_merge_count = 0;
     resolve_at(first_x, first_y);
     if (piece_count == 2 && board_value(second_x, second_y) != 0) {
         resolve_at(second_x, second_y);
