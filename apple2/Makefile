@@ -68,6 +68,7 @@ MERGE_EFFECT_STAMP := $(ASSET_DIR)/merge_effects.stamp
 MERGE_EFFECT_HEADER := $(GENERATED_DIR)/merge_effects.h
 MERGE_EFFECT_FILES := $(addprefix $(ASSET_DIR)/,MERGESTAR FX00 FX01 FX02 FX03 FX04 FX05 FX06 FX07 FX08 FX09)
 SCORE_DIGITS_INC := $(GENERATED_DIR)/score_digits.inc
+HIGH_SCORE_FILE := $(ASSET_DIR)/HISCORE
 
 .PHONY: all setup-tools assets test crunch disk run debug emulator-check doctor clean
 
@@ -170,7 +171,11 @@ $(SCORE_DIGITS_INC): scripts/generate_score_digits.py | $(GENERATED_DIR)
 	@if [ ! -x "$(PYTHON)" ]; then ./scripts/setup-tools.sh; fi
 	"$(PYTHON)" scripts/generate_score_digits.py --output "$@"
 
-assets: $(PRESENTS_STAMP) $(TITLE_STAMP) $(INSTRUCTIONS_STAMP) $(GAME_OVER_STAMP) $(GRID_STAMP) $(DICE_STAMP) $(MERGE_EFFECT_STAMP)
+$(HIGH_SCORE_FILE): scripts/generate_high_scores.py | $(ASSET_DIR)
+	@if [ ! -x "$(PYTHON)" ]; then ./scripts/setup-tools.sh; fi
+	"$(PYTHON)" scripts/generate_high_scores.py --output "$@"
+
+assets: $(PRESENTS_STAMP) $(TITLE_STAMP) $(INSTRUCTIONS_STAMP) $(GAME_OVER_STAMP) $(GRID_STAMP) $(DICE_STAMP) $(MERGE_EFFECT_STAMP) $(HIGH_SCORE_FILE)
 
 test: setup-tools
 	"$(PYTHON)" -m unittest discover -s tests -p 'test_*.py'

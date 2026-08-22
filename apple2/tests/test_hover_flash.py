@@ -50,7 +50,7 @@ class HoverFlashTests(unittest.TestCase):
         self.assertIn("if (board_value(x1, y1) == 0)", body)
         self.assertIn("if (board_value(x2, y2) == 0)", body)
         self.assertIn("draw_invalid_mark(x1, y1);", body)
-        self.assertIn("draw_die(x1, y1, piece_a, 1);", body)
+        self.assertIn("draw_die(x1, y1, piece_a);", body)
         self.assertNotIn("dhgr_transfer_buffer", body)
         self.assertNotIn("invert_dhgr_board_tile", body)
 

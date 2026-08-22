@@ -72,6 +72,10 @@
 #define ATTRACT_SCREEN_SECONDS 5u
 #define INITIAL_TITLE_SECONDS 10u
 #define NTSC_FRAMES_PER_SECOND 60u
+#define HIGH_SCORE_COUNT 10u
+#define HIGH_SCORE_ENTRY_BYTES 5u
+#define HIGH_SCORE_DATA_OFFSET 6u
+#define HIGH_SCORE_BYTES (HIGH_SCORE_DATA_OFFSET + HIGH_SCORE_COUNT * HIGH_SCORE_ENTRY_BYTES)
 
 static unsigned char board[BOARD_CELLS];
 static unsigned char placement_board_before[BOARD_CELLS];
@@ -149,9 +153,6 @@ static const signed char firework_center_y[9] = {0, -7, -12, -15, -12, -5, 5, 18
 
 static const signed char orient_dx[4] = {1, 0, -1, 0};
 static const signed char orient_dy[4] = {0, 1, 0, -1};
-static const unsigned char hgr_pixel_masks[7] = {1, 2, 4, 8, 16, 32, 64};
-static const unsigned char hgr_set_from[7] = {0x7F, 0x7E, 0x7C, 0x78, 0x70, 0x60, 0x40};
-static const unsigned char hgr_set_through[7] = {1, 3, 7, 15, 31, 63, 127};
 static unsigned char flood_seen[BOARD_CELLS];
 static unsigned char flood_list[BOARD_CELLS];
 
@@ -166,21 +167,6 @@ static void activate_soft_switch(unsigned address) {
 }
 
 #pragma code-name (pop)
-
-static void set_graphics(unsigned char mixed) {
-    activate_soft_switch(EIGHTY_STORE_OFF);
-    activate_soft_switch(RAMWRT_MAIN);
-    activate_soft_switch(COL80_OFF);
-    activate_soft_switch(DHIRES_OFF);
-    activate_soft_switch(GRAPHICS_ON);
-    if (mixed) {
-        activate_soft_switch(MIXED_GRAPHICS);
-    } else {
-        activate_soft_switch(FULL_GRAPHICS);
-    }
-    activate_soft_switch(PAGE1);
-    activate_soft_switch(HIRES_ON);
-}
 
 static void set_text(void) {
     activate_soft_switch(EIGHTY_STORE_OFF);
@@ -210,129 +196,6 @@ static void set_double_hires(unsigned char mixed) {
     activate_soft_switch(DHIRES_OFF);
     activate_soft_switch(COL80_ON);
     activate_soft_switch(DHIRES_ON);
-}
-
-static void hgr_clear_page(void) {
-    memset(HGR_PAGE, 0, 8192);
-}
-
-static void hgr_set_pixel(unsigned x, unsigned y) {
-    unsigned addr;
-
-    if (x >= 280 || y >= 160) {
-        return;
-    }
-    addr = hgr_row_address(y) + (x / 7u);
-    *((unsigned char*) addr) |= hgr_pixel_masks[x % 7u];
-}
-
-static void hgr_hline(unsigned x1, unsigned x2, unsigned y) {
-    unsigned swap;
-    unsigned start_byte;
-    unsigned end_byte;
-    unsigned column;
-    unsigned char first_bit;
-    unsigned char last_bit;
-    unsigned char* bytes;
-
-    if (y >= 160) {
-        return;
-    }
-    if (x2 < x1) {
-        swap = x1;
-        x1 = x2;
-        x2 = swap;
-    }
-    if (x1 >= 280) {
-        return;
-    }
-    if (x2 >= 280) {
-        x2 = 279;
-    }
-
-    start_byte = x1 / 7u;
-    end_byte = x2 / 7u;
-    first_bit = (unsigned char) (x1 % 7u);
-    last_bit = (unsigned char) (x2 % 7u);
-    bytes = (unsigned char*) (hgr_row_address(y) + start_byte);
-
-    if (start_byte == end_byte) {
-        bytes[0] |= hgr_set_from[first_bit] & hgr_set_through[last_bit];
-        return;
-    }
-
-    bytes[0] |= hgr_set_from[first_bit];
-    for (column = 1; column < end_byte - start_byte; ++column) {
-        bytes[column] |= 0x7Fu;
-    }
-    bytes[end_byte - start_byte] |= hgr_set_through[last_bit];
-}
-
-static void hgr_vline(unsigned x, unsigned y1, unsigned y2) {
-    unsigned y;
-    unsigned swap;
-    unsigned byte_offset;
-    unsigned char mask;
-
-    if (x >= 280) {
-        return;
-    }
-    if (y2 < y1) {
-        swap = y1;
-        y1 = y2;
-        y2 = swap;
-    }
-    if (y1 >= 160) {
-        return;
-    }
-    if (y2 >= 160) {
-        y2 = 159;
-    }
-
-    byte_offset = x / 7u;
-    mask = hgr_pixel_masks[x % 7u];
-    for (y = y1; y <= y2; ++y) {
-        *((unsigned char*) (hgr_row_address(y) + byte_offset)) |= mask;
-    }
-}
-
-static void hgr_rect(unsigned x, unsigned y, unsigned width, unsigned height) {
-    if (width == 0 || height == 0) {
-        return;
-    }
-    hgr_hline(x, x + width - 1u, y);
-    hgr_hline(x, x + width - 1u, y + height - 1u);
-    hgr_vline(x, y, y + height - 1u);
-    hgr_vline(x + width - 1u, y, y + height - 1u);
-}
-
-static void hgr_double_rect(unsigned x, unsigned y, unsigned width, unsigned height) {
-    hgr_rect(x, y, width, height);
-    hgr_rect(x + 1u, y + 1u, width - 2u, height - 2u);
-}
-
-static void hgr_draw_x(unsigned x, unsigned y, unsigned width, unsigned height) {
-    unsigned step;
-    unsigned limit = width < height ? width : height;
-    for (step = 0; step < limit; ++step) {
-        hgr_set_pixel(x + step, y + step);
-        hgr_set_pixel(x + width - 1u - step, y + step);
-    }
-}
-
-static void hgr_set_pixel_phase(unsigned x, unsigned y, unsigned char shifted) {
-    unsigned addr;
-    unsigned char* byte;
-
-    if (x >= 280 || y >= 160) {
-        return;
-    }
-    addr = hgr_row_address(y) + (x / 7u);
-    byte = (unsigned char*) addr;
-    *byte |= hgr_pixel_masks[x % 7u];
-    if (shifted) {
-        *byte |= 0x80u;
-    }
 }
 
 static unsigned text_row_offset(unsigned char row) {
@@ -821,14 +684,6 @@ static void advance_piece(void) {
     reset_piece_position();
 }
 
-static void clear_bottom_text(void) {
-    unsigned char row;
-    for (row = 20; row < 24; ++row) {
-        gotoxy(0, row);
-        cprintf("                                        ");
-    }
-}
-
 static void write_bottom_line(unsigned char row, const char* text) {
     gotoxy(0, row);
     cprintf("%-40s", text);
@@ -850,100 +705,6 @@ static void append_u16(char* buffer, unsigned int value) {
         *buffer++ = temp[--pos];
     }
     *buffer = '\0';
-}
-
-static void status_text(void) {
-    char line1[41];
-    char line2[41];
-    char digits[8];
-    unsigned char pos;
-
-    clear_bottom_text();
-    strcpy(line1, "SCORE ");
-    append_u16(digits, score);
-    strcat(line1, digits);
-    strcat(line1, single_mode ? "   MODE SINGLE" : "   MODE MIXED");
-
-    strcpy(line2, "CUR ");
-    pos = (unsigned char) strlen(line2);
-    line2[pos++] = (char) ('0' + piece_a);
-    if (piece_count == 2) {
-        line2[pos++] = '-';
-        line2[pos++] = (char) ('0' + piece_b);
-    }
-    line2[pos] = '\0';
-
-    write_bottom_line(20, line1);
-    write_bottom_line(21, line2);
-    if (!game_over) {
-        write_bottom_line(22, "ARROWS/WASD MOVE R ROTATE SPACE PLACE");
-        write_bottom_line(23, "N STARTS A NEW GAME");
-    } else {
-        write_bottom_line(22, "GAME OVER  SPACE OR N FOR NEW GAME");
-    }
-}
-
-static unsigned char die_asset_pixel(
-    const unsigned char* mask,
-    unsigned char x,
-    unsigned char y
-) {
-    unsigned offset = (unsigned) y * DICE_ASSET_ROW_BYTES + (x >> 3);
-    return mask[offset] & (1u << (x & 7u));
-}
-
-static void draw_asset_die(
-    unsigned x,
-    unsigned y,
-    const unsigned char* mask,
-    unsigned char value
-) {
-    unsigned char row;
-    unsigned char col;
-    unsigned char start;
-    unsigned char parity = value == 3 || value == 5 || value == 6;
-    unsigned char shifted = value == 2 || value == 5 || value == 6;
-    unsigned char solid;
-
-    for (row = 0; row < DICE_ASSET_SIZE; ++row) {
-        col = 0;
-        while (col < DICE_ASSET_SIZE) {
-            while (col < DICE_ASSET_SIZE && !die_asset_pixel(mask, col, row)) {
-                ++col;
-            }
-            if (col >= DICE_ASSET_SIZE) {
-                break;
-            }
-
-            solid = value == 1 || (value == 5 && (row & 1u) != 0);
-            if (!solid) {
-                while (col < DICE_ASSET_SIZE && die_asset_pixel(mask, col, row)) {
-                    if (((x + col) & 1u) == parity) {
-                        hgr_set_pixel_phase(x + col, y + row, shifted);
-                    }
-                    ++col;
-                }
-            } else {
-                start = col;
-                while (col < DICE_ASSET_SIZE && die_asset_pixel(mask, col, row)) {
-                    ++col;
-                }
-                hgr_hline(x + start, x + col - 1u, y + row);
-            }
-        }
-    }
-}
-
-static const unsigned char* die_face_mask(unsigned char value) {
-    switch (value) {
-        case 1: return die_one_face_mask;
-        case 2: return die_two_face_mask;
-        case 3: return die_three_face_mask;
-        case 4: return die_four_face_mask;
-        case 5: return die_five_face_mask;
-        case 6: return die_six_face_mask;
-    }
-    return die_one_face_mask;
 }
 
 static void replace_dhgr_source(unsigned char* source, unsigned char col, unsigned char row) {
@@ -980,24 +741,12 @@ static void replace_dhgr_asset(unsigned offset, unsigned char col, unsigned char
     replace_dhgr_source(dice_blits + offset, col, row);
 }
 
-static void draw_die(unsigned char col, unsigned char row, unsigned char value, unsigned char emph) {
-    unsigned x;
-    unsigned y;
-
-    if (dhgr_grid_active) {
-        replace_dhgr_asset(
-            dice_face_blit_offsets[(unsigned char) ((value - 1u) * BOARD_SIZE + col)],
-            col,
-            row
-        );
-        return;
-    }
-    x = BOARD_LEFT + (unsigned) col * CELL_PITCH_X;
-    y = BOARD_TOP + (unsigned) row * CELL_PITCH_Y;
-    draw_asset_die(x, y, die_face_mask(value), value);
-    if (emph) {
-        hgr_rect(x - 2u, y - 2u, CELL_SIZE + 4u, CELL_SIZE + 4u);
-    }
+static void draw_die(unsigned char col, unsigned char row, unsigned char value) {
+    replace_dhgr_asset(
+        dice_face_blit_offsets[(unsigned char) ((value - 1u) * BOARD_SIZE + col)],
+        col,
+        row
+    );
 }
 
 static void draw_sidebar_die(unsigned char row, unsigned char value) {
@@ -1039,31 +788,7 @@ static void draw_piece_sidebar(void) {
 }
 
 static void draw_invalid_mark(unsigned char col, unsigned char row) {
-    unsigned x;
-    unsigned y;
-
-    if (dhgr_grid_active) {
-        replace_dhgr_asset(dice_invalid_blit_offsets[col], col, row);
-    } else {
-        x = BOARD_LEFT + (unsigned) col * CELL_PITCH_X;
-        y = BOARD_TOP + (unsigned) row * CELL_PITCH_Y;
-        hgr_draw_x(x + 4u, y + 4u, CELL_SIZE - 8u, CELL_SIZE - 8u);
-    }
-}
-
-static void draw_board_frame(void) {
-    unsigned char row;
-    unsigned char col;
-    unsigned x;
-    unsigned y;
-
-    for (row = 0; row < BOARD_SIZE; ++row) {
-        for (col = 0; col < BOARD_SIZE; ++col) {
-            x = BOARD_LEFT + (unsigned) col * CELL_PITCH_X;
-            y = BOARD_TOP + (unsigned) row * CELL_PITCH_Y;
-            hgr_double_rect(x, y, CELL_SIZE, CELL_SIZE);
-        }
-    }
+    replace_dhgr_asset(dice_invalid_blit_offsets[col], col, row);
 }
 
 static unsigned char placement_cells(unsigned char* x1, unsigned char* y1, unsigned char* x2, unsigned char* y2) {
@@ -1104,7 +829,7 @@ static void draw_current_piece_preview(void) {
 
     placement_cells(&x1, &y1, &x2, &y2);
     if (board_value(x1, y1) == 0) {
-        draw_die(x1, y1, piece_a, 1);
+        draw_die(x1, y1, piece_a);
     } else {
         draw_invalid_mark(x1, y1);
     }
@@ -1112,25 +837,10 @@ static void draw_current_piece_preview(void) {
     if (piece_count == 2) {
         if (x2 < BOARD_SIZE && y2 < BOARD_SIZE) {
             if (board_value(x2, y2) == 0) {
-                draw_die(x2, y2, piece_b, 1);
+                draw_die(x2, y2, piece_b);
             } else {
                 draw_invalid_mark(x2, y2);
             }
-        }
-    }
-}
-
-static void clear_hgr_board_tile(unsigned char col, unsigned char row) {
-    unsigned y = BOARD_TOP - 2u + (unsigned) row * CELL_PITCH_Y;
-    unsigned x = BOARD_LEFT - 2u + (unsigned) col * CELL_PITCH_X;
-    unsigned char line;
-    unsigned char pixel;
-    unsigned char* byte;
-
-    for (line = 0; line < CELL_SIZE + 4u; ++line) {
-        for (pixel = 0; pixel < CELL_SIZE + 4u; ++pixel) {
-            byte = (unsigned char*) (hgr_row_address(y + line) + (x + pixel) / 7u);
-            *byte &= (unsigned char) ~hgr_pixel_masks[(x + pixel) % 7u];
         }
     }
 }
@@ -1179,24 +889,12 @@ static void invert_dhgr_board_tile(unsigned char col, unsigned char row) {
 
 static void redraw_board_cell_at(unsigned char col, unsigned char row) {
     unsigned char value = board_value(col, row);
-    unsigned x;
-    unsigned y;
 
-    if (dhgr_grid_active) {
-        if (value != 0) {
-            draw_die(col, row, value, 0);
-            return;
-        }
-        clear_dhgr_board_tile(col, row);
-    } else {
-        x = BOARD_LEFT + (unsigned) col * CELL_PITCH_X;
-        y = BOARD_TOP + (unsigned) row * CELL_PITCH_Y;
-        clear_hgr_board_tile(col, row);
-        hgr_double_rect(x, y, CELL_SIZE, CELL_SIZE);
-    }
     if (value != 0) {
-        draw_die(col, row, value, 0);
+        draw_die(col, row, value);
+        return;
     }
+    clear_dhgr_board_tile(col, row);
 }
 
 static void add_dirty_cell(
@@ -1283,12 +981,14 @@ static void render_game(void) {
 
     dhgr_grid_active = load_dice_blits() && load_a2fm_screen("GRID.A2FM");
     if (!dhgr_grid_active) {
-        set_graphics(1);
-        hgr_clear_page();
-        draw_board_frame();
-    } else {
-        set_double_hires(0);
+        set_text();
+        clrscr();
+        gotoxy(8, 10);
+        cprintf("REQUIRED DHGR ASSETS NOT FOUND");
+        game_over = 1;
+        return;
     }
+    set_double_hires(0);
 
     for (row = 0; row < BOARD_SIZE; ++row) {
         for (col = 0; col < BOARD_SIZE; ++col) {
@@ -1296,7 +996,7 @@ static void render_game(void) {
             if (value == 0) {
                 continue;
             }
-            draw_die(col, row, (unsigned char) value, 0);
+            draw_die(col, row, (unsigned char) value);
         }
     }
 
@@ -1306,9 +1006,6 @@ static void render_game(void) {
     if (dhgr_grid_active) {
         draw_score_value(displayed_score);
         draw_piece_sidebar();
-    }
-    if (!dhgr_grid_active) {
-        status_text();
     }
 }
 
@@ -1530,8 +1227,6 @@ static void resolve_at(unsigned char x, unsigned char y) {
             run_merge_grid_ripple(merge_effect_x, merge_effect_y);
             update_score_display();
             show_merge_flash(merge_effect_index);
-        } else {
-            status_text();
         }
     }
 }
@@ -1596,6 +1291,188 @@ static char read_input(void) {
         ch = (char) (ch - ('a' - 'A'));
     }
     return ch;
+}
+
+static unsigned char* high_score_entry(unsigned char index) {
+    return dhgr_transfer_buffer + HIGH_SCORE_DATA_OFFSET
+        + (unsigned) index * HIGH_SCORE_ENTRY_BYTES;
+}
+
+static unsigned int high_score_value(unsigned char index) {
+    unsigned char* entry = high_score_entry(index);
+    return (unsigned) entry[3] | ((unsigned) entry[4] << 8);
+}
+
+static unsigned char high_score_checksum(void) {
+    unsigned char checksum = 0;
+    unsigned char index;
+
+    for (index = HIGH_SCORE_DATA_OFFSET; index < HIGH_SCORE_BYTES; ++index) {
+        checksum = (unsigned char) (checksum + dhgr_transfer_buffer[index]);
+    }
+    return checksum;
+}
+
+static void reset_high_scores(void) {
+    unsigned char index;
+    unsigned char* entry;
+
+    memset(dhgr_transfer_buffer, 0, HIGH_SCORE_BYTES);
+    dhgr_transfer_buffer[0] = 'S';
+    dhgr_transfer_buffer[1] = 'I';
+    dhgr_transfer_buffer[2] = 'X';
+    dhgr_transfer_buffer[3] = 'H';
+    dhgr_transfer_buffer[4] = 1;
+    for (index = 0; index < HIGH_SCORE_COUNT; ++index) {
+        entry = high_score_entry(index);
+        entry[0] = '-';
+        entry[1] = '-';
+        entry[2] = '-';
+    }
+    dhgr_transfer_buffer[5] = high_score_checksum();
+}
+
+static unsigned char high_scores_valid(void) {
+    unsigned char index;
+    unsigned char initial;
+    unsigned char* entry;
+    unsigned int previous = 0xFFFFu;
+    unsigned int value;
+
+    if (dhgr_transfer_buffer[0] != 'S'
+            || dhgr_transfer_buffer[1] != 'I'
+            || dhgr_transfer_buffer[2] != 'X'
+            || dhgr_transfer_buffer[3] != 'H'
+            || dhgr_transfer_buffer[4] != 1
+            || dhgr_transfer_buffer[5] != high_score_checksum()) {
+        return 0;
+    }
+    for (index = 0; index < HIGH_SCORE_COUNT; ++index) {
+        entry = high_score_entry(index);
+        for (initial = 0; initial < 3; ++initial) {
+            if (entry[initial] != '-'
+                    && (entry[initial] < 'A' || entry[initial] > 'Z')) {
+                return 0;
+            }
+        }
+        value = high_score_value(index);
+        if (value > previous) {
+            return 0;
+        }
+        previous = value;
+    }
+    return 1;
+}
+
+static void load_high_scores(void) {
+    int fd = open("HISCORE", O_RDONLY);
+
+    if (fd >= 0) {
+        if (read_exact(fd, dhgr_transfer_buffer, HIGH_SCORE_BYTES)) {
+            close(fd);
+            if (high_scores_valid()) {
+                return;
+            }
+        } else {
+            close(fd);
+        }
+    }
+    reset_high_scores();
+}
+
+static void save_high_scores(void) {
+    int fd;
+
+    dhgr_transfer_buffer[5] = high_score_checksum();
+    fd = open("HISCORE", O_WRONLY | O_TRUNC);
+    if (fd >= 0) {
+        write(fd, dhgr_transfer_buffer, HIGH_SCORE_BYTES);
+        close(fd);
+    }
+}
+
+static unsigned char high_score_rank(void) {
+    unsigned char index;
+
+    for (index = 0; index < HIGH_SCORE_COUNT; ++index) {
+        if (score > high_score_value(index)) {
+            return index;
+        }
+    }
+    return HIGH_SCORE_COUNT;
+}
+
+static void enter_high_score(unsigned char rank) {
+    unsigned char index;
+    unsigned char initial;
+    unsigned char* entry;
+    char ch;
+    char digits[8];
+
+    for (index = HIGH_SCORE_COUNT - 1u; index > rank; --index) {
+        memcpy(high_score_entry(index), high_score_entry((unsigned char) (index - 1u)), HIGH_SCORE_ENTRY_BYTES);
+    }
+    entry = high_score_entry(rank);
+    entry[3] = (unsigned char) score;
+    entry[4] = (unsigned char) (score >> 8);
+
+    set_text();
+    clrscr();
+    gotoxy(12, 6);
+    cprintf("NEW HIGH SCORE");
+    append_u16(digits, score);
+    gotoxy(15, 8);
+    cprintf(digits);
+    gotoxy(7, 11);
+    cprintf("ENTER THREE INITIALS: ___");
+    for (initial = 0; initial < 3; ++initial) {
+        do {
+            ch = read_input();
+        } while (ch < 'A' || ch > 'Z');
+        entry[initial] = (unsigned char) ch;
+        gotoxy((unsigned char) (29u + initial), 11);
+        cputc(ch);
+    }
+    save_high_scores();
+}
+
+static void show_high_scores(unsigned char new_rank) {
+    unsigned char index;
+    unsigned char* entry;
+    char digits[8];
+
+    set_text();
+    clrscr();
+    gotoxy(11, 1);
+    cprintf("SIXIES HIGH SCORES");
+    for (index = 0; index < HIGH_SCORE_COUNT; ++index) {
+        entry = high_score_entry(index);
+        gotoxy(8, (unsigned char) (4u + index));
+        cputc(index == new_rank ? '>' : ' ');
+        if (index == 9u) {
+            cprintf("10. ");
+        } else {
+            cputc(' ');
+            cputc((char) ('1' + index));
+            cprintf(". ");
+        }
+        cputc(entry[0]);
+        cputc(entry[1]);
+        cputc(entry[2]);
+        cprintf("  ");
+        append_u16(digits, high_score_value(index));
+        cprintf(digits);
+    }
+    gotoxy(3, 18);
+    cprintf("SPACE RETURN OR N STARTS A NEW GAME");
+}
+
+static void wait_for_restart(void) {
+    char ch;
+
+    do {
+        ch = read_input();
+    } while (ch != ' ' && ch != 'N' && ch != CH_ENTER);
 }
 
 static char wait_for_game_input(void) {
@@ -1735,7 +1612,7 @@ start_game:
 static void show_game_over(void) {
     char score_line[41];
     char digits[8];
-    char ch;
+    unsigned char rank;
 
     append_u16(digits, score);
     strcpy(score_line, "FINAL SCORE ");
@@ -1752,7 +1629,7 @@ static void show_game_over(void) {
     )) {
         dhgr_begin_text();
         dhgr_add_text_line(20, score_line);
-        dhgr_add_text_line(21, "SPACE RETURN OR N STARTS A NEW GAME");
+        dhgr_add_text_line(21, "SPACE RETURN OR N SHOWS HIGH SCORES");
         dhgr_add_text_line(22, "APPLE II DHGR ART REBUILT FROM SOURCE PNGS");
         dhgr_add_text_line(23, "READY FOR ANOTHER ROUND");
         dhgr_finish_text();
@@ -1761,16 +1638,18 @@ static void show_game_over(void) {
         gotoxy(15, 8);
         cprintf("GAME OVER");
         write_bottom_line(20, score_line);
-        write_bottom_line(21, "SPACE RETURN OR N STARTS A NEW GAME");
+        write_bottom_line(21, "SPACE RETURN OR N SHOWS HIGH SCORES");
         write_bottom_line(22, "DHGR GAME OVER FILES NOT FOUND");
     }
 
-    while (1) {
-        ch = read_input();
-        if (ch == ' ' || ch == 'N' || ch == CH_ENTER) {
-            break;
-        }
+    load_high_scores();
+    rank = high_score_rank();
+    wait_for_restart();
+    if (rank < HIGH_SCORE_COUNT) {
+        enter_high_score(rank);
     }
+    show_high_scores(rank);
+    wait_for_restart();
 }
 
 static void game_loop(void) {
@@ -1793,6 +1672,12 @@ static void game_loop(void) {
         preview_changed = 0;
         placement_changed = 0;
         switch (ch) {
+#ifdef HIGH_SCORE_DEMO
+            case 'H':
+                score = 12345u;
+                game_over = 1;
+                continue;
+#endif
 #ifdef MERGE_EFFECT_DEMO
             case 'B':
                 merge_effect_demo_index = MERGE_EFFECT_SIXIES;
@@ -1874,11 +1759,7 @@ static void game_loop(void) {
             if (!game_over) {
                 draw_current_piece_preview();
             }
-            if (dhgr_grid_active) {
-                draw_piece_sidebar();
-            } else {
-                status_text();
-            }
+            draw_piece_sidebar();
         } else if (preview_changed) {
             redraw_preview_transition(old_x, old_y, old_orientation);
         }

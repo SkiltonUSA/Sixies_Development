@@ -347,7 +347,6 @@ def format_u16_array(name: str, data: list[int]) -> str:
 
 def write_header(
     path: Path,
-    masks: list[bytearray],
     dhgr_masks: list[bytearray],
     grid: bytes,
 ) -> None:
@@ -390,8 +389,6 @@ def write_header(
         f"#define DICE_SIDEBAR_MAIN_BYTE_COUNT {sidebar_main_byte_count}",
         "",
     ]
-    for name, mask in zip(DIE_NAMES, masks):
-        sections.extend((format_array(f"die_{name}_face_mask", pack_mask(mask)), ""))
     sections.extend((
         format_u16_array(
             "dice_face_blit_offsets",
@@ -524,11 +521,10 @@ def main() -> None:
     sources = [getattr(args, name) for name in DIE_NAMES]
     for source in sources:
         validate_source(source)
-    masks = [build_face_mask(value) for value in range(1, 7)]
     dhgr_masks = [build_dhgr_face_mask(value) for value in range(1, 7)]
     blits = build_blits(dhgr_masks)
     grid = args.grid.read_bytes()
-    write_header(args.header, masks, dhgr_masks, grid)
+    write_header(args.header, dhgr_masks, grid)
     args.blits.parent.mkdir(parents=True, exist_ok=True)
     args.blits.write_bytes(blits)
     write_preview(args.preview, dhgr_masks)

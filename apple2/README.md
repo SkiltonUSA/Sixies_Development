@@ -47,12 +47,15 @@ The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots
 - `AWESOME` is reserved for the second and later generic merges in the same placement turn.
 - Single-die mode begins when no adjacent empty pair remains.
 - Filling the final empty cell ends the game.
+- A compact ten-entry high-score table records three initials and a five-digit score on disk.
 
 ## Scoring
 
 A merge awards the face value multiplied by the number of consumed dice. Three ones score 3 points, three twos score 6, three fives score 15, and larger connected groups score all consumed dice.
 
 Removing sixes adds a 50-point bonus. A merge of three sixes therefore scores `3 x 6 + 50 = 68` points. In a chain reaction, each merge redraws its result, updates the scoreboard, and completes its ripple, star burst, and callout before the next merge begins.
+
+At game over, `Space`, `Return`, or `N` opens the high-score table. A qualifying score prompts for three letters, inserts the result in descending order, and saves it to the disk's 56-byte `HISCORE` file. The table retains ten entries; a score must exceed at least one existing entry to qualify.
 
 ## Host Requirements
 
@@ -88,7 +91,7 @@ make -C apple2 doctor
 make -C apple2 run
 ```
 
-`setup-tools` installs or downloads the development environment. `doctor` builds the program and verifies the emulator configuration. `run` creates the disk image, copies it to a disposable emulator directory, and boots SIXIES.
+`setup-tools` installs or downloads the development environment. `doctor` builds the program and verifies the emulator configuration. `run` creates the disk image, refreshes the emulator working copy while preserving its saved high scores, and boots SIXIES.
 
 Windows and Linux setup is not currently automated. On those hosts, install cc65, Exomizer 3.1.2, Python 3 with Pillow, Java, AppleCommander, a ProDOS disk template, and a compatible Apple II emulator manually before using the Makefile as a reference.
 
@@ -138,7 +141,7 @@ The principal generated files are:
 | `apple2/build/generated/` | Generated C headers for asset geometry |
 | `apple2/build/previews/` | PNG previews of converted Apple II artwork |
 
-The disk contains `SIXIES.SYSTEM`, the crunched `SIXIES` ProDOS BIN, compressed `PRESENTS.RLE`, `INSTRUCT.RLE`, and `GAMEOVER.RLE` screens, the original `TITLE.A2FM`, `GRID.A2FM`, `DICE.BLITS`, `MERGESTAR`, and the ten `FX00` through `FX09` callout files. Booting the disk launches `SIXIES.SYSTEM`, which loads the SFX at `$080D`; it decrunches and starts the game at `$4000`.
+The disk contains `SIXIES.SYSTEM`, the crunched `SIXIES` ProDOS BIN, compressed `PRESENTS.RLE`, `INSTRUCT.RLE`, and `GAMEOVER.RLE` screens, the original `TITLE.A2FM`, `GRID.A2FM`, `DICE.BLITS`, `MERGESTAR`, the 56-byte `HISCORE` table, and the ten `FX00` through `FX09` callout files. Booting the disk launches `SIXIES.SYSTEM`, which loads the SFX at `$080D`; it decrunches and starts the game at `$4000`.
 
 ## Emulator
 
@@ -154,7 +157,7 @@ The disk contains `SIXIES.SYSTEM`, the crunched `SIXIES` ProDOS BIN, compressed 
   apple2/build/sixies.po
 ```
 
-The launcher first copies the packaged disk to `apple2/build/emulator/sixies-run.po`. Emulator writes therefore do not modify `apple2/build/sixies.po`.
+The launcher first copies the packaged disk to `apple2/build/emulator/sixies-run.po`. Emulator writes therefore do not modify `apple2/build/sixies.po`; before refreshing that working copy on a later run, the launcher extracts and restores its `HISCORE` file.
 
 To use another Apple II emulator, configure an enhanced Apple IIe with 128 KB RAM, auxiliary memory, 80-column/DHGR support, and the `.po` image in drive 1. RGB or monochrome output is recommended. Boot the disk and run `SIXIES.SYSTEM` if the emulator does not launch it automatically.
 
@@ -176,12 +179,15 @@ izapple2 shortcuts used during development:
 | `R` or `Q` | Rotate a paired piece |
 | `Space` or `Return` | Place the current piece |
 | `N` | Clear the board and start a new game |
+| `A` through `Z` | Enter three initials after a qualifying game |
 
 ## Graphics and Runtime Design
 
 Static full-screen graphics are stored as disk-backed DHGR pages. The game streams main and auxiliary banks into Page 1, then updates only dirty cell interiors. Dice and score digits use fixed-position opaque or XOR assembly blits, while moving star effects use pre-shifted XOR sprites that restore the pixels beneath them.
 
-The release disk uses Exomizer 3.1.2's Apple II/IIe SFX target. `crunch_apple2_binary.py` validates cc65's AppleSingle metadata, converts the `$4000` data fork to PRG input, runs `sfx -t162`, verifies a complete `desfx` round trip, validates the generated BASIC launcher, and strips that launcher before ProDOS packaging at its `$080D` machine entry. The current 23.7 KB native program becomes an approximately 11.4 KB disk file, leaving 17 KB free on the 140 KB image; decompression does not change the game's runtime memory map.
+High scores occupy 56 disk bytes: a four-byte signature, version, checksum, and ten five-byte records containing three initials plus a little-endian 16-bit score. The runtime overlays this data on the existing 1 KB DHGR transfer buffer after the game-over artwork is loaded, avoiding a dedicated high-score BSS allocation.
+
+The release disk uses Exomizer 3.1.2's Apple II/IIe SFX target. `crunch_apple2_binary.py` validates cc65's AppleSingle metadata, converts the `$4000` data fork to PRG input, runs `sfx -t162`, verifies a complete `desfx` round trip, validates the generated BASIC launcher, and strips that launcher before ProDOS packaging at its `$080D` machine entry. Decompression does not change the game's runtime memory map.
 
 The Studio313 intro, generated instruction page, and game-over screen are RLE-packed so the new page fits the 140 KB ProDOS disk while the supplied title retains its faster raw A2FM loader. The title and grid share a single-open A2FM streamer; the compressed-screen loader reads one bank at a time into the reusable dice buffer and expands it through the 1 KB transfer buffer. Startup shows the presentation for five seconds and the initial title for ten seconds, then rotates instructions, presentation, and title at five seconds each. `Space`, `Return`, or `N` starts immediately from any attract screen; the normal dice load then reuses the same memory.
 
