@@ -48,6 +48,7 @@ The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots
 - Single-die mode begins when no adjacent empty pair remains.
 - Filling the final empty cell ends the game.
 - A compact ten-entry high-score table records three initials and a five-digit score on disk.
+- Pressing `N` during gameplay asks `ARE YOU SURE [Y/N]?`; only `Y` clears the current board.
 
 ## Scoring
 
@@ -178,7 +179,8 @@ izapple2 shortcuts used during development:
 | Arrow keys or `W`, `A`, `S`, `D` | Move the placement dice |
 | `R` or `Q` | Rotate a paired piece |
 | `Space` or `Return` | Place the current piece |
-| `N` | Clear the board and start a new game |
+| `N` | Open the new-game confirmation prompt |
+| `Y` / `N` | Confirm a new game / return to the current game |
 | `A` through `Z` | Enter three initials after a qualifying game |
 
 ## Graphics and Runtime Design

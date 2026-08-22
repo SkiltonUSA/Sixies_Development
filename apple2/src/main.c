@@ -132,6 +132,7 @@ extern void restore_merge_effect_background(void);
 extern void xor_merge_star(void);
 extern void xor_score_digit(void);
 extern void draw_footer_separator(void);
+extern void xor_new_game_prompt(void);
 
 static void replace_dhgr_source(unsigned char* source, unsigned char col, unsigned char row);
 static void redraw_board_cell_at(unsigned char col, unsigned char row);
@@ -1295,6 +1296,31 @@ static char read_input(void) {
     return ch;
 }
 
+static unsigned char confirm_new_game(void) {
+    char ch;
+    unsigned char quiet_frames;
+
+    xor_new_game_prompt();
+    do {
+        ch = read_input();
+    } while (ch != 'Y' && ch != 'N');
+    if (ch == 'N') {
+        xor_new_game_prompt();
+        quiet_frames = 0;
+        while (quiet_frames < 3u) {
+            if (kbhit()) {
+                cgetc();
+                quiet_frames = 0;
+            } else {
+                wait_animation_frames(1);
+                ++quiet_frames;
+            }
+        }
+        return 0;
+    }
+    return 1;
+}
+
 static unsigned char* high_score_entry(unsigned char index) {
     return dhgr_transfer_buffer + HIGH_SCORE_DATA_OFFSET
         + (unsigned) index * HIGH_SCORE_ENTRY_BYTES;
@@ -1745,7 +1771,9 @@ static void game_loop(void) {
 #ifdef SCREEN_SHAKE_DEMO
                 run_merge_grid_shake();
 #else
-                begin_new_game();
+                if (confirm_new_game()) {
+                    begin_new_game();
+                }
 #endif
                 continue;
         }

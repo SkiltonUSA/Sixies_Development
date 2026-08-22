@@ -68,6 +68,7 @@ MERGE_EFFECT_STAMP := $(ASSET_DIR)/merge_effects.stamp
 MERGE_EFFECT_HEADER := $(GENERATED_DIR)/merge_effects.h
 MERGE_EFFECT_FILES := $(addprefix $(ASSET_DIR)/,MERGESTAR FX00 FX01 FX02 FX03 FX04 FX05 FX06 FX07 FX08 FX09)
 SCORE_DIGITS_INC := $(GENERATED_DIR)/score_digits.inc
+FOOTER_PROMPT_INC := $(GENERATED_DIR)/footer_prompt.inc
 HIGH_SCORE_FILE := $(ASSET_DIR)/HISCORE
 
 .PHONY: all setup-tools assets test crunch disk run debug emulator-check doctor clean
@@ -171,6 +172,10 @@ $(SCORE_DIGITS_INC): scripts/generate_score_digits.py | $(GENERATED_DIR)
 	@if [ ! -x "$(PYTHON)" ]; then ./scripts/setup-tools.sh; fi
 	"$(PYTHON)" scripts/generate_score_digits.py --output "$@"
 
+$(FOOTER_PROMPT_INC): scripts/generate_footer_prompt.py | $(GENERATED_DIR)
+	@if [ ! -x "$(PYTHON)" ]; then ./scripts/setup-tools.sh; fi
+	"$(PYTHON)" scripts/generate_footer_prompt.py --output "$@"
+
 $(HIGH_SCORE_FILE): scripts/generate_high_scores.py | $(ASSET_DIR)
 	@if [ ! -x "$(PYTHON)" ]; then ./scripts/setup-tools.sh; fi
 	"$(PYTHON)" scripts/generate_high_scores.py --output "$@"
@@ -180,7 +185,7 @@ assets: $(PRESENTS_STAMP) $(TITLE_STAMP) $(INSTRUCTIONS_STAMP) $(GAME_OVER_STAMP
 test: setup-tools
 	"$(PYTHON)" -m unittest discover -s tests -p 'test_*.py'
 
-$(TARGET): Makefile $(SRC) $(ASM_SRC) $(PRESENTS_STAMP) $(INSTRUCTIONS_STAMP) $(GAME_OVER_STAMP) $(DICE_STAMP) $(MERGE_EFFECT_STAMP) $(SCORE_DIGITS_INC) | $(BUILD_DIR)
+$(TARGET): Makefile $(SRC) $(ASM_SRC) $(PRESENTS_STAMP) $(INSTRUCTIONS_STAMP) $(GAME_OVER_STAMP) $(DICE_STAMP) $(MERGE_EFFECT_STAMP) $(SCORE_DIGITS_INC) $(FOOTER_PROMPT_INC) | $(BUILD_DIR)
 	@if [ -z "$(CC65)" ]; then echo "cl65 was not found on PATH."; exit 1; fi
 	cl65 -t apple2 -Oirs --codesize 500 --start-addr 0x4000 -I "$(GENERATED_DIR)" \
 		--asm-include-dir "$(GENERATED_DIR)" \

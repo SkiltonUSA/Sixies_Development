@@ -17,6 +17,7 @@
 .export _xor_merge_star
 .export _xor_score_digit
 .export _draw_footer_separator
+.export _xor_new_game_prompt
 .import _dhgr_transfer_buffer
 .import _dhgr_blit_source
 .import _dhgr_blit_row_index
@@ -56,6 +57,10 @@ GRID_SHAKE_ROWS = 120
 
 .assert MERGE_EFFECT_BACKUP + MERGE_EFFECT_BANK_BYTES * 2 <= $6000, error, "merge save-under exceeds auxiliary HGR Page 2"
 
+.segment "RODATA"
+
+.include "footer_prompt.inc"
+
 .segment "CODE"
 
 ; void __fastcall__ copy_buffer_to_aux(void* destination)
@@ -84,6 +89,66 @@ copy_page:
     sta RAMWRT_MAIN
     rts
 .endproc
+
+; XOR the fixed footer confirmation into both DHGR banks. Calling the routine
+; a second time restores the original black pixels without a save-under buffer.
+.proc _xor_new_game_prompt
+    sta EIGHTY_STORE_ON
+    sta PAGE2
+    lda #<footer_prompt_aux_masks
+    sta ptr1
+    lda #>footer_prompt_aux_masks
+    sta ptr1+1
+    lda #FOOTER_PROMPT_AUX_OFFSET
+    sta tmp2
+    jsr xor_footer_prompt_bank
+
+    sta EIGHTY_STORE_OFF
+    sta PAGE1
+    sta RAMWRT_MAIN
+    lda #<footer_prompt_main_masks
+    sta ptr1
+    lda #>footer_prompt_main_masks
+    sta ptr1+1
+    lda #FOOTER_PROMPT_MAIN_OFFSET
+    sta tmp2
+    jsr xor_footer_prompt_bank
+    rts
+.endproc
+
+xor_footer_prompt_bank:
+    lda #0
+    sta tmp3
+footer_prompt_row:
+    ldx tmp3
+    lda footer_prompt_row_low,x
+    clc
+    adc tmp2
+    sta ptr2
+    lda footer_prompt_row_high,x
+    adc #0
+    sta ptr2+1
+    ldy #0
+footer_prompt_byte:
+    lda (ptr2),y
+    eor (ptr1),y
+    sta (ptr2),y
+    iny
+    cpy #FOOTER_PROMPT_BANK_BYTES
+    bne footer_prompt_byte
+
+    clc
+    lda ptr1
+    adc #FOOTER_PROMPT_BANK_BYTES
+    sta ptr1
+    bcc footer_prompt_source_ready
+    inc ptr1+1
+footer_prompt_source_ready:
+    inc tmp3
+    lda tmp3
+    cmp #FOOTER_PROMPT_ROWS
+    bne footer_prompt_row
+    rts
 
 ; Draw the gameplay footer divider as stable monochrome DHGR instead of using
 ; the irregular source-bitmap pixels. Signals 10-549 retain the original
