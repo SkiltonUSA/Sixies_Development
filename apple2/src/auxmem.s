@@ -16,6 +16,7 @@
 .export _restore_merge_effect_background
 .export _xor_merge_star
 .export _xor_score_digit
+.export _draw_footer_separator
 .import _dhgr_transfer_buffer
 .import _dhgr_blit_source
 .import _dhgr_blit_row_index
@@ -81,6 +82,47 @@ copy_page:
     dex
     bne copy_page
     sta RAMWRT_MAIN
+    rts
+.endproc
+
+; Draw the gameplay footer divider as stable monochrome DHGR instead of using
+; the irregular source-bitmap pixels. Signals 10-549 retain the original
+; margins; two adjacent scanlines keep the line solid on RGB and composite.
+.proc _draw_footer_separator
+    sta EIGHTY_STORE_ON
+    sta PAGE2
+    lda #0
+    sta $2E50
+    sta $3250
+    lda #$7F
+    ldx #1
+footer_aux_middle:
+    sta $2E50,x
+    sta $3250,x
+    inx
+    cpx #39
+    bne footer_aux_middle
+    lda #$0F
+    sta $2E50+39
+    sta $3250+39
+
+    sta EIGHTY_STORE_OFF
+    sta PAGE1
+    sta RAMWRT_MAIN
+    lda #$78
+    sta $2E50
+    sta $3250
+    lda #$7F
+    ldx #1
+footer_main_middle:
+    sta $2E50,x
+    sta $3250,x
+    inx
+    cpx #39
+    bne footer_main_middle
+    lda #0
+    sta $2E50+39
+    sta $3250+39
     rts
 .endproc
 

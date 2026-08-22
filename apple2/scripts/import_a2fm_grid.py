@@ -41,6 +41,8 @@ PRE_RENDERED_LABELS = (
 SCORE_CLEAR_BOX = (24, 43, 89, 54)
 MASCOT_CLEAR_BOX = (13, 52, 100, 143)
 MASCOT_BOX = (13, 59, 88, 55)
+FOOTER_SEPARATOR_TOP = 163
+FOOTER_SEPARATOR_BOTTOM = 165
 
 FONT = {
     " ": ("000", "000", "000", "000", "000"),
@@ -144,6 +146,9 @@ def build_runtime_grid(
 ) -> tuple[bytes, bytes, Image.Image]:
     image = A2FM.decode_mono(main, auxiliary)
     pixels = image.load()
+    for y in range(FOOTER_SEPARATOR_TOP, FOOTER_SEPARATOR_BOTTOM + 1):
+        for x in range(A2FM.SCREEN_WIDTH):
+            pixels[x, y] = 0
     left, top, right, bottom = SIDEBAR_CLEAR_BOX
     for y in range(top, bottom + 1):
         for x in range(left, right + 1):

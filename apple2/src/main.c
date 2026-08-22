@@ -131,6 +131,7 @@ extern void save_merge_effect_background(void);
 extern void restore_merge_effect_background(void);
 extern void xor_merge_star(void);
 extern void xor_score_digit(void);
+extern void draw_footer_separator(void);
 
 static void replace_dhgr_source(unsigned char* source, unsigned char col, unsigned char row);
 static void redraw_board_cell_at(unsigned char col, unsigned char row);
@@ -989,6 +990,7 @@ static void render_game(void) {
         return;
     }
     set_double_hires(0);
+    draw_footer_separator();
 
     for (row = 0; row < BOARD_SIZE; ++row) {
         for (col = 0; col < BOARD_SIZE; ++col) {

@@ -80,6 +80,12 @@ class A2fmGridImportTests(unittest.TestCase):
             mascot_left + mascot_width,
             mascot_top + mascot_height,
         )).tobytes()))
+        self.assertFalse(any(image.crop((
+            0,
+            IMPORTER.FOOTER_SEPARATOR_TOP,
+            IMPORTER.A2FM.SCREEN_WIDTH,
+            IMPORTER.FOOTER_SEPARATOR_BOTTOM + 1,
+        )).tobytes()))
         IMPORTER.validate_black_cell_interiors(runtime_main, runtime_auxiliary)
 
 
