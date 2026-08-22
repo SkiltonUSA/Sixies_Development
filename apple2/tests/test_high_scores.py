@@ -21,12 +21,23 @@ SPEC.loader.exec_module(GENERATOR)
 
 
 class HighScoreTests(unittest.TestCase):
-    def test_initial_table_has_ten_empty_versioned_entries(self) -> None:
+    def test_initial_table_has_seeded_versioned_entries(self) -> None:
         table = GENERATOR.build_table()
         self.assertEqual(len(table), 56)
         self.assertEqual(table[:5], b"SIXH\x01")
         self.assertEqual(table[5], sum(table[6:]) & 0xFF)
-        for index in range(10):
+        expected = (
+            (b"DOM", 1349),
+            (b"PRI", 1020),
+            (b"TWD", 893),
+            (b"TAN", 802),
+            (b"TB ", 755),
+        )
+        for index, (initials, score) in enumerate(expected):
+            offset = 6 + index * 5
+            self.assertEqual(table[offset : offset + 3], initials)
+            self.assertEqual(int.from_bytes(table[offset + 3 : offset + 5], "little"), score)
+        for index in range(len(expected), 10):
             offset = 6 + index * 5
             self.assertEqual(table[offset : offset + 5], b"---\x00\x00")
 
@@ -47,6 +58,7 @@ class HighScoreTests(unittest.TestCase):
             self.assertIn(call, SOURCE)
         self.assertIn('open("HISCORE", O_WRONLY | O_TRUNC)', SOURCE)
         self.assertIn("HIGH_SCORE_COUNT 10u", SOURCE)
+        self.assertIn("entry[initial] != ' '", SOURCE)
 
     def test_high_score_file_is_built_and_packaged(self) -> None:
         self.assertIn("HIGH_SCORE_FILE := $(ASSET_DIR)/HISCORE", MAKEFILE)

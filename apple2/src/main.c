@@ -1379,6 +1379,7 @@ static unsigned char high_scores_valid(void) {
         entry = high_score_entry(index);
         for (initial = 0; initial < 3; ++initial) {
             if (entry[initial] != '-'
+                    && entry[initial] != ' '
                     && (entry[initial] < 'A' || entry[initial] > 'Z')) {
                 return 0;
             }

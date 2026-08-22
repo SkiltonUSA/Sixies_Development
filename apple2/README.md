@@ -58,6 +58,8 @@ Removing sixes adds a 50-point bonus. A merge of three sixes therefore scores `3
 
 At game over, `Space`, `Return`, or `N` opens the high-score table. A qualifying score prompts for three letters, inserts the result in descending order, and saves it to the disk's 56-byte `HISCORE` file. The table retains ten entries; a score must exceed at least one existing entry to qualify.
 
+New disks seed the first five places with `DOM 1349`, `PRI 1020`, `TWD 893`, `TAN 802`, and `TB 755`. An invisible trailing space pads the final two-letter name to the table's fixed three-character initials field.
+
 ## Host Requirements
 
 The automated setup currently targets macOS on Apple silicon or Intel. Internet access is required the first time it downloads tools and the ProDOS template.

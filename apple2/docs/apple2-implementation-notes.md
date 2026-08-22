@@ -78,6 +78,7 @@
 ## High Scores
 
 - `HISCORE` is a 56-byte ProDOS file: `SIXH`, format version 1, an eight-bit checksum, and ten five-byte entries. Each entry stores three uppercase initials and a little-endian 16-bit score.
+- New tables seed `DOM 1349`, `PRI 1020`, `TWD 893`, `TAN 802`, and `TB 755` in descending order; a trailing space pads `TB`, and the remaining five records are `--- 0`.
 - Game over loads and validates the table after the DHGR end screen has finished using the transfer buffer. Missing or damaged data becomes ten `--- 0` entries in RAM; a qualifying score shifts lower records, captures exactly three letters, recalculates the checksum, and truncates the existing file to the fixed format.
 - The table reuses the 1 KB DHGR transfer buffer, adding no dedicated high-score array to BSS. The emulator launcher preserves the writable `HISCORE` file while replacing the rest of its working disk with the latest release build.
 
