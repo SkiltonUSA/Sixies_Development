@@ -26,11 +26,24 @@ class AttractFlowTests(unittest.TestCase):
         initial_title = body.index("INITIAL_TITLE_SECONDS")
         loop_start = body.index("while (1)")
         instructions = body.index("instructions_screen();", loop_start)
-        presents = body.index("presents_screen();", instructions)
+        high_scores = body.index("high_scores_screen();", instructions)
+        presents = body.index("presents_screen();", high_scores)
         title = body.index("title_screen();", presents)
         self.assertLess(initial_title, loop_start)
-        self.assertLess(instructions, presents)
+        self.assertLess(instructions, high_scores)
+        self.assertLess(high_scores, presents)
         self.assertLess(presents, title)
+
+    def test_attract_high_scores_reload_saved_table_without_rank_marker(self) -> None:
+        match = re.search(
+            r"static void high_scores_screen\(void\) \{(?P<body>.*?)\n\}",
+            SOURCE,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match)
+        body = match.group("body")
+        self.assertIn("load_high_scores();", body)
+        self.assertIn("show_high_scores(HIGH_SCORE_COUNT);", body)
 
     def test_timed_wait_polls_for_start_keys(self) -> None:
         match = re.search(

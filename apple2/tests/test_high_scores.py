@@ -63,6 +63,12 @@ class HighScoreTests(unittest.TestCase):
         self.assertIn("HIGH_SCORE_COUNT 10u", SOURCE)
         self.assertIn("entry[initial] != ' '", SOURCE)
 
+    def test_table_rows_are_centered_on_the_text_screen(self) -> None:
+        self.assertIn(
+            "gotoxy(12, (unsigned char) (4u + index));",
+            SOURCE,
+        )
+
     def test_high_score_file_is_built_and_packaged(self) -> None:
         self.assertIn("HIGH_SCORE_FILE := $(ASSET_DIR)/HISCORE", MAKEFILE)
         self.assertIn("MERGESTAR HISCORE", PACKAGER)

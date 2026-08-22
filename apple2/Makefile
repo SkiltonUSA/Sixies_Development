@@ -81,7 +81,7 @@ setup-tools:
 $(BUILD_DIR) $(PREVIEW_DIR) $(ASSET_DIR) $(GENERATED_DIR):
 	mkdir -p "$@"
 
-$(TITLE_STAMP): $(TITLE_MASTER) $(TITLE_REFERENCE) scripts/import_a2fm_asset.py | $(ASSET_DIR) $(PREVIEW_DIR)
+$(TITLE_STAMP): $(TITLE_MASTER) $(TITLE_REFERENCE) scripts/import_a2fm_asset.py scripts/generate_title.py scripts/generate_instructions.py scripts/generate_presents.py | $(ASSET_DIR) $(PREVIEW_DIR)
 	@if [ ! -x "$(PYTHON)" ]; then ./scripts/setup-tools.sh; fi
 	"$(PYTHON)" scripts/import_a2fm_asset.py \
 		--input "$(TITLE_MASTER)" \
@@ -89,7 +89,10 @@ $(TITLE_STAMP): $(TITLE_MASTER) $(TITLE_REFERENCE) scripts/import_a2fm_asset.py 
 		--aux "$(TITLE_AUX)" \
 		--preview "$(PREVIEW_DIR)/title_logo.png" \
 		--reference "$(TITLE_REFERENCE)"
-	cp "$(TITLE_MASTER)" "$(TITLE_A2FM)"
+	"$(PYTHON)" scripts/generate_title.py \
+		--input "$(TITLE_MASTER)" \
+		--output "$(TITLE_A2FM)" \
+		--preview "$(PREVIEW_DIR)/title_logo.png"
 	touch "$@"
 
 $(PRESENTS_STAMP): $(PRESENTS_MASTER) scripts/generate_presents.py scripts/import_a2fm_asset.py | $(ASSET_DIR) $(PREVIEW_DIR) $(GENERATED_DIR)

@@ -1476,7 +1476,7 @@ static void show_high_scores(unsigned char new_rank) {
     cprintf("SIXIES HIGH SCORES");
     for (index = 0; index < HIGH_SCORE_COUNT; ++index) {
         entry = high_score_entry(index);
-        gotoxy(8, (unsigned char) (4u + index));
+        gotoxy(12, (unsigned char) (4u + index));
         cputc(index == new_rank ? '>' : ' ');
         if (index == 9u) {
             cprintf("10. ");
@@ -1594,6 +1594,11 @@ static void instructions_screen(void) {
     }
 }
 
+static void high_scores_screen(void) {
+    load_high_scores();
+    show_high_scores(HIGH_SCORE_COUNT);
+}
+
 static void startup_attract_loop(void) {
     presents_screen();
     if (wait_for_start_or_timeout(
@@ -1611,6 +1616,13 @@ static void startup_attract_loop(void) {
 
     while (1) {
         instructions_screen();
+        if (wait_for_start_or_timeout(
+            ATTRACT_SCREEN_SECONDS * NTSC_FRAMES_PER_SECOND
+        )) {
+            break;
+        }
+
+        high_scores_screen();
         if (wait_for_start_or_timeout(
             ATTRACT_SCREEN_SECONDS * NTSC_FRAMES_PER_SECOND
         )) {

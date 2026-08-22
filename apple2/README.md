@@ -30,7 +30,7 @@ The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots
 ## Game Features
 
 - A 5x5 pre-rendered DHGR grid that remains in place during movement and placement.
-- A timed monochrome DHGR attract loop with Studio313 presentation, title, and instruction screens.
+- A timed attract loop with Studio313 presentation, title, instructions, and the live ten-entry high-score table.
 - The initial title remains for ten seconds; subsequent attract screens rotate every five seconds.
 - Random single or paired dice, with four-way rotation for pairs.
 - The board-placement dice invert while waiting for input, without flashing the current-dice sidebar.
@@ -144,7 +144,7 @@ The principal generated files are:
 | `apple2/build/generated/` | Generated C headers for asset geometry |
 | `apple2/build/previews/` | PNG previews of converted Apple II artwork |
 
-The disk contains `SIXIES.SYSTEM`, the crunched `SIXIES` ProDOS BIN, compressed `PRESENTS.RLE`, `INSTRUCT.RLE`, and `GAMEOVER.RLE` screens, the original `TITLE.A2FM`, `GRID.A2FM`, `DICE.BLITS`, `MERGESTAR`, the 56-byte `HISCORE` table, and the ten `FX00` through `FX09` callout files. Booting the disk launches `SIXIES.SYSTEM`, which loads the SFX at `$080D`; it decrunches and starts the game at `$4000`.
+The disk contains `SIXIES.SYSTEM`, the crunched `SIXIES` ProDOS BIN, compressed `PRESENTS.RLE`, `INSTRUCT.RLE`, and `GAMEOVER.RLE` screens, the prompt-enhanced `TITLE.A2FM`, `GRID.A2FM`, `DICE.BLITS`, `MERGESTAR`, the 56-byte `HISCORE` table, and the ten `FX00` through `FX09` callout files. Booting the disk launches `SIXIES.SYSTEM`, which loads the SFX at `$080D`; it decrunches and starts the game at `$4000`.
 
 ## Emulator
 
@@ -193,7 +193,7 @@ High scores occupy 56 disk bytes: a four-byte signature, version, checksum, and 
 
 The release disk uses Exomizer 3.1.2's Apple II/IIe SFX target. `crunch_apple2_binary.py` validates cc65's AppleSingle metadata, converts the `$4000` data fork to PRG input, runs `sfx -t162`, verifies a complete `desfx` round trip, validates the generated BASIC launcher, and strips that launcher before ProDOS packaging at its `$080D` machine entry. Decompression does not change the game's runtime memory map.
 
-The Studio313 intro, generated instruction page, and game-over screen are RLE-packed so the new page fits the 140 KB ProDOS disk while the supplied title retains its faster raw A2FM loader. The title and grid share a single-open A2FM streamer; the compressed-screen loader reads one bank at a time into the reusable dice buffer and expands it through the 1 KB transfer buffer. Startup shows the presentation for five seconds and the initial title for ten seconds, then rotates instructions, presentation, and title at five seconds each. `Space`, `Return`, or `N` starts immediately from any attract screen; the normal dice load then reuses the same memory.
+The Studio313 intro, generated instruction page, and game-over screen are RLE-packed so the new page fits the 140 KB ProDOS disk while the supplied title retains its faster raw A2FM loader. The title and grid share a single-open A2FM streamer; the compressed-screen loader reads one bank at a time into the reusable dice buffer and expands it through the 1 KB transfer buffer. Startup shows the presentation for five seconds and the initial title for ten seconds, then rotates instructions, the live high-score table, presentation, and title at five seconds each. `Space`, `Return`, or `N` starts immediately from any attract screen; the normal dice load then reuses the same memory.
 
 `generate_score_digits.py` precomputes the auxiliary/main masks for all eight possible 3-bit glyph rows at each of the five fixed score positions. A score change compares the old and new five-digit values and blits only changed positions, so gameplay performs no sprite construction, alignment division, or modulo operations.
 
