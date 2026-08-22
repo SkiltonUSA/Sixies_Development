@@ -32,14 +32,17 @@ class HighScoreTests(unittest.TestCase):
             (b"TWD", 893),
             (b"TAN", 802),
             (b"TB ", 755),
+            (b"ACE", 650),
+            (b"MAX", 540),
+            (b"ZED", 430),
+            (b"BOT", 320),
+            (b"CPU", 210),
         )
         for index, (initials, score) in enumerate(expected):
             offset = 6 + index * 5
             self.assertEqual(table[offset : offset + 3], initials)
             self.assertEqual(int.from_bytes(table[offset + 3 : offset + 5], "little"), score)
-        for index in range(len(expected), 10):
-            offset = 6 + index * 5
-            self.assertEqual(table[offset : offset + 5], b"---\x00\x00")
+        self.assertEqual(len(expected), 10)
 
     def test_runtime_reuses_transfer_buffer_instead_of_adding_table_bss(self) -> None:
         self.assertIn(

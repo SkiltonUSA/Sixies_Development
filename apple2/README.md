@@ -58,7 +58,7 @@ Removing sixes adds a 50-point bonus. A merge of three sixes therefore scores `3
 
 At game over, `Space`, `Return`, or `N` opens the high-score table. A qualifying score prompts for three letters, inserts the result in descending order, and saves it to the disk's 56-byte `HISCORE` file. The table retains ten entries; a score must exceed at least one existing entry to qualify.
 
-New disks seed the first five places with `DOM 1349`, `PRI 1020`, `TWD 893`, `TAN 802`, and `TB 755`. An invisible trailing space pads the final two-letter name to the table's fixed three-character initials field.
+New disks seed the table with `DOM 1349`, `PRI 1020`, `TWD 893`, `TAN 802`, `TB 755`, `ACE 650`, `MAX 540`, `ZED 430`, `BOT 320`, and `CPU 210`. An invisible trailing space pads the two-letter `TB` name to the table's fixed three-character initials field.
 
 ## Host Requirements
 

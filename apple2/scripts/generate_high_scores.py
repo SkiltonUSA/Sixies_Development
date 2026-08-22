@@ -18,6 +18,11 @@ DEFAULT_ENTRIES = (
     (b"TWD", 893),
     (b"TAN", 802),
     (b"TB ", 755),
+    (b"ACE", 650),
+    (b"MAX", 540),
+    (b"ZED", 430),
+    (b"BOT", 320),
+    (b"CPU", 210),
 )
 
 
