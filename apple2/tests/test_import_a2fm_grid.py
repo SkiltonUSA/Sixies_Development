@@ -56,6 +56,10 @@ class A2fmGridImportTests(unittest.TestCase):
         self.assertEqual(len(runtime_main), IMPORTER.PAGE_BYTES)
         self.assertEqual(len(runtime_auxiliary), IMPORTER.PAGE_BYTES)
         self.assertEqual(IMPORTER.SIDEBAR_LABELS, ())
+        self.assertIn(
+            ("[N]EW GAME", 36, 176, (28, 174, 122, 181)),
+            IMPORTER.PRE_RENDERED_LABELS,
+        )
         left, top, right, bottom = IMPORTER.SIDEBAR_CLEAR_BOX
         self.assertFalse(any(image.crop((left, top, right + 1, bottom + 1)).tobytes()))
         for label, label_x, label_y, clear_box in IMPORTER.PRE_RENDERED_LABELS:
