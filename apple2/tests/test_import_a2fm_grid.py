@@ -86,6 +86,15 @@ class A2fmGridImportTests(unittest.TestCase):
             IMPORTER.A2FM.SCREEN_WIDTH,
             IMPORTER.FOOTER_SEPARATOR_BOTTOM + 1,
         )).tobytes()))
+        settings_left, settings_top, settings_right, settings_bottom = (
+            IMPORTER.SETTINGS_CLEAR_BOX
+        )
+        self.assertFalse(any(image.crop((
+            settings_left,
+            settings_top,
+            settings_right + 1,
+            settings_bottom + 1,
+        )).tobytes()))
         IMPORTER.validate_black_cell_interiors(runtime_main, runtime_auxiliary)
 
 

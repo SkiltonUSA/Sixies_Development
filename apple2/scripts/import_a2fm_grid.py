@@ -36,13 +36,13 @@ PRE_RENDERED_LABELS = (
     ("SCORE", 38, 14, (28, 12, 86, 19)),
     ("TOTAL", 36, 35, (32, 34, 77, 40)),
     ("NEW GAME", 44, 176, (28, 174, 122, 181)),
-    ("SETTINGS", 468, 176, (454, 174, 538, 181)),
 )
 SCORE_CLEAR_BOX = (24, 43, 89, 54)
 MASCOT_CLEAR_BOX = (13, 52, 100, 143)
 MASCOT_BOX = (13, 59, 88, 55)
 FOOTER_SEPARATOR_TOP = 163
 FOOTER_SEPARATOR_BOTTOM = 165
+SETTINGS_CLEAR_BOX = (418, 168, 559, 191)
 
 FONT = {
     " ": ("000", "000", "000", "000", "000"),
@@ -148,6 +148,10 @@ def build_runtime_grid(
     pixels = image.load()
     for y in range(FOOTER_SEPARATOR_TOP, FOOTER_SEPARATOR_BOTTOM + 1):
         for x in range(A2FM.SCREEN_WIDTH):
+            pixels[x, y] = 0
+    left, top, right, bottom = SETTINGS_CLEAR_BOX
+    for y in range(top, bottom + 1):
+        for x in range(left, right + 1):
             pixels[x, y] = 0
     left, top, right, bottom = SIDEBAR_CLEAR_BOX
     for y in range(top, bottom + 1):
