@@ -18,6 +18,7 @@
 .export _xor_score_digit
 .export _draw_footer_separator
 .export _xor_new_game_prompt
+.export _draw_high_score_glyph
 .import _dhgr_transfer_buffer
 .import _dhgr_blit_source
 .import _dhgr_blit_row_index
@@ -87,6 +88,58 @@ copy_page:
     dex
     bne copy_page
     sta RAMWRT_MAIN
+    rts
+.endproc
+
+; Draw one 5x7 high-score glyph into aligned 14-signal cells. Each glyph is
+; stored as seven auxiliary bytes followed by seven main bytes.
+.proc _draw_high_score_glyph
+    lda _dhgr_blit_source
+    sta ptr1
+    lda _dhgr_blit_source+1
+    sta ptr1+1
+
+    sta RAMWRT_AUX
+    ldx #0
+high_score_aux_row:
+    lda _merge_effect_row_low,x
+    clc
+    adc _dhgr_blit_byte_offset
+    sta ptr2
+    lda _merge_effect_row_high,x
+    adc #0
+    sta ptr2+1
+    ldy #0
+    lda (ptr1),y
+    sta (ptr2),y
+    inc ptr1
+    bne high_score_aux_source_ready
+    inc ptr1+1
+high_score_aux_source_ready:
+    inx
+    cpx #7
+    bne high_score_aux_row
+
+    sta RAMWRT_MAIN
+    ldx #0
+high_score_main_row:
+    lda _merge_effect_row_low,x
+    clc
+    adc _dhgr_blit_byte_offset
+    sta ptr2
+    lda _merge_effect_row_high,x
+    adc #0
+    sta ptr2+1
+    ldy #0
+    lda (ptr1),y
+    sta (ptr2),y
+    inc ptr1
+    bne high_score_main_source_ready
+    inc ptr1+1
+high_score_main_source_ready:
+    inx
+    cpx #7
+    bne high_score_main_row
     rts
 .endproc
 

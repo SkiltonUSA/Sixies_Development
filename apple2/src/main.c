@@ -8,6 +8,7 @@
 
 #include "dice_assets.h"
 #include "game_over_assets.h"
+#include "high_score_assets.h"
 #include "instructions_assets.h"
 #include "merge_effects.h"
 #include "presents_assets.h"
@@ -16,6 +17,8 @@
     || PRESENTS_MAIN_PACKED_BYTES > DICE_BLITS_BYTES \
     || INSTRUCTIONS_AUX_PACKED_BYTES > DICE_BLITS_BYTES \
     || INSTRUCTIONS_MAIN_PACKED_BYTES > DICE_BLITS_BYTES \
+    || HIGH_SCORE_AUX_PACKED_BYTES > DICE_BLITS_BYTES - HIGH_SCORE_FONT_BYTES \
+    || HIGH_SCORE_MAIN_PACKED_BYTES > DICE_BLITS_BYTES - HIGH_SCORE_FONT_BYTES \
     || GAME_OVER_AUX_PACKED_BYTES > DICE_BLITS_BYTES \
     || GAME_OVER_MAIN_PACKED_BYTES > DICE_BLITS_BYTES
 #error "packed DHGR bank does not fit the startup dice buffer"
@@ -51,6 +54,10 @@
     || MERGE_EFFECT_BANK_BYTES > DHGR_TRANSFER_SIZE \
     || DICE_BLIT_BANK_BYTES > DHGR_TRANSFER_SIZE
 #error "generated asset does not fit the shared DHGR transfer buffer"
+#endif
+
+#if HIGH_SCORE_FONT_BYTES > DICE_BLITS_BYTES
+#error "DHGR high-score font does not fit the reusable dice buffer"
 #endif
 
 #define BOARD_SIZE 5
@@ -133,6 +140,7 @@ extern void xor_merge_star(void);
 extern void xor_score_digit(void);
 extern void draw_footer_separator(void);
 extern void xor_new_game_prompt(void);
+extern void draw_high_score_glyph(void);
 
 static void replace_dhgr_source(unsigned char* source, unsigned char col, unsigned char row);
 static void redraw_board_cell_at(unsigned char col, unsigned char row);
@@ -240,16 +248,21 @@ static unsigned char load_a2fm_screen(const char* filename) {
     return 1;
 }
 
-static unsigned char load_dice_blits(void) {
+static unsigned char load_buffer_asset(
+    const char* filename,
+    unsigned char* destination,
+    unsigned bytes,
+    unsigned expected_checksum
+) {
     int fd;
     int count;
-    unsigned remaining = DICE_BLITS_BYTES;
+    unsigned remaining = bytes;
     unsigned chunk;
     unsigned checksum = 0;
     unsigned i;
-    unsigned char* destination = dice_blits;
+    unsigned char* start = destination;
 
-    fd = open("DICE.BLITS", O_RDONLY);
+    fd = open(filename, O_RDONLY);
     if (fd < 0) {
         return 0;
     }
@@ -264,10 +277,19 @@ static unsigned char load_dice_blits(void) {
         remaining -= chunk;
     }
     close(fd);
-    for (i = 0; i < DICE_BLITS_BYTES; ++i) {
-        checksum += dice_blits[i];
+    for (i = 0; i < bytes; ++i) {
+        checksum += start[i];
     }
-    return checksum == DICE_BLITS_CHECKSUM;
+    return checksum == expected_checksum;
+}
+
+static unsigned char load_dice_blits(void) {
+    return load_buffer_asset(
+        "DICE.BLITS",
+        dice_blits,
+        DICE_BLITS_BYTES,
+        DICE_BLITS_CHECKSUM
+    );
 }
 
 static unsigned char read_exact(int fd, unsigned char* destination, unsigned count) {
@@ -1465,7 +1487,83 @@ static void enter_high_score(unsigned char rank) {
     save_high_scores();
 }
 
-static void show_high_scores(unsigned char new_rank) {
+static unsigned char high_score_glyph_index(char ch) {
+    if (ch >= '0' && ch <= '9') {
+        return (unsigned char) (ch - '0');
+    }
+    if (ch >= 'A' && ch <= 'Z') {
+        return (unsigned char) (10u + ch - 'A');
+    }
+    if (ch == ' ') {
+        return 36u;
+    }
+    if (ch == '.') {
+        return 37u;
+    }
+    if (ch == '>') {
+        return 38u;
+    }
+    return 39u;
+}
+
+static void prepare_high_score_row(unsigned char y) {
+    unsigned char row;
+    unsigned address;
+
+    for (row = 0; row < HIGH_SCORE_FONT_ROWS; ++row) {
+        address = hgr_row_address((unsigned) y + row);
+        merge_effect_row_low[row] = (unsigned char) address;
+        merge_effect_row_high[row] = (unsigned char) (address >> 8);
+    }
+}
+
+static void draw_high_score_char(char ch, unsigned char column) {
+    unsigned char* font = dice_blits + DICE_BLITS_BYTES - HIGH_SCORE_FONT_BYTES;
+    unsigned char glyph = high_score_glyph_index(ch);
+
+    dhgr_blit_source = font + (unsigned) glyph * HIGH_SCORE_FONT_GLYPH_BYTES;
+    dhgr_blit_byte_offset = column;
+    draw_high_score_glyph();
+}
+
+static void draw_high_score_rows(unsigned char new_rank) {
+    unsigned char index;
+    unsigned char position;
+    unsigned char significant;
+    unsigned char* entry;
+    unsigned char digits[SCORE_DIGITS];
+
+    for (index = 0; index < HIGH_SCORE_COUNT; ++index) {
+        entry = high_score_entry(index);
+        prepare_high_score_row(
+            (unsigned char) (HIGH_SCORE_TABLE_TOP + index * HIGH_SCORE_TABLE_ROW_PITCH)
+        );
+        if (index == new_rank) {
+            draw_high_score_char('>', HIGH_SCORE_TABLE_COLUMN);
+        }
+        for (position = 0; position < 3u; ++position) {
+            draw_high_score_char(
+                (char) entry[position],
+                (unsigned char) (HIGH_SCORE_NAME_COLUMN + position)
+            );
+        }
+        score_value_digits(high_score_value(index), digits);
+        significant = 0;
+        for (position = 0; position < SCORE_DIGITS; ++position) {
+            if (digits[position] != 0 || position == SCORE_DIGITS - 1u) {
+                significant = 1;
+            }
+            if (significant) {
+                draw_high_score_char(
+                    (char) ('0' + digits[position]),
+                    (unsigned char) (HIGH_SCORE_SCORE_COLUMN + position)
+                );
+            }
+        }
+    }
+}
+
+static void show_high_scores_text(unsigned char new_rank) {
     unsigned char index;
     unsigned char* entry;
     char digits[8];
@@ -1494,6 +1592,31 @@ static void show_high_scores(unsigned char new_rank) {
     }
     gotoxy(3, 18);
     cprintf("SPACE RETURN OR N STARTS A NEW GAME");
+}
+
+static void show_high_scores(unsigned char new_rank) {
+    unsigned char* font = dice_blits + DICE_BLITS_BYTES - HIGH_SCORE_FONT_BYTES;
+
+    set_text();
+    clrscr();
+    if (load_buffer_asset(
+            "HSFONT",
+            font,
+            HIGH_SCORE_FONT_BYTES,
+            HIGH_SCORE_FONT_CHECKSUM
+        ) && load_rle_dhgr_screen(
+            "HISCORES.RLE",
+            HIGH_SCORE_AUX_PACKED_BYTES,
+            HIGH_SCORE_MAIN_PACKED_BYTES,
+            HIGH_SCORE_PACKED_CHECKSUM,
+            0
+        )) {
+        load_high_scores();
+        draw_high_score_rows(new_rank);
+        return;
+    }
+    load_high_scores();
+    show_high_scores_text(new_rank);
 }
 
 static void wait_for_restart(void) {
@@ -1595,7 +1718,6 @@ static void instructions_screen(void) {
 }
 
 static void high_scores_screen(void) {
-    load_high_scores();
     show_high_scores(HIGH_SCORE_COUNT);
 }
 

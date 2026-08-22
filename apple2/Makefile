@@ -26,6 +26,7 @@ GAME_OVER_MASTER := $(ROOT)/src/assets/game_over_logo_flat_master.png
 GRID_MASTER := $(APPLE2_DIR)/assets/game_grid_dhgr_mono_master.a2fm
 GRID_REFERENCE := $(APPLE2_DIR)/assets/game_grid_dhgr_mono_reference.png
 MASCOT_MASTER := $(ROOT)/src/assets/main_mascot_master.png
+HIGH_SCORE_DICE_MASTER := $(APPLE2_DIR)/assets/high_score_dice_master.ppm
 DIE_ONE_MASTER := $(APPLE2_DIR)/assets/die_1_master.png
 DIE_TWO_MASTER := $(APPLE2_DIR)/assets/die_2_master.png
 DIE_THREE_MASTER := $(APPLE2_DIR)/assets/die_3_master.png
@@ -70,6 +71,10 @@ MERGE_EFFECT_FILES := $(addprefix $(ASSET_DIR)/,MERGESTAR FX00 FX01 FX02 FX03 FX
 SCORE_DIGITS_INC := $(GENERATED_DIR)/score_digits.inc
 FOOTER_PROMPT_INC := $(GENERATED_DIR)/footer_prompt.inc
 HIGH_SCORE_FILE := $(ASSET_DIR)/HISCORE
+HIGH_SCORE_SCREEN_RLE := $(ASSET_DIR)/HISCORES.RLE
+HIGH_SCORE_FONT := $(ASSET_DIR)/HSFONT
+HIGH_SCORE_HEADER := $(GENERATED_DIR)/high_score_assets.h
+HIGH_SCORE_STAMP := $(ASSET_DIR)/high_scores.stamp
 
 .PHONY: all setup-tools assets test crunch disk run debug emulator-check doctor clean
 
@@ -183,12 +188,22 @@ $(HIGH_SCORE_FILE): scripts/generate_high_scores.py | $(ASSET_DIR)
 	@if [ ! -x "$(PYTHON)" ]; then ./scripts/setup-tools.sh; fi
 	"$(PYTHON)" scripts/generate_high_scores.py --output "$@"
 
-assets: $(PRESENTS_STAMP) $(TITLE_STAMP) $(INSTRUCTIONS_STAMP) $(GAME_OVER_STAMP) $(GRID_STAMP) $(DICE_STAMP) $(MERGE_EFFECT_STAMP) $(HIGH_SCORE_FILE)
+$(HIGH_SCORE_STAMP): $(HIGH_SCORE_DICE_MASTER) scripts/generate_high_score_screen.py scripts/generate_instructions.py scripts/generate_presents.py | $(ASSET_DIR) $(PREVIEW_DIR) $(GENERATED_DIR)
+	@if [ ! -x "$(PYTHON)" ]; then ./scripts/setup-tools.sh; fi
+	"$(PYTHON)" scripts/generate_high_score_screen.py \
+		--dice "$(HIGH_SCORE_DICE_MASTER)" \
+		--output "$(HIGH_SCORE_SCREEN_RLE)" \
+		--font "$(HIGH_SCORE_FONT)" \
+		--header "$(HIGH_SCORE_HEADER)" \
+		--preview "$(PREVIEW_DIR)/high_scores.png"
+	touch "$@"
+
+assets: $(PRESENTS_STAMP) $(TITLE_STAMP) $(INSTRUCTIONS_STAMP) $(GAME_OVER_STAMP) $(GRID_STAMP) $(DICE_STAMP) $(MERGE_EFFECT_STAMP) $(HIGH_SCORE_FILE) $(HIGH_SCORE_STAMP)
 
 test: setup-tools
 	"$(PYTHON)" -m unittest discover -s tests -p 'test_*.py'
 
-$(TARGET): Makefile $(SRC) $(ASM_SRC) $(PRESENTS_STAMP) $(INSTRUCTIONS_STAMP) $(GAME_OVER_STAMP) $(DICE_STAMP) $(MERGE_EFFECT_STAMP) $(SCORE_DIGITS_INC) $(FOOTER_PROMPT_INC) | $(BUILD_DIR)
+$(TARGET): Makefile $(SRC) $(ASM_SRC) $(PRESENTS_STAMP) $(INSTRUCTIONS_STAMP) $(GAME_OVER_STAMP) $(HIGH_SCORE_STAMP) $(DICE_STAMP) $(MERGE_EFFECT_STAMP) $(SCORE_DIGITS_INC) $(FOOTER_PROMPT_INC) | $(BUILD_DIR)
 	@if [ -z "$(CC65)" ]; then echo "cl65 was not found on PATH."; exit 1; fi
 	cl65 -t apple2 -Oirs --codesize 500 --start-addr 0x4000 -I "$(GENERATED_DIR)" \
 		--asm-include-dir "$(GENERATED_DIR)" \

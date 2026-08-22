@@ -47,7 +47,7 @@ The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots
 - `AWESOME` is reserved for the second and later generic merges in the same placement turn.
 - Single-die mode begins when no adjacent empty pair remains.
 - Filling the final empty cell ends the game.
-- A compact ten-entry high-score table records three initials and a five-digit score on disk.
+- A compact ten-entry DHGR high-score table records three initials and a five-digit score on disk, with the supplied lucky-dice artwork in its right panel.
 - Pressing `N` during gameplay asks `ARE YOU SURE [Y/N]?`; only `Y` clears the current board.
 
 ## Scoring
@@ -144,7 +144,7 @@ The principal generated files are:
 | `apple2/build/generated/` | Generated C headers for asset geometry |
 | `apple2/build/previews/` | PNG previews of converted Apple II artwork |
 
-The disk contains `SIXIES.SYSTEM`, the crunched `SIXIES` ProDOS BIN, compressed `PRESENTS.RLE`, `INSTRUCT.RLE`, and `GAMEOVER.RLE` screens, the prompt-enhanced `TITLE.A2FM`, `GRID.A2FM`, `DICE.BLITS`, `MERGESTAR`, the 56-byte `HISCORE` table, and the ten `FX00` through `FX09` callout files. Booting the disk launches `SIXIES.SYSTEM`, which loads the SFX at `$080D`; it decrunches and starts the game at `$4000`.
+The disk contains `SIXIES.SYSTEM`, the crunched `SIXIES` ProDOS BIN, compressed `PRESENTS.RLE`, `INSTRUCT.RLE`, `GAMEOVER.RLE`, and `HISCORES.RLE` screens, the prompt-enhanced `TITLE.A2FM`, the disk-backed `HSFONT`, `GRID.A2FM`, `DICE.BLITS`, `MERGESTAR`, the 56-byte `HISCORE` table, and the ten `FX00` through `FX09` callout files. Booting the disk launches `SIXIES.SYSTEM`, which loads the SFX at `$080D`; it decrunches and starts the game at `$4000`.
 
 ## Emulator
 
@@ -189,7 +189,7 @@ izapple2 shortcuts used during development:
 
 Static full-screen graphics are stored as disk-backed DHGR pages. The game streams main and auxiliary banks into Page 1, then updates only dirty cell interiors. Dice and score digits use fixed-position opaque or XOR assembly blits, while moving star effects use pre-shifted XOR sprites that restore the pixels beneath them.
 
-High scores occupy 56 disk bytes: a four-byte signature, version, checksum, and ten five-byte records containing three initials plus a little-endian 16-bit score. The runtime overlays this data on the existing 1 KB DHGR transfer buffer after the game-over artwork is loaded, avoiding a dedicated high-score BSS allocation.
+High scores occupy 56 disk bytes: a four-byte signature, version, checksum, and ten five-byte records containing three initials plus a little-endian 16-bit score. The runtime overlays this data on the existing 1 KB DHGR transfer buffer after the game-over artwork is loaded, avoiding a dedicated high-score BSS allocation. The score page streams a compressed DHGR background with the lucky-dice image, then draws the live entries with a 560-byte disk-backed dual-bank font held in the otherwise reusable dice buffer.
 
 The release disk uses Exomizer 3.1.2's Apple II/IIe SFX target. `crunch_apple2_binary.py` validates cc65's AppleSingle metadata, converts the `$4000` data fork to PRG input, runs `sfx -t162`, verifies a complete `desfx` round trip, validates the generated BASIC launcher, and strips that launcher before ProDOS packaging at its `$080D` machine entry. Decompression does not change the game's runtime memory map.
 

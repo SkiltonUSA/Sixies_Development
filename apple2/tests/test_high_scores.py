@@ -71,7 +71,20 @@ class HighScoreTests(unittest.TestCase):
 
     def test_high_score_file_is_built_and_packaged(self) -> None:
         self.assertIn("HIGH_SCORE_FILE := $(ASSET_DIR)/HISCORE", MAKEFILE)
+        self.assertIn("HIGH_SCORE_SCREEN_RLE := $(ASSET_DIR)/HISCORES.RLE", MAKEFILE)
+        self.assertIn("HIGH_SCORE_FONT := $(ASSET_DIR)/HSFONT", MAKEFILE)
+        self.assertIn("HISCORES.RLE HSFONT", PACKAGER)
         self.assertIn("MERGESTAR HISCORE", PACKAGER)
+
+    def test_dhgr_table_reloads_scores_after_loading_graphics(self) -> None:
+        self.assertIn('"HISCORES.RLE"', SOURCE)
+        self.assertIn('"HSFONT"', SOURCE)
+        self.assertIn("draw_high_score_rows(new_rank);", SOURCE)
+        graphics = SOURCE.index('"HISCORES.RLE"')
+        reload_scores = SOURCE.index("load_high_scores();", graphics)
+        draw_rows = SOURCE.index("draw_high_score_rows(new_rank);", reload_scores)
+        self.assertLess(graphics, reload_scores)
+        self.assertLess(reload_scores, draw_rows)
 
     def test_emulator_runner_preserves_saved_scores(self) -> None:
         self.assertIn('-g "$RUN_DISK" HISCORE "$high_score_backup"', RUNNER)

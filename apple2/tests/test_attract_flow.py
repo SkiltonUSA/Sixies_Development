@@ -34,7 +34,7 @@ class AttractFlowTests(unittest.TestCase):
         self.assertLess(high_scores, presents)
         self.assertLess(presents, title)
 
-    def test_attract_high_scores_reload_saved_table_without_rank_marker(self) -> None:
+    def test_attract_high_scores_use_live_table_without_rank_marker(self) -> None:
         match = re.search(
             r"static void high_scores_screen\(void\) \{(?P<body>.*?)\n\}",
             SOURCE,
@@ -42,7 +42,6 @@ class AttractFlowTests(unittest.TestCase):
         )
         self.assertIsNotNone(match)
         body = match.group("body")
-        self.assertIn("load_high_scores();", body)
         self.assertIn("show_high_scores(HIGH_SCORE_COUNT);", body)
 
     def test_timed_wait_polls_for_start_keys(self) -> None:
