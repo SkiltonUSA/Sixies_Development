@@ -1630,8 +1630,6 @@ static void show_game_over(void) {
         dhgr_begin_text();
         dhgr_add_text_line(20, score_line);
         dhgr_add_text_line(21, "SPACE RETURN OR N SHOWS HIGH SCORES");
-        dhgr_add_text_line(22, "APPLE II DHGR ART REBUILT FROM SOURCE PNGS");
-        dhgr_add_text_line(23, "READY FOR ANOTHER ROUND");
         dhgr_finish_text();
     } else {
         clrscr();
