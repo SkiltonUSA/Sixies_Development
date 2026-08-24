@@ -18,6 +18,12 @@ The port is written in C and 6502 assembly with cc65. Its Studio313 presentation
 
 *Press `I` during a game to open this page. Press `Space` to reconstruct and return to the unchanged board.*
 
+### Title, Game Over, And High Scores
+
+| Title | Game Over | High Scores |
+| --- | --- | --- |
+| ![SIXIES Apple II title screen](docs/images/sixies-title.png) | ![SIXIES Apple II game-over screen](docs/images/sixies-game-over.png) | ![SIXIES Apple II high-score table](docs/images/sixies-high-scores.png) |
+
 ## Apple II Specifications
 
 | Component | Requirement |
@@ -39,41 +45,11 @@ The port is written in C and 6502 assembly with cc65. Its Studio313 presentation
 
 The supplied launcher selects izapple2's enhanced Apple IIe model, which uses a 65C02 and the required auxiliary memory. It enables RGB output and leaves slots 2, 3, and 4 empty. RGB displays the one-bit DHGR art as stable black and white rather than composite artifact colors. A joystick, mouse, Mockingboard, accelerator, and hard disk are not required.
 
-## Game Features
+## Game Rules
 
-- A 5x5 pre-rendered DHGR grid that remains in place during movement and placement.
-- A timed attract loop with Studio313 presentation, title, instructions, and the live ten-entry high-score table.
-- The initial title remains for ten seconds; subsequent attract screens rotate every five seconds.
-- Random single or paired dice, with four-way rotation for pairs. During normal play, pairs occur on two-thirds of turns and singles on one-third. Values 1, 2, and 3 may appear alone. Allowed pairs are `1+2`, `1+3`, `2+3`, `2+4`, `3+3`, and `3+4`. A standalone 4 unlocks when three value-4 dice are on the board; a standalone 5 unlocks when four value-5 dice are on the board. Value 5 never appears in a pair.
-- The board-placement dice invert while waiting for input, without flashing the current-dice sidebar.
-- Occupied targets shown with per-die diagonal hatching.
-- Stock-speaker effects reproduce the C64 movement bounce, rotation/placement portal ping, descending invalid-placement bonk, value-specific merge arpeggios, and sixes noise burst. `M` toggles them on or off.
-- Three-or-more edge-connected dice merge into the next value.
-- Connected sixes are removed from the board.
-- Chain reactions resolve one merge at a time so every board change remains visible.
-- Only the current placement dice appear centered in the right panel; labels and the next-piece preview are omitted to conserve memory.
-- The mascot and persistent five-digit score appear in the left panel.
-- Multiple merges resolve as separate visual events with an immediate score update for each one.
-- Horizontal and vertical grid ripples accompany every merge; merges consuming fives or sixes add four simultaneous diagonal arms. Flashing merged dice, falling star sprites, comic callouts, and value-specific sounds complete the effect.
-- Merges of exactly three fives or exactly three sixes shake the grid horizontally.
-- `FIVES` appears when fours merge into a five, and `SIXIES` when fives merge into a six.
-- `AWESOME` is reserved for the second and later generic merges in the same placement turn.
-- Forced single-die mode applies only while no adjacent empty pair remains. After 5s and 6s clear and open pair space, normal pair generation resumes.
-- In forced single-die mode, two-thirds of generated dice are weighted toward eligible values bordering the remaining empty cells; one-third retain normal random selection.
-- Filling the final empty cell ends the game.
-- A compact ten-entry DHGR high-score table records three initials and a five-digit score on disk, with the supplied lucky-dice artwork in its right panel.
-- Pressing `N` during gameplay asks `ARE YOU SURE [Y/N]?`; only `Y` clears the current board.
-- The lower-right `[I]NSTRUCTIONS` button mirrors `[N]EW GAME`; pressing `I` opens the instruction page and `Space` returns to the unchanged game.
+SIXIES uses single or paired dice on a 5x5 grid. Place dice without overlapping occupied cells, connect at least three equal edge-touching values, and build chain reactions before the board fills.
 
-## Scoring
-
-A merge awards the face value multiplied by the number of consumed dice. Three ones score 3 points, three twos score 6, three fives score 15, and larger connected groups score all consumed dice.
-
-Removing sixes adds a 50-point bonus. A merge of three sixes therefore scores `3 x 6 + 50 = 68` points. In a chain reaction, each merge redraws its result, updates the scoreboard, and completes its ripple, star burst, and callout before the next merge begins.
-
-At game over, `Space`, `Return`, or `N` opens the high-score table. A qualifying score prompts for three letters, inserts the result in descending order, and saves it to the disk's 56-byte `HISCORE` file. The table retains ten entries; a score must exceed at least one existing entry to qualify.
-
-New disks seed the table with `DOM 1349`, `PRI 1020`, `TWD 893`, `TAN 802`, `TB 755`, `ACE 650`, `MAX 540`, `ZED 430`, `BOT 320`, and `CPU 210`. An invisible trailing space pads the two-letter `TB` name to the table's fixed three-character initials field.
+The complete piece-generation rules, merge behavior, scoring, effects, controls, and high-score rules are documented in [SIXIES Apple II Game Rules](RULES_README.md).
 
 ## Host Requirements
 
@@ -234,19 +210,6 @@ izapple2 shortcuts used during development:
 | `F5` | Toggle full-speed execution |
 | `F6` | Cycle display modes |
 | `F12` | Save `snapshot.png` |
-
-## Controls
-
-| Key | Game action |
-| --- | --- |
-| Arrow keys or `W`, `A`, `S`, `D` | Move the placement dice |
-| `E` or `Q` | Rotate a paired piece |
-| `Space` or `Return` | Place the current piece |
-| `N` | Open the new-game confirmation prompt |
-| `M` | Toggle speaker sound on or off |
-| `I` | Show instructions; `Space` returns to the current game |
-| `Y` / `N` | Confirm a new game / return to the current game |
-| `A` through `Z` | Enter three initials after a qualifying game |
 
 ## Graphics and Runtime Design
 

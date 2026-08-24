@@ -8,7 +8,13 @@ This repository also contains a native Apple II version built with C and 6502 as
 
 ![SIXIES gameplay on an enhanced Apple IIe](apple2/docs/images/sixies-gameplay.png)
 
-*Current Apple II gameplay: persistent DHGR grid, placed and hovering dice, mascot and score on the left, and current/next dice on the right.*
+*Current Apple II gameplay: persistent DHGR grid, placed and hovering dice, mascot and score on the left, current dice on the right, and mirrored New Game/Instructions controls.*
+
+### More Apple II Screens
+
+| Title | Game Over | High Scores |
+| --- | --- | --- |
+| ![SIXIES Apple II title screen](apple2/docs/images/sixies-title.png) | ![SIXIES Apple II game-over screen](apple2/docs/images/sixies-game-over.png) | ![SIXIES Apple II high-score table](apple2/docs/images/sixies-high-scores.png) |
 
 ```sh
 make -C apple2 setup-tools
@@ -82,16 +88,6 @@ Moving a die between grid cells plays the three-frame c64SIDkit `bounce` effect.
 
 ## Rules
 
-Each turn normally produces one or two dice with values from 1 to 4. Once at least five value-5 dice are present on the board, each new piece has a 1-in-16 chance of containing one generated value-5 die. A double piece can never contain two value-4 dice. Double pieces rotate in four directions and must fit entirely inside empty grid cells.
+Complete C64 piece generation, placement, merging, scoring, effects, and end-game rules are in the [C64 Game Rules](RULES_README.md).
 
-Valid targets show the dice normally. The current target uses a yellow marching-ants border, with two independently animated squares for a double die. Targets that overlap an occupied cell show the intended dice as gray dithered shadows and cannot be placed.
-
-Three or more edge-connected equal dice merge at the placed die. Values progress from 1 through 6; a connected group of 6s disappears. New values can immediately trigger another merge. Each merge scores the total value of the consumed dice.
-
-The first merge in every chain plays a happy rising C-E-G-C pulse arpeggio synchronized with the start of the merge animation. Cascading merges do not replay the first-merge cue.
-
-When a score takes first place, its complete high-score row flashes yellow and white until the player enters all three initials.
-
-When no two edge-adjacent empty cells remain, the game switches permanently to single-die pieces. Filling the final empty cell ends the game.
-
-Placed dice pulse to acknowledge the move. Each merge fades the sidebar mascot through dark gray to black, then fades in one of the supplied hi-res comic bursts. Lower-value merges rotate through `AWESOME`, `BOOM`, `DANG`, `LETS GO`, `WHOA`, `WOW`, `YEAH`, and `YES`; merging value-5 dice always shows `FIVES`, and merging value-6 dice always shows `SIXIES`. The bursts are resized and centered across the full 80-pixel sidebar. A value-1 merge keeps its word solid white. Value 2 begins entirely blue and changes to gray from left to right, while value 3 sends a green band from left to right across white. Value-4, value-5, and value-6 merges animate concentric red, orange, yellow, green, cyan, blue, and purple bands through the word. On a merge, full squares along the destination row and column flash inward from all four grid edges while the dice pulse: white for the first merge and cyan for a chain merge. Three sprite stars burst from the destination, jump outward, and fall in separate arcs into the next grid row. A second chain merge doubles the size of the firework stars. Creating a six follows the burst with three stars descending from the top to the bottom of the board. The upgraded die pauses for roughly half a second before a second chain merge collapses. New Game spirals from the bottom-left cell toward the center. Game over reverses that effect, then wipes the full display from top to bottom with a solid gray band. Each band holds for 0.1 seconds before revealing a native multicolor Koala logo. The completed Sixies image and large red `GAME OVER` banner remain visible for two seconds before the final score and five-entry high-score page replace the center panel. A new first-place score prompts for three initials and persists until the PRG is reloaded. The end-game display then rotates through the title, high-score, and credits pages every ten seconds. A compact `PRESS N FOR NEW GAME` instruction remains at the bottom, and `N` starts a new game from any end-game page. The logo uses one flat C64 color per letter, a continuous solid-white outer border, and a solid-black inner stroke with no dithering. New Game restores hi-res mode and resets the board, score, and single-die endgame mode without clearing the high-score table.
+The port has its own generation probabilities, controls, scoring bonus, and high-score behavior. See the [Apple II Game Rules](apple2/RULES_README.md) when playing that version.
