@@ -24,6 +24,12 @@ The port is written in C and 6502 assembly with cc65. Its Studio313 presentation
 | --- | --- | --- |
 | ![SIXIES Apple II title screen](docs/images/sixies-title.png) | ![SIXIES Apple II game-over screen](docs/images/sixies-game-over.png) | ![SIXIES Apple II high-score table](docs/images/sixies-high-scores.png) |
 
+### Gameplay Video
+
+[![Watch SIXIES for Apple II on YouTube](https://img.youtube.com/vi/pp3WzQ6sM_I/maxresdefault.jpg)](https://www.youtube.com/watch?v=pp3WzQ6sM_I&t=63s)
+
+[Watch SIXIES for Apple II on YouTube](https://www.youtube.com/watch?v=pp3WzQ6sM_I&t=63s).
+
 ## Apple II Specifications
 
 | Component | Requirement |

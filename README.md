@@ -16,6 +16,12 @@ This repository also contains a native Apple II version built with C and 6502 as
 | --- | --- | --- |
 | ![SIXIES Apple II title screen](apple2/docs/images/sixies-title.png) | ![SIXIES Apple II game-over screen](apple2/docs/images/sixies-game-over.png) | ![SIXIES Apple II high-score table](apple2/docs/images/sixies-high-scores.png) |
 
+### Gameplay Video
+
+[![Watch SIXIES for Apple II on YouTube](https://img.youtube.com/vi/pp3WzQ6sM_I/maxresdefault.jpg)](https://www.youtube.com/watch?v=pp3WzQ6sM_I&t=63s)
+
+[Watch SIXIES for Apple II on YouTube](https://www.youtube.com/watch?v=pp3WzQ6sM_I&t=63s).
+
 ```sh
 make -C apple2 setup-tools
 make -C apple2 doctor
