@@ -19,6 +19,11 @@
 .export _draw_footer_separator
 .export _xor_new_game_prompt
 .export _draw_high_score_glyph
+.export _play_move_sound
+.export _play_rotate_sound
+.export _play_place_sound
+.export _play_invalid_placement_sound
+.export _play_merge_sound
 .import _dhgr_transfer_buffer
 .import _dhgr_blit_source
 .import _dhgr_blit_row_index
@@ -37,6 +42,7 @@
 .import _merge_effect_byte_offset
 .import _score_blit_position
 .import _score_blit_digit
+.import _sound_enabled
 .importzp ptr1, ptr2, ptr3, ptr4, tmp1, tmp2, tmp3
 
 RAMWRT_MAIN = $C004
@@ -47,6 +53,7 @@ EIGHTY_STORE_OFF = $C000
 EIGHTY_STORE_ON  = $C001
 PAGE1 = $C054
 PAGE2 = $C055
+SPEAKER = $C030
 MERGE_EFFECT_ROW_BYTES = 20
 MERGE_EFFECT_HEIGHT = 48
 MERGE_EFFECT_BANK_BYTES = MERGE_EFFECT_ROW_BYTES * MERGE_EFFECT_HEIGHT
@@ -62,7 +69,141 @@ GRID_SHAKE_ROWS = 120
 
 .include "footer_prompt.inc"
 
+; Four-note stock-speaker adaptations of the C64 value 1-5 merge themes.
+; Delays decrease as pitch rises; transition counts keep each note near 12 ms.
+merge_note_delays:
+    .byte 113, 89, 75, 56
+    .byte 56, 44, 37, 27
+    .byte 37, 30, 25, 18
+    .byte 27, 21, 18, 13
+    .byte 21, 18, 15, 10
+merge_note_transitions:
+    .byte 6, 8, 9, 12
+    .byte 12, 16, 19, 25
+    .byte 19, 24, 29, 39
+    .byte 25, 32, 39, 50
+    .byte 32, 39, 47, 62
+
 .segment "CODE"
+
+; Stock-speaker adaptations of the C64 SID board effects. The six NOP delay
+; keeps each half-period cycle-counted while the short effects remain fast
+; enough to run after a DHGR update without making cursor movement feel late.
+.proc _play_move_sound
+    lda #41
+    ldx #20
+    jmp play_speaker_tone
+.endproc
+
+_play_rotate_sound:
+_play_place_sound:
+    lda #60
+    ldx #24
+    jmp play_speaker_tone
+
+.proc _play_invalid_placement_sound
+    lda #100
+    ldx #8
+    jsr play_speaker_tone
+    lda #135
+    ldx #8
+    jsr play_speaker_tone
+    lda #180
+    ldx #8
+    jsr play_speaker_tone
+    lda #250
+    ldx #8
+    jmp play_speaker_tone
+.endproc
+
+; __fastcall__ argument A is the consumed die value. Values 1-5 play the same
+; rising chords as the C64 version; sixes disappear with descending noise.
+.proc _play_merge_sound
+    ldy _sound_enabled
+    beq merge_sound_done
+    cmp #6
+    beq merge_six_noise
+    cmp #1
+    bcc merge_sound_done
+    cmp #6
+    bcs merge_sound_done
+
+    sec
+    sbc #1
+    asl
+    asl
+    sta tmp3
+    clc
+    adc #4
+    sta ptr4
+merge_note:
+    ldy tmp3
+    lda merge_note_delays,y
+    ldx merge_note_transitions,y
+    jsr play_speaker_tone
+    inc tmp3
+    lda tmp3
+    cmp ptr4
+    bne merge_note
+merge_sound_done:
+    rts
+
+merge_six_noise:
+    lda #$a5
+    sta tmp1
+    lda #48
+    sta tmp2
+    lda #30
+    sta tmp3
+merge_six_click:
+    bit SPEAKER
+    lda tmp1
+    lsr
+    bcc merge_six_seed_ready
+    eor #$b8
+merge_six_seed_ready:
+    sta tmp1
+    and #$0f
+    clc
+    adc tmp3
+    tay
+merge_six_delay:
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    dey
+    bne merge_six_delay
+    inc tmp3
+    dec tmp2
+    bne merge_six_click
+    rts
+.endproc
+
+; A is the half-period delay and X is the number of speaker transitions.
+play_speaker_tone:
+    ldy _sound_enabled
+    beq speaker_tone_done
+    sta tmp1
+    stx tmp2
+speaker_tone_toggle:
+    bit SPEAKER
+    ldy tmp1
+speaker_tone_delay:
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    dey
+    bne speaker_tone_delay
+    dec tmp2
+    bne speaker_tone_toggle
+speaker_tone_done:
+    rts
 
 ; void __fastcall__ copy_buffer_to_aux(void* destination)
 ; AX contains the auxiliary destination. Reads remain mapped to main memory, so

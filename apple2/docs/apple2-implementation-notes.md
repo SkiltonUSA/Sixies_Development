@@ -63,7 +63,7 @@
 - Partial edge bytes are restored from generated per-cell scanline chunks copied from the original A2FM grid. Identical 24-row chunks are deduplicated into a compact pool; auxiliary writes never read the corresponding main-bank byte, preventing bank-crossing vertical trails in the center column.
 - Generated low/high scanline tables feed 6502 assembly clear and opaque replacement loops. Movement performs only one masked 3-4 byte pass across 24 rows in each bank; all mask scanning, phase alignment, division, and modulo work happens during the host build.
 - Horizontal lines set whole seven-pixel HGR bytes between masked edge bytes, vertical lines calculate `x / 7` once, and filled rectangles reuse the byte-oriented horizontal routine. Avoiding per-pixel 16-bit divide/modulo makes the initial grid appear substantially faster.
-- A new current piece is generated after every valid placement and completed merge sequence. The hidden look-ahead queue and its three persistent bytes are removed; generation observes single-die mode directly.
+- A new current piece is generated after every valid placement and completed merge sequence. The hidden look-ahead queue and its three persistent bytes are removed; generation recomputes single-die mode from whether the current board still has an adjacent empty pair.
 - Sidebar slots are opaque fixed-position assembly blits. Missing second dice are replaced with black sprite planes, so pair-to-single transitions cannot leave stale pips or outlines.
 - Placement snapshots all 25 logical cells and redraws the committed dice first. Merge resolution then snapshots and redraws only the cells changed by one connected group at a time; the bitmap grid is never cleared during normal play.
 - An off-board second die is represented with an explicit sentinel. It must not inherit zero-initialized coordinates and mark board cell `(0,0)` as invalid.
@@ -109,6 +109,10 @@ The original Prince of Persia source is the strongest reference for a larger ren
 - Pitch requires cycle-counted half-period loops; note duration requires an outer loop or equivalent sequencing.
 - A blocking beeper tune consumes effectively all CPU time. It is suitable for a static title screen but not concurrent gameplay.
 - Sound timing belongs in assembly. Game sound effects can use shorter, less pitch-critical loops.
+- Board movement uses a short cycle-counted tone near the C64 `bounce` patch's 720 Hz pitch. Rotation and valid placement share a roughly 500 Hz speaker ping, matching the C64 `portal_ping` trigger mapping. Invalid placement descends through four short periods from roughly 300 Hz toward 130 Hz to reproduce the C64 triangle `bonk` contour without blocking nine video frames.
+- Successful movement, rotation, and placement sounds run after their DHGR update, so the visual response remains immediate. Invalid placement sounds directly from the failed placement path and leaves the board untouched.
+- Each resolved merge captures the consumed face before changing the board, then starts its value-specific speaker effect after the changed cells are drawn. Values 1-5 use compact four-note versions of the C64 arpeggios; removed sixes use a descending LFSR-jittered click burst. Chain merges trigger these effects separately.
+- `M` toggles `sound_enabled`. The speaker tone routine returns immediately when sound is off, so every board effect is muted without changing call sites. The choice persists across new games.
 
 ## References
 

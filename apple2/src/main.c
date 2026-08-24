@@ -83,6 +83,7 @@
 #define HIGH_SCORE_ENTRY_BYTES 5u
 #define HIGH_SCORE_DATA_OFFSET 6u
 #define HIGH_SCORE_BYTES (HIGH_SCORE_DATA_OFFSET + HIGH_SCORE_COUNT * HIGH_SCORE_ENTRY_BYTES)
+#define PAIR_PIECE_COUNT 6u
 
 static unsigned char board[BOARD_CELLS];
 static unsigned char placement_board_before[BOARD_CELLS];
@@ -95,11 +96,13 @@ static unsigned char piece_a;
 static unsigned char piece_b;
 static unsigned char orientation;
 static unsigned char single_mode;
+unsigned char sound_enabled = 1;
 static unsigned char game_over;
 static unsigned char merge_effect_index;
 static unsigned char merge_effect_x;
 static unsigned char merge_effect_y;
 static unsigned char turn_merge_count;
+static unsigned char merge_sound_value;
 static unsigned int displayed_score;
 #ifdef MERGE_EFFECT_DEMO
 static unsigned char merge_effect_demo_index;
@@ -141,6 +144,11 @@ extern void xor_score_digit(void);
 extern void draw_footer_separator(void);
 extern void xor_new_game_prompt(void);
 extern void draw_high_score_glyph(void);
+extern void play_move_sound(void);
+extern void play_rotate_sound(void);
+extern void play_place_sound(void);
+extern void play_invalid_placement_sound(void);
+extern void __fastcall__ play_merge_sound(unsigned char value);
 
 static void replace_dhgr_source(unsigned char* source, unsigned char col, unsigned char row);
 static void redraw_board_cell_at(unsigned char col, unsigned char row);
@@ -155,6 +163,13 @@ static const char merge_effect_files[MERGE_EFFECT_COUNT][5] = {
 
 static const unsigned char first_merge_effects[7] = {
     1, 2, 4, 6, 7, 8, 9,
+};
+
+static const unsigned char pair_piece_first[PAIR_PIECE_COUNT] = {
+    1, 1, 2, 2, 3, 3,
+};
+static const unsigned char pair_piece_second[PAIR_PIECE_COUNT] = {
+    2, 3, 3, 4, 3, 4,
 };
 
 static const unsigned char firework_side_x[9] = {0, 2, 4, 6, 8, 10, 12, 14, 16};
@@ -662,13 +677,58 @@ static unsigned char has_any_placement(void) {
     return has_adjacent_empty_pair();
 }
 
-static unsigned char random_face(unsigned char allow_five) {
+static unsigned char weighted_surrounding_face(
+    unsigned char four_unlocked,
+    unsigned char five_unlocked
+) {
+    unsigned char weights[5] = {0, 0, 0, 0, 0};
+    unsigned char total = 0;
     unsigned char value;
-    if (allow_five && ((rand() & 15) == 0)) {
-        return 5;
+    unsigned char choice;
+    unsigned char direction;
+    unsigned char x;
+    unsigned char y;
+    signed char neighbor_x;
+    signed char neighbor_y;
+
+    for (y = 0; y < BOARD_SIZE; ++y) {
+        for (x = 0; x < BOARD_SIZE; ++x) {
+            value = board_value(x, y);
+            if (value == 0 || value > 5
+                || (value == 4 && !four_unlocked)
+                || (value == 5 && !five_unlocked)) {
+                continue;
+            }
+            for (direction = 0; direction < 4; ++direction) {
+                neighbor_x = (signed char) x + orient_dx[direction];
+                neighbor_y = (signed char) y + orient_dy[direction];
+                if (neighbor_x < 0 || neighbor_x >= BOARD_SIZE
+                    || neighbor_y < 0 || neighbor_y >= BOARD_SIZE) {
+                    continue;
+                }
+                if (board_value(
+                    (unsigned char) neighbor_x,
+                    (unsigned char) neighbor_y
+                ) != 0) {
+                    continue;
+                }
+                ++weights[value - 1u];
+                ++total;
+            }
+        }
     }
-    value = (unsigned char) ((rand() % 4) + 1);
-    return value;
+
+    if (total == 0) {
+        return 0;
+    }
+    choice = (unsigned char) (rand() % total);
+    for (value = 1; value <= 5; ++value) {
+        if (choice < weights[value - 1u]) {
+            return value;
+        }
+        choice = (unsigned char) (choice - weights[value - 1u]);
+    }
+    return 0;
 }
 
 static void generate_piece(
@@ -676,18 +736,36 @@ static void generate_piece(
     unsigned char* first,
     unsigned char* second
 ) {
-    unsigned char allow_five;
+    unsigned char choice;
+    unsigned char four_unlocked = count_value(4) >= 3;
+    unsigned char five_unlocked = count_value(5) >= 4;
+    unsigned char single_count = (unsigned char) (
+        3 + four_unlocked + five_unlocked
+    );
 
-    allow_five = count_value(5) >= 5;
-    if (single_mode) {
+    single_mode = !has_adjacent_empty_pair();
+    if (single_mode || (rand() % 3) == 0) {
         *count = 1;
+        *second = 0;
+        if (single_mode && (rand() % 3) != 0) {
+            *first = weighted_surrounding_face(four_unlocked, five_unlocked);
+            if (*first != 0) {
+                return;
+            }
+        }
+        choice = (unsigned char) (rand() % single_count);
+        if (choice < 3) {
+            *first = (unsigned char) (choice + 1);
+        } else if (four_unlocked && choice == 3) {
+            *first = 4;
+        } else {
+            *first = 5;
+        }
     } else {
-        *count = (rand() & 1) ? 2 : 1;
-    }
-    *first = random_face(allow_five);
-    *second = random_face(allow_five);
-    if (*count == 2 && *first == 4 && *second == 4) {
-        *second = 3;
+        choice = (unsigned char) (rand() % PAIR_PIECE_COUNT);
+        *count = 2;
+        *first = pair_piece_first[choice];
+        *second = pair_piece_second[choice];
     }
 }
 
@@ -1226,6 +1304,7 @@ static unsigned char merge_at(unsigned char x, unsigned char y) {
         merge_effect_index = first_merge_effects[rand() % 7u];
     }
     turn_merge_count = count == 3u ? value : 1u;
+    merge_sound_value = value;
     merge_effect_x = x;
     merge_effect_y = y;
     keep = cell_index(x, y);
@@ -1245,6 +1324,7 @@ static void resolve_at(unsigned char x, unsigned char y) {
             break;
         }
         redraw_board_changes();
+        play_merge_sound(merge_sound_value);
         if (dhgr_grid_active) {
             if (turn_merge_count >= 5u) {
                 run_merge_grid_shake();
@@ -1316,6 +1396,10 @@ static char read_input(void) {
         ch = (char) (ch - ('a' - 'A'));
     }
     return ch;
+}
+
+static void toggle_sound(void) {
+    sound_enabled = (unsigned char) !sound_enabled;
 }
 
 static unsigned char confirm_new_game(void) {
@@ -1655,6 +1739,9 @@ static unsigned char wait_for_start_or_timeout(unsigned frames) {
             if (ch == ' ' || ch == CH_ENTER || ch == 'N') {
                 return 1;
             }
+            if (ch == 'M') {
+                toggle_sound();
+            }
         }
         wait_animation_frames(1);
         --frames;
@@ -1710,9 +1797,11 @@ static void instructions_screen(void) {
         gotoxy(3, 8);
         cprintf("MATCH 3 TOUCHING DICE TO MERGE");
         gotoxy(3, 10);
-        cprintf("WASD MOVE  Q OR R ROTATE");
+        cprintf("WASD MOVE  Q OR E ROTATE");
         gotoxy(3, 12);
         cprintf("SPACE OR RETURN PLACES DICE");
+        gotoxy(3, 14);
+        cprintf("[M] TOGGLES SOUND");
         write_bottom_line(20, "SPACE OR RETURN STARTS");
     }
 }
@@ -1885,7 +1974,7 @@ static void game_loop(void) {
                     preview_changed = 1;
                 }
                 break;
-            case 'R':
+            case 'E':
             case 'Q':
                 if (piece_count == 2) {
                     orientation = (unsigned char) ((orientation + 1u) & 3u);
@@ -1901,7 +1990,13 @@ static void game_loop(void) {
                     &placed_x2,
                     &placed_y2
                 );
+                if (!placement_changed) {
+                    play_invalid_placement_sound();
+                }
                 break;
+            case 'M':
+                toggle_sound();
+                continue;
             case 'N':
 #ifdef SCREEN_SHAKE_DEMO
                 run_merge_grid_shake();
@@ -1914,10 +2009,8 @@ static void game_loop(void) {
         }
         if (placement_changed) {
             redraw_board_changes();
+            play_place_sound();
             resolve_merges(placed_x1, placed_y1, placed_x2, placed_y2);
-            if (!single_mode && !has_adjacent_empty_pair()) {
-                single_mode = 1;
-            }
             advance_piece();
             if (!game_over) {
                 draw_current_piece_preview();
@@ -1925,6 +2018,11 @@ static void game_loop(void) {
             draw_piece_sidebar();
         } else if (preview_changed) {
             redraw_preview_transition(old_x, old_y, old_orientation);
+            if (old_orientation != orientation) {
+                play_rotate_sound();
+            } else {
+                play_move_sound();
+            }
         }
     }
 }

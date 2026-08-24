@@ -32,9 +32,10 @@ The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots
 - A 5x5 pre-rendered DHGR grid that remains in place during movement and placement.
 - A timed attract loop with Studio313 presentation, title, instructions, and the live ten-entry high-score table.
 - The initial title remains for ten seconds; subsequent attract screens rotate every five seconds.
-- Random single or paired dice, with four-way rotation for pairs.
+- Random single or paired dice, with four-way rotation for pairs. During normal play, pairs occur on two-thirds of turns and singles on one-third. Values 1, 2, and 3 may appear alone. Allowed pairs are `1+2`, `1+3`, `2+3`, `2+4`, `3+3`, and `3+4`. A standalone 4 unlocks when three value-4 dice are on the board; a standalone 5 unlocks when four value-5 dice are on the board. Value 5 never appears in a pair.
 - The board-placement dice invert while waiting for input, without flashing the current-dice sidebar.
 - Occupied targets shown with per-die diagonal hatching.
+- Stock-speaker effects reproduce the C64 movement bounce, rotation/placement portal ping, descending invalid-placement bonk, value-specific merge arpeggios, and sixes noise burst. `M` toggles them on or off.
 - Three-or-more edge-connected dice merge into the next value.
 - Connected sixes are removed from the board.
 - Chain reactions resolve one merge at a time so every board change remains visible.
@@ -45,7 +46,8 @@ The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots
 - Merges of exactly three fives or exactly three sixes shake the grid horizontally.
 - `FIVES` appears when fours merge into a five, and `SIXIES` when fives merge into a six.
 - `AWESOME` is reserved for the second and later generic merges in the same placement turn.
-- Single-die mode begins when no adjacent empty pair remains.
+- Forced single-die mode applies only while no adjacent empty pair remains. After 5s and 6s clear and open pair space, normal pair generation resumes.
+- In forced single-die mode, two-thirds of generated dice are weighted toward eligible values bordering the remaining empty cells; one-third retain normal random selection.
 - Filling the final empty cell ends the game.
 - A compact ten-entry DHGR high-score table records three initials and a five-digit score on disk, with the supplied lucky-dice artwork in its right panel.
 - Pressing `N` during gameplay asks `ARE YOU SURE [Y/N]?`; only `Y` clears the current board.
@@ -179,9 +181,10 @@ izapple2 shortcuts used during development:
 | Key | Game action |
 | --- | --- |
 | Arrow keys or `W`, `A`, `S`, `D` | Move the placement dice |
-| `R` or `Q` | Rotate a paired piece |
+| `E` or `Q` | Rotate a paired piece |
 | `Space` or `Return` | Place the current piece |
 | `N` | Open the new-game confirmation prompt |
+| `M` | Toggle speaker sound on or off |
 | `Y` / `N` | Confirm a new game / return to the current game |
 | `A` through `Z` | Enter three initials after a qualifying game |
 

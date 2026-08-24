@@ -7,7 +7,7 @@ import argparse
 import importlib.util
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw, ImageOps
 
 
 SCRIPT_DIR = Path(__file__).parent
@@ -50,6 +50,10 @@ SEEDED_ROWS = (
     ("CPU", 210),
 )
 GREATER_ROWS = (0x10, 0x08, 0x04, 0x02, 0x04, 0x08, 0x10)
+ART_MONO_THRESHOLD = 100
+MASCOT_CONTENT_THRESHOLD = 24
+MASCOT_SIZE = (148, 90)
+MASCOT_POSITION = (2, 55)
 
 
 def glyph_rows(character: str) -> tuple[int, ...]:
@@ -82,39 +86,76 @@ def draw_runtime_text(image: Image.Image, text: str, column: int, y: int) -> Non
                     pixels[signal + 1, y + row] = 255
 
 
-def draw_double_box(
-    draw: ImageDraw.ImageDraw,
-    left: int,
-    top: int,
-    right: int,
-    bottom: int,
-) -> None:
-    draw.rectangle((left, top, right, bottom), outline=255)
-    draw.rectangle((left + 2, top + 2, right - 2, bottom - 2), outline=255)
-
-
-def monochrome_dice(path: Path) -> Image.Image:
+def monochrome_art(
+    path: Path,
+    source_size: tuple[int, int],
+    output_size: tuple[int, int],
+) -> Image.Image:
     source = Image.open(path).convert("RGB")
-    if source.size != (64, 56):
-        raise ValueError(f"high-score dice must be 64x56, got {source.size}")
+    if source.size != source_size:
+        raise ValueError(f"high-score art must be {source_size}, got {source.size}")
     mono = Image.new("L", source.size, 0)
     source_pixels = source.load()
     mono_pixels = mono.load()
     for y in range(source.height):
         for x in range(source.width):
-            mono_pixels[x, y] = 255 if max(source_pixels[x, y]) >= 48 else 0
-    return mono.resize((128, 56), Image.Resampling.NEAREST)
+            mono_pixels[x, y] = (
+                255 if max(source_pixels[x, y]) >= ART_MONO_THRESHOLD else 0
+            )
+    return mono.resize(output_size, Image.Resampling.NEAREST)
 
 
-def render_background(dice_path: Path) -> Image.Image:
+def monochrome_dice(path: Path) -> Image.Image:
+    return monochrome_art(path, (64, 56), (128, 56))
+
+
+def monochrome_mascot(path: Path) -> Image.Image:
+    source = Image.open(path).convert("RGB")
+    if source.size != (1414, 1113):
+        raise ValueError(f"high-score mascot must be 1414x1113, got {source.size}")
+
+    intensity = ImageChops.lighter(
+        ImageChops.lighter(source.getchannel("R"), source.getchannel("G")),
+        source.getchannel("B"),
+    )
+    content_bounds = intensity.point(
+        lambda value: 255 if value >= MASCOT_CONTENT_THRESHOLD else 0
+    ).getbbox()
+    if content_bounds is None:
+        raise ValueError("high-score mascot has no visible pixels")
+
+    physical_size = (MASCOT_SIZE[0], MASCOT_SIZE[1] * 2)
+    fitted = ImageOps.contain(
+        intensity.crop(content_bounds),
+        physical_size,
+        Image.Resampling.LANCZOS,
+    )
+    physical_canvas = Image.new("L", physical_size, 0)
+    physical_canvas.paste(
+        fitted,
+        (
+            (physical_canvas.width - fitted.width) // 2,
+            (physical_canvas.height - fitted.height) // 2,
+        ),
+    )
+    return physical_canvas.resize(
+        MASCOT_SIZE,
+        Image.Resampling.LANCZOS,
+    ).convert(
+        "1",
+        dither=Image.Dither.FLOYDSTEINBERG,
+    ).convert(
+        "L"
+    )
+
+
+def render_background(dice_path: Path, mascot_path: Path) -> Image.Image:
     image = Image.new("L", (SCREEN_WIDTH, SCREEN_HEIGHT), 0)
     draw = ImageDraw.Draw(image)
 
-    draw_double_box(draw, 12, 5, 547, 187)
     INSTRUCTIONS.draw_text(image, "SIXIES HIGH SCORES", 12)
     draw.line((24, 29, 535, 29), fill=255)
 
-    draw_double_box(draw, 143, 35, 375, 155)
     draw_text_at(image, "RANK  NAME  SCORE", 171, 39)
     for index in range(10):
         draw_runtime_text(
@@ -124,11 +165,9 @@ def render_background(dice_path: Path) -> Image.Image:
             TABLE_TOP + index * TABLE_ROW_PITCH,
         )
 
-    draw_double_box(draw, 391, 43, 543, 145)
+    image.paste(monochrome_mascot(mascot_path), MASCOT_POSITION)
     image.paste(monochrome_dice(dice_path), (403, 60))
-    draw_text_at(image, "LUCKY DICE", 413, 130)
 
-    draw_double_box(draw, 77, 168, 482, 185)
     INSTRUCTIONS.draw_text(image, "SPACE RETURN OR N STARTS A NEW GAME", 173)
     return image
 
@@ -183,6 +222,7 @@ def sample_line(index: int, name: str, score: int) -> str:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dice", required=True, type=Path)
+    parser.add_argument("--mascot", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--font", required=True, type=Path)
     parser.add_argument("--header", required=True, type=Path)
@@ -192,7 +232,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    background = render_background(args.dice)
+    background = render_background(args.dice, args.mascot)
     main_page, auxiliary_page = GENERATOR.to_mono_pages(background)
     GENERATOR.write_packed_screen(
         main_page,

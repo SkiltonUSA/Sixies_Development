@@ -44,6 +44,17 @@ class InstructionGenerationTests(unittest.TestCase):
             set(),
         )
 
+    def test_rotation_instructions_use_e_and_q(self) -> None:
+        self.assertEqual(
+            INSTRUCTIONS.CONTROL_LINES[0],
+            "WASD OR ARROWS MOVE   Q OR E ROTATE",
+        )
+
+    def test_controls_include_sound_toggle(self) -> None:
+        self.assertEqual(INSTRUCTIONS.CONTROL_LINES[2], "[M] TOGGLES SOUND")
+        self.assertIn("[", INSTRUCTIONS.FONT)
+        self.assertIn("]", INSTRUCTIONS.FONT)
+
 
 if __name__ == "__main__":
     unittest.main()

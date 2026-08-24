@@ -22,11 +22,12 @@ ASM_SRC := $(APPLE2_DIR)/src/auxmem.s
 TITLE_MASTER := $(APPLE2_DIR)/assets/title_dhgr_mono_master.a2fm
 TITLE_REFERENCE := $(APPLE2_DIR)/assets/title_dhgr_mono_reference.png
 PRESENTS_MASTER := $(APPLE2_DIR)/assets/presents_master.ppm
-GAME_OVER_MASTER := $(ROOT)/src/assets/game_over_logo_flat_master.png
+GAME_OVER_MASTER := $(APPLE2_DIR)/assets/game_over_master.png
 GRID_MASTER := $(APPLE2_DIR)/assets/game_grid_dhgr_mono_master.a2fm
 GRID_REFERENCE := $(APPLE2_DIR)/assets/game_grid_dhgr_mono_reference.png
 MASCOT_MASTER := $(ROOT)/src/assets/main_mascot_master.png
 HIGH_SCORE_DICE_MASTER := $(APPLE2_DIR)/assets/high_score_dice_master.ppm
+HIGH_SCORE_MASCOT_MASTER := $(APPLE2_DIR)/assets/high_score_mascot_master.png
 DIE_ONE_MASTER := $(APPLE2_DIR)/assets/die_1_master.png
 DIE_TWO_MASTER := $(APPLE2_DIR)/assets/die_2_master.png
 DIE_THREE_MASTER := $(APPLE2_DIR)/assets/die_3_master.png
@@ -52,8 +53,6 @@ PRESENTS_RLE := $(ASSET_DIR)/PRESENTS.RLE
 PRESENTS_HEADER := $(GENERATED_DIR)/presents_assets.h
 INSTRUCTIONS_RLE := $(ASSET_DIR)/INSTRUCT.RLE
 INSTRUCTIONS_HEADER := $(GENERATED_DIR)/instructions_assets.h
-GAME_OVER_MAIN := $(ASSET_DIR)/GAMEOVER.MAIN
-GAME_OVER_AUX := $(ASSET_DIR)/GAMEOVER.AUX
 GAME_OVER_RLE := $(ASSET_DIR)/GAMEOVER.RLE
 GAME_OVER_HEADER := $(GENERATED_DIR)/game_over_assets.h
 GRID_A2FM := $(ASSET_DIR)/GRID.A2FM
@@ -117,20 +116,13 @@ $(INSTRUCTIONS_STAMP): scripts/generate_instructions.py scripts/generate_present
 		--preview "$(PREVIEW_DIR)/instructions.png"
 	touch "$@"
 
-$(GAME_OVER_STAMP): $(GAME_OVER_MASTER) scripts/convert_dhgr_asset.py scripts/pack_dhgr_banks.py scripts/generate_presents.py | $(ASSET_DIR) $(PREVIEW_DIR) $(GENERATED_DIR)
+$(GAME_OVER_STAMP): $(GAME_OVER_MASTER) scripts/generate_game_over.py scripts/generate_presents.py scripts/import_a2fm_asset.py | $(ASSET_DIR) $(PREVIEW_DIR) $(GENERATED_DIR)
 	@if [ ! -x "$(PYTHON)" ]; then ./scripts/setup-tools.sh; fi
-	"$(PYTHON)" scripts/convert_dhgr_asset.py \
+	"$(PYTHON)" scripts/generate_game_over.py \
 		--input "$(GAME_OVER_MASTER)" \
-		--main "$(GAME_OVER_MAIN)" \
-		--aux "$(GAME_OVER_AUX)" \
-		--preview "$(PREVIEW_DIR)/game_over_logo.png" \
-		--height 160
-	"$(PYTHON)" scripts/pack_dhgr_banks.py \
-		--aux "$(GAME_OVER_AUX)" \
-		--main "$(GAME_OVER_MAIN)" \
 		--output "$(GAME_OVER_RLE)" \
 		--header "$(GAME_OVER_HEADER)" \
-		--prefix GAME_OVER
+		--preview "$(PREVIEW_DIR)/game_over_logo.png"
 	touch "$@"
 
 $(GRID_STAMP): $(GRID_MASTER) $(GRID_REFERENCE) $(MASCOT_MASTER) scripts/import_a2fm_grid.py scripts/import_a2fm_asset.py | $(ASSET_DIR) $(PREVIEW_DIR)
@@ -188,10 +180,11 @@ $(HIGH_SCORE_FILE): scripts/generate_high_scores.py | $(ASSET_DIR)
 	@if [ ! -x "$(PYTHON)" ]; then ./scripts/setup-tools.sh; fi
 	"$(PYTHON)" scripts/generate_high_scores.py --output "$@"
 
-$(HIGH_SCORE_STAMP): $(HIGH_SCORE_DICE_MASTER) scripts/generate_high_score_screen.py scripts/generate_instructions.py scripts/generate_presents.py | $(ASSET_DIR) $(PREVIEW_DIR) $(GENERATED_DIR)
+$(HIGH_SCORE_STAMP): $(HIGH_SCORE_DICE_MASTER) $(HIGH_SCORE_MASCOT_MASTER) scripts/generate_high_score_screen.py scripts/generate_instructions.py scripts/generate_presents.py | $(ASSET_DIR) $(PREVIEW_DIR) $(GENERATED_DIR)
 	@if [ ! -x "$(PYTHON)" ]; then ./scripts/setup-tools.sh; fi
 	"$(PYTHON)" scripts/generate_high_score_screen.py \
 		--dice "$(HIGH_SCORE_DICE_MASTER)" \
+		--mascot "$(HIGH_SCORE_MASCOT_MASTER)" \
 		--output "$(HIGH_SCORE_SCREEN_RLE)" \
 		--font "$(HIGH_SCORE_FONT)" \
 		--header "$(HIGH_SCORE_HEADER)" \

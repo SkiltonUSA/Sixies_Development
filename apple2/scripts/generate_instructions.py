@@ -22,6 +22,8 @@ FONT = {
     " ": (0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00),
     "(": (0x04, 0x08, 0x10, 0x10, 0x10, 0x08, 0x04),
     ")": (0x04, 0x02, 0x01, 0x01, 0x01, 0x02, 0x04),
+    "[": (0x1E, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1E),
+    "]": (0x0F, 0x01, 0x01, 0x01, 0x01, 0x01, 0x0F),
     "-": (0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00),
     ".": (0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C),
     "0": (0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E),
@@ -78,8 +80,9 @@ RULE_LINES = (
     "A FULL GRID ENDS THE GAME.",
 )
 CONTROL_LINES = (
-    "WASD OR ARROWS MOVE   Q OR R ROTATE",
+    "WASD OR ARROWS MOVE   Q OR E ROTATE",
     "SPACE OR RETURN PLACE   N STARTS NEW GAME",
+    "[M] TOGGLES SOUND",
 )
 
 
@@ -127,10 +130,10 @@ def render_instructions() -> Image.Image:
     for index, line in enumerate(RULE_LINES):
         draw_text(image, line, 61 + index * 10)
 
-    draw_double_box(draw, 15, 128, 544, 160)
-    draw_text(image, "CONTROLS", 133)
-    draw_text(image, CONTROL_LINES[0], 142)
-    draw_text(image, CONTROL_LINES[1], 151)
+    draw_double_box(draw, 15, 122, 544, 165)
+    draw_text(image, "CONTROLS", 127)
+    for index, line in enumerate(CONTROL_LINES):
+        draw_text(image, line, 136 + index * 9)
 
     draw_double_box(draw, 112, 170, 447, 187)
     draw_text(image, "PRESS SPACE OR RETURN TO PLAY", 175)
