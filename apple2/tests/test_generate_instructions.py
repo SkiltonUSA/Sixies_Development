@@ -37,7 +37,7 @@ class InstructionGenerationTests(unittest.TestCase):
             *INSTRUCTIONS.CONTROL_LINES,
             "HOW TO PLAY",
             "CONTROLS",
-            "PRESS SPACE OR RETURN TO PLAY",
+            INSTRUCTIONS.FOOTER_PROMPT,
         )
         self.assertEqual(
             {character for line in lines for character in line} - INSTRUCTIONS.FONT.keys(),
@@ -51,7 +51,7 @@ class InstructionGenerationTests(unittest.TestCase):
         )
 
     def test_controls_include_sound_toggle(self) -> None:
-        self.assertEqual(INSTRUCTIONS.CONTROL_LINES[2], "[M] TOGGLES SOUND")
+        self.assertEqual(INSTRUCTIONS.CONTROL_LINES[2], "[M] SOUND   [I] INSTRUCTIONS")
         self.assertIn("[", INSTRUCTIONS.FONT)
         self.assertIn("]", INSTRUCTIONS.FONT)
 

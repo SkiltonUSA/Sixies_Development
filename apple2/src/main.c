@@ -1802,8 +1802,16 @@ static void instructions_screen(void) {
         cprintf("SPACE OR RETURN PLACES DICE");
         gotoxy(3, 14);
         cprintf("[M] TOGGLES SOUND");
-        write_bottom_line(20, "SPACE OR RETURN STARTS");
+        write_bottom_line(20, "PRESS SPACE TO CONTINUE");
     }
+}
+
+static void show_game_instructions(void) {
+    instructions_screen();
+    while (read_input() != ' ') {
+    }
+    render_game();
+    drain_pending_input();
 }
 
 static void high_scores_screen(void) {
@@ -1996,6 +2004,9 @@ static void game_loop(void) {
                 break;
             case 'M':
                 toggle_sound();
+                continue;
+            case 'I':
+                show_game_instructions();
                 continue;
             case 'N':
 #ifdef SCREEN_SHAKE_DEMO

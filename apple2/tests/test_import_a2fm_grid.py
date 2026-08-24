@@ -57,7 +57,11 @@ class A2fmGridImportTests(unittest.TestCase):
         self.assertEqual(len(runtime_auxiliary), IMPORTER.PAGE_BYTES)
         self.assertEqual(IMPORTER.SIDEBAR_LABELS, ())
         self.assertIn(
-            ("[N]EW GAME", 36, 176, (28, 174, 122, 181)),
+            ("[N]EW GAME", 38, 176, (28, 174, 126, 181)),
+            IMPORTER.PRE_RENDERED_LABELS,
+        )
+        self.assertIn(
+            ("[I]NSTRUCTIONS", 429, 176, (424, 174, 544, 181)),
             IMPORTER.PRE_RENDERED_LABELS,
         )
         left, top, right, bottom = IMPORTER.SIDEBAR_CLEAR_BOX
@@ -90,16 +94,30 @@ class A2fmGridImportTests(unittest.TestCase):
             IMPORTER.A2FM.SCREEN_WIDTH,
             IMPORTER.FOOTER_SEPARATOR_BOTTOM + 1,
         )).tobytes()))
-        settings_left, settings_top, settings_right, settings_bottom = (
-            IMPORTER.SETTINGS_CLEAR_BOX
+        button_left, button_top, button_right, button_bottom = (
+            IMPORTER.INSTRUCTIONS_BUTTON_BOX
         )
-        self.assertFalse(any(image.crop((
-            settings_left,
-            settings_top,
-            settings_right + 1,
-            settings_bottom + 1,
+        self.assertTrue(any(image.crop((
+            button_left,
+            button_top,
+            button_right + 1,
+            button_bottom + 1,
         )).tobytes()))
         IMPORTER.validate_black_cell_interiors(runtime_main, runtime_auxiliary)
+
+    def test_footer_buttons_use_matching_single_line_borders(self) -> None:
+        image = Image.new("L", (IMPORTER.A2FM.SCREEN_WIDTH, IMPORTER.HEIGHT), 0)
+        IMPORTER.draw_footer_buttons(image)
+        left_box = IMPORTER.NEW_GAME_BUTTON_BOX
+        right_box = IMPORTER.INSTRUCTIONS_BUTTON_BOX
+
+        self.assertEqual(
+            image.crop((left_box[0], left_box[1], left_box[2] + 1, left_box[3] + 1)).tobytes(),
+            image.crop((right_box[0], right_box[1], right_box[2] + 1, right_box[3] + 1)).tobytes(),
+        )
+        middle_y = left_box[1] + (left_box[3] - left_box[1]) // 2
+        self.assertEqual(image.getpixel((left_box[0], middle_y)), 255)
+        self.assertEqual(image.getpixel((left_box[0] + 2, middle_y)), 0)
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ import argparse
 import importlib.util
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 
 SCRIPT_DIR = Path(__file__).parent
@@ -35,14 +35,18 @@ SIDEBAR_LABELS = ()
 PRE_RENDERED_LABELS = (
     ("SCORE", 38, 14, (28, 12, 86, 19)),
     ("TOTAL", 36, 35, (32, 34, 77, 40)),
-    ("[N]EW GAME", 36, 176, (28, 174, 122, 181)),
+    ("[N]EW GAME", 38, 176, (28, 174, 126, 181)),
+    ("[I]NSTRUCTIONS", 429, 176, (424, 174, 544, 181)),
 )
 SCORE_CLEAR_BOX = (24, 43, 89, 54)
 MASCOT_CLEAR_BOX = (13, 52, 100, 143)
 MASCOT_BOX = (13, 59, 88, 55)
 FOOTER_SEPARATOR_TOP = 163
 FOOTER_SEPARATOR_BOTTOM = 165
-SETTINGS_CLEAR_BOX = (418, 168, 559, 191)
+LEFT_FOOTER_CLEAR_BOX = (0, 168, 151, 191)
+RIGHT_FOOTER_CLEAR_BOX = (408, 168, 559, 191)
+NEW_GAME_BUTTON_BOX = (13, 169, 140, 189)
+INSTRUCTIONS_BUTTON_BOX = (419, 169, 546, 189)
 
 FONT = {
     " ": ("000", "000", "000", "000", "000"),
@@ -124,6 +128,12 @@ def draw_label(
         cursor += 4 * scale_x
 
 
+def draw_footer_buttons(image: Image.Image) -> None:
+    draw = ImageDraw.Draw(image)
+    for box in (NEW_GAME_BUTTON_BOX, INSTRUCTIONS_BUTTON_BOX):
+        draw.rounded_rectangle(box, radius=6, outline=255)
+
+
 def draw_mascot(image: Image.Image, mascot_path: Path) -> None:
     with Image.open(mascot_path) as source:
         grayscale = source.convert("L")
@@ -151,10 +161,14 @@ def build_runtime_grid(
     for y in range(FOOTER_SEPARATOR_TOP, FOOTER_SEPARATOR_BOTTOM + 1):
         for x in range(A2FM.SCREEN_WIDTH):
             pixels[x, y] = 0
-    left, top, right, bottom = SETTINGS_CLEAR_BOX
-    for y in range(top, bottom + 1):
-        for x in range(left, right + 1):
-            pixels[x, y] = 0
+    for left, top, right, bottom in (
+        LEFT_FOOTER_CLEAR_BOX,
+        RIGHT_FOOTER_CLEAR_BOX,
+    ):
+        for y in range(top, bottom + 1):
+            for x in range(left, right + 1):
+                pixels[x, y] = 0
+    draw_footer_buttons(image)
     left, top, right, bottom = SIDEBAR_CLEAR_BOX
     for y in range(top, bottom + 1):
         for x in range(left, right + 1):

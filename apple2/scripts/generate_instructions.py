@@ -82,8 +82,9 @@ RULE_LINES = (
 CONTROL_LINES = (
     "WASD OR ARROWS MOVE   Q OR E ROTATE",
     "SPACE OR RETURN PLACE   N STARTS NEW GAME",
-    "[M] TOGGLES SOUND",
+    "[M] SOUND   [I] INSTRUCTIONS",
 )
+FOOTER_PROMPT = "PRESS SPACE TO CONTINUE"
 
 
 def draw_text(image: Image.Image, text: str, y: int) -> None:
@@ -136,7 +137,7 @@ def render_instructions() -> Image.Image:
         draw_text(image, line, 136 + index * 9)
 
     draw_double_box(draw, 112, 170, 447, 187)
-    draw_text(image, "PRESS SPACE OR RETURN TO PLAY", 175)
+    draw_text(image, FOOTER_PROMPT, 175)
     return image
 
 

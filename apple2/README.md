@@ -51,6 +51,7 @@ The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots
 - Filling the final empty cell ends the game.
 - A compact ten-entry DHGR high-score table records three initials and a five-digit score on disk, with the supplied lucky-dice artwork in its right panel.
 - Pressing `N` during gameplay asks `ARE YOU SURE [Y/N]?`; only `Y` clears the current board.
+- The lower-right `[I]NSTRUCTIONS` button mirrors `[N]EW GAME`; pressing `I` opens the instruction page and `Space` returns to the unchanged game.
 
 ## Scoring
 
@@ -185,6 +186,7 @@ izapple2 shortcuts used during development:
 | `Space` or `Return` | Place the current piece |
 | `N` | Open the new-game confirmation prompt |
 | `M` | Toggle speaker sound on or off |
+| `I` | Show instructions; `Space` returns to the current game |
 | `Y` / `N` | Confirm a new game / return to the current game |
 | `A` through `Z` | Enter three initials after a qualifying game |
 

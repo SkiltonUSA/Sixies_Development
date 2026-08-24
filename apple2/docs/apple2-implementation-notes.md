@@ -65,6 +65,7 @@
 - Horizontal lines set whole seven-pixel HGR bytes between masked edge bytes, vertical lines calculate `x / 7` once, and filled rectangles reuse the byte-oriented horizontal routine. Avoiding per-pixel 16-bit divide/modulo makes the initial grid appear substantially faster.
 - A new current piece is generated after every valid placement and completed merge sequence. The hidden look-ahead queue and its three persistent bytes are removed; generation recomputes single-die mode from whether the current board still has an adjacent empty pair.
 - Sidebar slots are opaque fixed-position assembly blits. Missing second dice are replaced with black sprite planes, so pair-to-single transitions cannot leave stale pips or outlines.
+- The runtime grid generator replaces the removed lower-right settings area with a pre-rendered `[I]NSTRUCTIONS` button. During play, `I` loads the existing instruction screen; `Space` reloads the grid and dice assets and reconstructs the unchanged board state.
 - Placement snapshots all 25 logical cells and redraws the committed dice first. Merge resolution then snapshots and redraws only the cells changed by one connected group at a time; the bitmap grid is never cleared during normal play.
 - An off-board second die is represented with an explicit sentinel. It must not inherit zero-initialized coordinates and mark board cell `(0,0)` as invalid.
 - New-game rendering drains any pending keyboard latch before entering the game loop, preventing the title's start key from immediately placing a piece or starting another redraw.

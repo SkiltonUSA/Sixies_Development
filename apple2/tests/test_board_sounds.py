@@ -100,7 +100,7 @@ class BoardSoundTests(unittest.TestCase):
         self.assertIn("sound_enabled = (unsigned char) !sound_enabled;", SOURCE)
         self.assertIn("case 'M':\n                toggle_sound();\n                continue;", SOURCE)
         self.assertIn('cprintf("[M] TOGGLES SOUND");', SOURCE)
-        self.assertIn('"[M] TOGGLES SOUND"', INSTRUCTIONS)
+        self.assertIn('"[M] SOUND   [I] INSTRUCTIONS"', INSTRUCTIONS)
         self.assertIn("ldy _sound_enabled", ASSEMBLY)
         self.assertIn("beq speaker_tone_done", ASSEMBLY)
 
