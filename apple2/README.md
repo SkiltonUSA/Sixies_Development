@@ -4,28 +4,40 @@ SIXIES is a native Apple II port of the repository's C64 dice-merging puzzle gam
 
 The port is written in C and 6502 assembly with cc65. Its Studio313 presentation card, title, board, dice, mascot, score display, merge fireworks, and comic callouts use monochrome Apple II double-hi-resolution graphics. Generated binaries and downloaded tools are intentionally excluded from Git; the documented build recreates the complete bootable disk from source.
 
+## Screenshots
+
+### Gameplay
+
 ![SIXIES gameplay on an enhanced Apple IIe](docs/images/sixies-gameplay.png)
 
-*Current gameplay captured directly from izapple2's emulated framebuffer.*
+*Current gameplay captured directly from izapple2. The placement die is shown with collision hatching; `[N]EW GAME` and `[I]NSTRUCTIONS` use matching footer controls.*
+
+### Instructions
+
+![SIXIES instruction screen on an enhanced Apple IIe](docs/images/sixies-instructions.png)
+
+*Press `I` during a game to open this page. Press `Space` to reconstruct and return to the unchanged board.*
 
 ## Apple II Specifications
 
 | Component | Requirement |
 | --- | --- |
-| Machine | Enhanced Apple IIe or compatible emulator |
-| Memory | 128 KB with auxiliary memory |
-| CPU | 6502-compatible; tested with the enhanced Apple IIe model |
-| Display | 80-column-capable DHGR, 560x192 monochrome |
+| Machine | Enhanced Apple IIe or a compatible emulator |
+| CPU | 65C02 at the standard Apple II rate, approximately 1.023 MHz |
+| Memory | 128 KB total: 64 KB main RAM and 64 KB auxiliary RAM |
+| Auxiliary hardware | Extended 80-column memory support required for DHGR |
+| Display | Double-hi-resolution, 560x192 one-bit monochrome |
 | Video page | DHGR Page 1 in main and auxiliary RAM |
-| Storage | Bootable ProDOS-order `.po` disk image |
+| Storage | One 140 KB ProDOS-order `.po` disk image in drive 1 |
 | Operating system | ProDOS 2.4.3 disk template |
 | Input | Apple II keyboard |
+| Sound | Built-in one-bit Apple II speaker; no Mockingboard required |
 | Source language | C and 6502 assembly, compiled by cc65 |
 | Program address | Exomizer SFX at `$080D`; game unpacked to `$4000`, with high memory limited to `$BF00` |
 | Software stack | `$0300` bytes |
 | Language card | Merge sprite and score rendering code at `$D400` |
 
-The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots 2, 3, and 4. The RGB setting displays the one-bit DHGR art as stable black and white rather than composite artifact colors.
+The supplied launcher selects izapple2's enhanced Apple IIe model, which uses a 65C02 and the required auxiliary memory. It enables RGB output and leaves slots 2, 3, and 4 empty. RGB displays the one-bit DHGR art as stable black and white rather than composite artifact colors. A joystick, mouse, Mockingboard, accelerator, and hard disk are not required.
 
 ## Game Features
 
@@ -42,7 +54,7 @@ The supplied launcher uses an enhanced Apple IIe with RGB output and empty slots
 - Only the current placement dice appear centered in the right panel; labels and the next-piece preview are omitted to conserve memory.
 - The mascot and persistent five-digit score appear in the left panel.
 - Multiple merges resolve as separate visual events with an immediate score update for each one.
-- Grid ripples, flashing merged dice, falling star sprites, and comic callouts accompany merges.
+- Horizontal and vertical grid ripples accompany every merge; merges consuming fives or sixes add four simultaneous diagonal arms. Flashing merged dice, falling star sprites, comic callouts, and value-specific sounds complete the effect.
 - Merges of exactly three fives or exactly three sixes shake the grid horizontally.
 - `FIVES` appears when fours merge into a five, and `SIXIES` when fives merge into a six.
 - `AWESOME` is reserved for the second and later generic merges in the same placement turn.
@@ -87,21 +99,30 @@ xcode-select --install
 
 ## Quick Start from GitHub
 
-Clone the repository and run all commands from its root directory:
+The automated path supports macOS on Apple silicon and Intel. Clone the repository and run all commands from its root directory:
 
 ```sh
 git clone https://github.com/SkiltonUSA/Sixies_Development.git
 cd Sixies_Development
 make -C apple2 setup-tools
+make -C apple2 test
 make -C apple2 doctor
 make -C apple2 run
 ```
 
-`setup-tools` installs or downloads the development environment. `doctor` builds the program and verifies the emulator configuration. `run` creates the disk image, refreshes the emulator working copy while preserving its saved high scores, and boots SIXIES.
+`setup-tools` installs or downloads the development environment. `test` verifies the asset converters and gameplay source contracts. `doctor` builds the assets and release disk and verifies the emulator configuration. `run` refreshes the emulator working copy while preserving its saved high scores, then boots SIXIES.
+
+To play:
+
+1. Wait for the attract sequence, or press `Space`, `Return`, or `N` to start immediately.
+2. Move with the arrow keys or `W`, `A`, `S`, and `D`; rotate paired dice with `E` or `Q`.
+3. Place dice with `Space` or `Return`.
+4. Press `I` to read the instructions during play, then press `Space` to return to the same game.
+5. Close the izapple2 window or press `Command-Q` when finished. High scores saved to the emulator disk are retained on the next `make -C apple2 run`.
 
 Windows and Linux setup is not currently automated. On those hosts, install cc65, Exomizer 3.1.2, Python 3 with Pillow, Java, AppleCommander, a ProDOS disk template, and a compatible Apple II emulator manually before using the Makefile as a reference.
 
-## Installed Tools
+## Development Tools
 
 The setup script keeps downloaded dependencies under the ignored `.tools/` directory so they do not modify the repository or need to be committed.
 
@@ -117,6 +138,31 @@ The setup script keeps downloaded dependencies under the ignored `.tools/` direc
 | OpenJDK | Homebrew when absent | Run AppleCommander |
 
 izapple2 and the ProDOS template are checksum-verified by `scripts/setup-tools.sh`. AppleCommander is downloaded from its current GitHub release.
+
+## Python Asset Pipeline
+
+All Python tools run through `.tools/apple2-venv/bin/python`; Pillow is their only third-party Python dependency. `make -C apple2 assets` runs the production generators in dependency order and writes disposable output under `apple2/build/`. Source artwork remains under `apple2/assets/` or the repository's shared `src/assets/` directory.
+
+| Script | Build responsibility |
+| --- | --- |
+| `import_a2fm_asset.py` | Splits b2d `.a2fm` files into validated 8 KB auxiliary and main DHGR banks and creates monochrome previews. |
+| `import_a2fm_grid.py` | Imports the supplied gameplay grid, clears dynamic regions, adds the mascot and matching footer controls, validates all 25 die interiors, and emits `GRID.A2FM`. |
+| `generate_hgr_dice.py` | Converts the six source dice into phase-correct fixed-position DHGR blits, collision hatching, edge-restore data, and generated C geometry. |
+| `generate_title.py` | Adds the start prompt to the supplied title A2FM page without changing the title artwork. |
+| `generate_presents.py` | Converts and RLE-packs the monochrome Studio313 presentation screen. |
+| `generate_instructions.py` | Pre-renders the complete DHGR rules and controls page, including the in-game `I` and `Space` flow. |
+| `generate_game_over.py` | Converts the supplied mascot artwork into the monochrome RLE game-over page. |
+| `generate_high_score_screen.py` | Builds the high-score background, mascot/dice art, and the disk-backed DHGR font used for live score rows. |
+| `generate_high_scores.py` | Creates the checksummed 56-byte default ten-entry `HISCORE` data file. |
+| `generate_merge_effects.py` | Converts the ten exclamation masters and star artwork into compact opaque/XOR DHGR fragments. |
+| `generate_score_digits.py` | Emits fixed-position auxiliary/main score masks as a ca65 include, removing runtime font calculations. |
+| `generate_footer_prompt.py` | Emits the XOR masks and HGR row addresses for `ARE YOU SURE [Y/N]?`. |
+| `pack_dhgr_banks.py` | RLE-packs existing auxiliary/main DHGR banks for the streaming screen loader. |
+| `crunch_apple2_binary.py` | Converts the cc65 AppleSingle output for Exomizer 3.1.2, verifies a complete decrunch round trip, and emits the ProDOS-loadable SFX payload. |
+| `convert_dhgr_asset.py` / `convert_hgr_asset.py` | Standalone conversion utilities for importing and previewing additional DHGR or HGR artwork. |
+| `generate_hgr_grid.py` | Retained HGR grid-conversion reference and geometry test utility; the production grid uses `import_a2fm_grid.py`. |
+
+The shell scripts complete the host workflow: `setup-tools.sh` installs dependencies, `package_disk.sh` copies the executable and generated assets onto the ProDOS image, and `run-emulator.sh` maintains the writable emulator disk and launches izapple2.
 
 ## Build Commands
 
@@ -151,7 +197,13 @@ The disk contains `SIXIES.SYSTEM`, the crunched `SIXIES` ProDOS BIN, compressed 
 
 ## Emulator
 
-`make -C apple2 run` launches the workspace copy of izapple2 with the equivalent configuration:
+The recommended launch command is:
+
+```sh
+make -C apple2 run
+```
+
+It builds `apple2/build/sixies.po`, copies it to the writable `apple2/build/emulator/sixies-run.po`, restores the previous emulator disk's `HISCORE` file, and launches izapple2 with this equivalent configuration:
 
 ```sh
 .tools/izapple2/izapple2 \
@@ -160,12 +212,18 @@ The disk contains `SIXIES.SYSTEM`, the crunched `SIXIES` ProDOS BIN, compressed 
   -s2=empty \
   -s3=empty \
   -s4=empty \
-  apple2/build/sixies.po
+  apple2/build/emulator/sixies-run.po
 ```
 
-The launcher first copies the packaged disk to `apple2/build/emulator/sixies-run.po`. Emulator writes therefore do not modify `apple2/build/sixies.po`; before refreshing that working copy on a later run, the launcher extracts and restores its `HISCORE` file.
+Emulator writes therefore do not modify the clean release image. Before refreshing the working copy on a later run, the launcher extracts and restores its high-score file.
 
-To use another Apple II emulator, configure an enhanced Apple IIe with 128 KB RAM, auxiliary memory, 80-column/DHGR support, and the `.po` image in drive 1. RGB or monochrome output is recommended. Boot the disk and run `SIXIES.SYSTEM` if the emulator does not launch it automatically.
+To use another Apple II emulator:
+
+1. Select an enhanced Apple IIe with a 65C02 and 128 KB RAM.
+2. Enable the extended 80-column/auxiliary-memory hardware and DHGR support.
+3. Insert `apple2/build/sixies.po` into drive 1 and boot it as a ProDOS-order disk.
+4. Choose RGB or monochrome output for stable black-and-white graphics.
+5. Run `SIXIES.SYSTEM` if the emulator does not execute the startup file automatically.
 
 izapple2 shortcuts used during development:
 

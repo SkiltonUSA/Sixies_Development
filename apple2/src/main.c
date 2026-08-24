@@ -178,6 +178,8 @@ static const signed char firework_center_y[9] = {0, -7, -12, -15, -12, -5, 5, 18
 
 static const signed char orient_dx[4] = {1, 0, -1, 0};
 static const signed char orient_dy[4] = {0, 1, 0, -1};
+static const signed char ripple_diagonal_dx[4] = {-1, 1, -1, 1};
+static const signed char ripple_diagonal_dy[4] = {-1, -1, 1, 1};
 static unsigned char flood_seen[BOARD_CELLS];
 static unsigned char flood_list[BOARD_CELLS];
 
@@ -1135,10 +1137,53 @@ static void wait_merge_flash(void) {
 #endif
 }
 
-static void toggle_ripple_step(
+static void toggle_diagonal_ripple_step(
     unsigned char merge_x,
     unsigned char merge_y,
     unsigned char step
+) {
+    unsigned char direction;
+    unsigned char moved;
+    unsigned char retreat;
+    signed char x;
+    signed char y;
+    signed char next_x;
+    signed char next_y;
+
+    for (direction = 0; direction < 4; ++direction) {
+        x = (signed char) merge_x;
+        y = (signed char) merge_y;
+        moved = 0;
+        while (moved < BOARD_SIZE - 1u) {
+            next_x = x + ripple_diagonal_dx[direction];
+            next_y = y + ripple_diagonal_dy[direction];
+            if (next_x < 0 || next_x >= BOARD_SIZE
+                || next_y < 0 || next_y >= BOARD_SIZE) {
+                break;
+            }
+            x = next_x;
+            y = next_y;
+            ++moved;
+        }
+
+        retreat = step;
+        while (retreat != 0 && moved != 0) {
+            x -= ripple_diagonal_dx[direction];
+            y -= ripple_diagonal_dy[direction];
+            --retreat;
+            --moved;
+        }
+        if (moved != 0) {
+            invert_dhgr_board_tile((unsigned char) x, (unsigned char) y);
+        }
+    }
+}
+
+static void toggle_ripple_step(
+    unsigned char merge_x,
+    unsigned char merge_y,
+    unsigned char step,
+    unsigned char diagonal
 ) {
     unsigned char left = step < merge_x ? step : merge_x;
     unsigned char right = BOARD_SIZE - 1u - step;
@@ -1159,15 +1204,22 @@ static void toggle_ripple_step(
     if (bottom != top && (bottom != merge_y || !target_in_row)) {
         invert_dhgr_board_tile(merge_x, bottom);
     }
+    if (diagonal) {
+        toggle_diagonal_ripple_step(merge_x, merge_y, step);
+    }
 }
 
-static void run_merge_grid_ripple(unsigned char merge_x, unsigned char merge_y) {
+static void run_merge_grid_ripple(
+    unsigned char merge_x,
+    unsigned char merge_y,
+    unsigned char diagonal
+) {
     unsigned char step;
 
     for (step = 0; step < BOARD_SIZE; ++step) {
-        toggle_ripple_step(merge_x, merge_y, step);
+        toggle_ripple_step(merge_x, merge_y, step, diagonal);
         wait_animation_frames(2);
-        toggle_ripple_step(merge_x, merge_y, step);
+        toggle_ripple_step(merge_x, merge_y, step, diagonal);
     }
     set_double_hires(0);
 }
@@ -1329,7 +1381,11 @@ static void resolve_at(unsigned char x, unsigned char y) {
             if (turn_merge_count >= 5u) {
                 run_merge_grid_shake();
             }
-            run_merge_grid_ripple(merge_effect_x, merge_effect_y);
+            run_merge_grid_ripple(
+                merge_effect_x,
+                merge_effect_y,
+                merge_sound_value >= 5u
+            );
             update_score_display();
             show_merge_flash(merge_effect_index);
         }
@@ -1946,7 +2002,11 @@ static void game_loop(void) {
                 score += merge_effect_demo_index == MERGE_EFFECT_SIXIES
                     ? 68u
                     : (merge_effect_demo_index == MERGE_EFFECT_FIVES ? 15u : 3u);
-                run_merge_grid_ripple(merge_effect_x, merge_effect_y);
+                run_merge_grid_ripple(
+                    merge_effect_x,
+                    merge_effect_y,
+                    merge_effect_demo_index == MERGE_EFFECT_SIXIES
+                );
                 update_score_display();
                 show_merge_flash(merge_effect_demo_index);
                 merge_effect_demo_index = (unsigned char) (

@@ -25,7 +25,7 @@ class SequentialMergeTests(unittest.TestCase):
         snapshot = body.index("memcpy(placement_board_before, board, sizeof(board));")
         merge = body.index("merge_at(x, y)")
         redraw = body.index("redraw_board_changes();")
-        ripple = body.index("run_merge_grid_ripple(merge_effect_x, merge_effect_y);")
+        ripple = body.index("run_merge_grid_ripple(")
         score = body.index("update_score_display();")
         callout = body.index("show_merge_flash(merge_effect_index);")
         self.assertLess(snapshot, merge)

@@ -37,6 +37,30 @@ class ScreenShakeTests(unittest.TestCase):
         )
         self.assertIn("turn_merge_count = count == 3u ? value : 1u;", body)
 
+    def test_five_and_six_merges_enable_diagonal_ripple(self) -> None:
+        body = function_body("resolve_at(unsigned char x, unsigned char y)")
+        ripple = body[body.index("run_merge_grid_ripple("):body.index("update_score_display")]
+        self.assertIn("merge_sound_value >= 5u", ripple)
+
+        step = function_body(
+            "toggle_ripple_step(\n"
+            "    unsigned char merge_x,\n"
+            "    unsigned char merge_y,\n"
+            "    unsigned char step,\n"
+            "    unsigned char diagonal\n"
+            ")"
+        )
+        self.assertIn("if (diagonal)", step)
+        self.assertIn("toggle_diagonal_ripple_step(merge_x, merge_y, step);", step)
+        self.assertIn(
+            "static const signed char ripple_diagonal_dx[4] = {-1, 1, -1, 1};",
+            SOURCE,
+        )
+        self.assertIn(
+            "static const signed char ripple_diagonal_dy[4] = {-1, -1, 1, 1};",
+            SOURCE,
+        )
+
     def test_shake_sequence_restores_original_position(self) -> None:
         body = re.search(
             r"\.proc _run_merge_grid_shake(?P<body>.*?)\.endproc",
