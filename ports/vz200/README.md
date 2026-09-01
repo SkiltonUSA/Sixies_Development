@@ -49,11 +49,16 @@ The attract loop rotates through presentation, title, and high-score pages.
 Press `Space` or `Return` to open the rules page, then press a key to begin.
 
 - `W`, `A`, `S`, `D`: move the placement cursor.
-- `Q` or `R`: rotate a double die.
+- `Q` or `E`: rotate a double die.
 - `Space` or `Return`: place the current die or double.
 - `N`: start a new game.
 - `.`: development shortcut that fills the board and enters the game-over
   flow.
+- Left VZ joystick: stick to move, `FIRE` to place, and `ARM` to rotate.
+
+The boot page changes the joystick line to `DETECTED....OK` after it observes
+an active joystick control. The physical interface has no idle presence ID, so
+an untouched module cannot be distinguished from an empty slot.
 
 Place one or two dice on the 5x5 board. Three or more orthogonally connected
 dice with the same face merge into the next face; groups of sixes disappear.

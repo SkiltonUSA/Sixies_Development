@@ -57,11 +57,16 @@ screens. Press `Space` or `Return` for the rules page, then press a key to
 start a game.
 
 - `W`, `A`, `S`, `D`: move the placement cursor.
-- `Q` or `R`: rotate a double die.
+- `Q` or `E`: rotate a double die.
 - `Space` or `Return`: place the current die or double.
 - `N`: start a new game.
 - `.`: development shortcut that fills the board and starts the game-over
   sequence.
+- Left VZ joystick: stick to move, `FIRE` to place, and `ARM` to rotate.
+
+The startup page reports joystick detection after it observes a joystick input.
+The original interface has no idle presence signal, so an untouched module and
+an empty slot are electrically indistinguishable.
 
 ## Rules
 

@@ -159,9 +159,16 @@ Keep the keyboard controls behaviorally aligned with the C64 build where the
 VZ keyboard allows it:
 
 - `W`, `A`, `S`, `D`: move
-- `Q` or `R`: rotate double
+- `Q` or `E`: rotate double
 - `Space` or `Return`: place
 - `N`: new game
+
+The optional left VZ joystick interface maps stick directions to movement,
+`FIRE` to place, and `ARM` to rotate. It is read from standard I/O ports `$2B`
+and `$27`; those controls are active-low. The original module does not expose
+an idle presence ID, so the boot status can only mark it detected after seeing
+an active direction, Fire, or Arm signal. MAME should be launched with its
+`-io joystick` slot enabled.
 
 Those keys exist in the published VZ200 keyboard matrix, so preserving the
 control vocabulary is practical. Joystick support is optional until the game is

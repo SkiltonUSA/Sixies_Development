@@ -12,11 +12,15 @@ LOAD_ADDR       EQU     $7AE9
 LATCH_DISPLAY   EQU     %00011000       ; Mode 1 with the buff/white background.
 SPEAKER_POSITIVE EQU    %00011001       ; Bit 0 drives one side of the speaker.
 SPEAKER_NEGATIVE EQU    %00111000       ; Bit 5 drives the other side.
+JOYSTICK_LEFT_PORT EQU  $2B             ; Left VZ joystick: U/D/L/R/Fire.
+JOYSTICK_LEFT_ARM_PORT EQU $27          ; Left VZ joystick: Arm button.
+JOYSTICK_IDLE   EQU     %00011111       ; All five controls are active-low.
+JOYSTICK_ARM_IDLE EQU   %00010000
 
 BOARD_CELLS     EQU     25
 BOARD_SIZE      EQU     5
 HIGH_SCORE_COUNT EQU    5
-MERGE_CALLOUT_TEXT_COUNT EQU 9
+MERGE_CALLOUT_GENERIC_COUNT EQU 7
 SCREEN_BYTES    EQU     $0800
 
 ACTION_NONE     EQU     0
@@ -44,28 +48,43 @@ Start:
         OR      A
         JP      Z, ExpandedMemoryMissing
         LD      SP, $CFFE               ; Expanded-RAM stack above pre-rendered title frames.
+        CALL    ProbeJoystickModule
         CALL    DrawExpandedMemoryFound
         CALL    ExpandedMemoryStatusDelay
         JP      RunAttractMode
 
 ; Idle boot flow. Each page is held for six seconds unless Space/Return opens
-; the instructions, then the sequence loops from the presentation page.
+; the instructions or N starts a game, then the sequence loops from the
+; presentation page.
 RunAttractMode:
         LD      A, 1
         LD      (attractMode), A
 AttractIntroScreen:
         CALL    DrawPresentsScreen
         CALL    WaitAttractScreen
+        CP      ACTION_NEW
+        JP      Z, InstructionStartGame
         CP      ACTION_PLACE
         JP      Z, TitleShowInstructions
 AttractTitleScreen:
         CALL    DrawTitleScreen
         CALL    WaitAttractTitleScreen
+        CP      ACTION_NEW
+        JP      Z, InstructionStartGame
         CP      ACTION_PLACE
         JP      Z, TitleShowInstructions
 AttractHighScoreScreen:
         CALL    DrawHighScoreScreen
         CALL    WaitAttractScreen
+        CP      ACTION_NEW
+        JP      Z, InstructionStartGame
+        CP      ACTION_PLACE
+        JP      Z, TitleShowInstructions
+AttractCreditsScreen:
+        CALL    DrawCreditsScreen
+        CALL    WaitAttractScreen
+        CP      ACTION_NEW
+        JP      Z, InstructionStartGame
         CP      ACTION_PLACE
         JP      Z, TitleShowInstructions
         JR      AttractIntroScreen
@@ -78,6 +97,8 @@ WaitAttractScreenTick:
         CALL    GameOverTimeoutDelay
         CALL    PollAction
         CP      ACTION_PLACE
+        RET     Z
+        CP      ACTION_NEW
         RET     Z
         DJNZ    WaitAttractScreenTick
         XOR     A
@@ -93,6 +114,8 @@ WaitAttractTitleScreenTick:
         POP     BC
         CALL    PollAction
         CP      ACTION_PLACE
+        RET     Z
+        CP      ACTION_NEW
         RET     Z
         DJNZ    WaitAttractTitleScreenTick
         XOR     A
@@ -215,81 +238,171 @@ ExpandedMemoryMissingLoop:
         JR      ExpandedMemoryMissingLoop
 
 ; ---------------------------------------------------------------------------
-; Input. The VZ keyboard matrix is memory mapped at $6800-$6fff. A key must
-; be released before another action is accepted, which prevents uncontrolled
-; cursor repeats on the original keyboard and in VZEM.
+; Input. The keyboard is memory-mapped at $6800-$6fff. The optional VZ
+; joystick module is read through standard I/O ports $2B and $27. Each input
+; source has a release lock, preventing uncontrolled cursor repeats.
 ; ---------------------------------------------------------------------------
 
 PollAction:
+        CALL    PollKeyboardAction
+        OR      A
+        RET     NZ
+        JP      PollJoystickAction
+
+PollKeyboardAction:
         LD      A, (keyLocked)
         OR      A
-        JR      Z, PollActionScan
+        JR      Z, PollKeyboardActionScan
         LD      A, ($6800)
         AND     $3F
         CP      $3F
-        JR      NZ, PollActionNone
+        JR      NZ, PollKeyboardActionNone
         XOR     A
         LD      (keyLocked), A
-PollActionNone:
+PollKeyboardActionNone:
         XOR     A
         RET
 
-PollActionScan:
+PollKeyboardActionScan:
         LD      A, ($68FE)              ; T W - E Q R
         BIT     1, A
-        JR      Z, PollActionUp
+        JR      Z, PollKeyboardActionUp
         BIT     4, A
-        JR      Z, PollActionRotate
-        BIT     5, A
-        JR      Z, PollActionRotate
+        JR      Z, PollKeyboardActionRotate
+        BIT     3, A
+        JR      Z, PollKeyboardActionRotate
 
         LD      A, ($68FD)              ; G S Ctrl D A F
         BIT     1, A
-        JR      Z, PollActionDown
+        JR      Z, PollKeyboardActionDown
         BIT     3, A
-        JR      Z, PollActionRight
+        JR      Z, PollKeyboardActionRight
         BIT     4, A
-        JR      Z, PollActionLeft
+        JR      Z, PollKeyboardActionLeft
 
         LD      A, ($68EF)              ; N . , - / Space M
         BIT     0, A
-        JR      Z, PollActionNew
+        JR      Z, PollKeyboardActionNew
         BIT     1, A
-        JR      Z, PollActionFill
+        JR      Z, PollKeyboardActionFill
         BIT     4, A
-        JR      Z, PollActionPlace
+        JR      Z, PollKeyboardActionPlace
 
         LD      A, ($68BF)              ; Y O Return I P U
         BIT     2, A
-        JR      Z, PollActionPlace
+        JR      Z, PollKeyboardActionPlace
         XOR     A
         RET
 
-PollActionUp:
+PollKeyboardActionUp:
         LD      A, ACTION_UP
-        JR      PollActionFound
-PollActionDown:
+        JR      PollKeyboardActionFound
+PollKeyboardActionDown:
         LD      A, ACTION_DOWN
-        JR      PollActionFound
-PollActionLeft:
+        JR      PollKeyboardActionFound
+PollKeyboardActionLeft:
         LD      A, ACTION_LEFT
-        JR      PollActionFound
-PollActionRight:
+        JR      PollKeyboardActionFound
+PollKeyboardActionRight:
         LD      A, ACTION_RIGHT
-        JR      PollActionFound
-PollActionRotate:
+        JR      PollKeyboardActionFound
+PollKeyboardActionRotate:
         LD      A, ACTION_ROTATE
-        JR      PollActionFound
-PollActionPlace:
+        JR      PollKeyboardActionFound
+PollKeyboardActionPlace:
         LD      A, ACTION_PLACE
-        JR      PollActionFound
-PollActionNew:
+        JR      PollKeyboardActionFound
+PollKeyboardActionNew:
         LD      A, ACTION_NEW
-        JR      PollActionFound
-PollActionFill:
+        JR      PollKeyboardActionFound
+PollKeyboardActionFill:
         LD      A, ACTION_FILL
-PollActionFound:
+PollKeyboardActionFound:
         LD      (keyLocked), A
+        RET
+
+; The original two-button VZ interface has active-low direction, Fire, and
+; Arm signals. Fire places a die; Arm rotates a double without a chord.
+PollJoystickAction:
+        CALL    ProbeJoystickModule
+        IN      A, (JOYSTICK_LEFT_PORT)
+        AND     JOYSTICK_IDLE
+        LD      (joystickState), A
+        IN      A, (JOYSTICK_LEFT_ARM_PORT)
+        AND     JOYSTICK_ARM_IDLE
+        LD      (joystickArmState), A
+        LD      B, A
+        LD      A, (joystickState)
+        CP      JOYSTICK_IDLE
+        JR      NZ, PollJoystickActionActive
+        LD      A, B
+        CP      JOYSTICK_ARM_IDLE
+        JR      NZ, PollJoystickActionActive
+        XOR     A
+        LD      (joystickLocked), A
+        RET
+PollJoystickActionActive:
+        LD      A, (joystickLocked)
+        OR      A
+        JR      NZ, PollJoystickActionNone
+        LD      A, (joystickArmState)
+        OR      A
+        JR      Z, PollJoystickActionRotate
+        LD      A, (joystickState)
+        BIT     0, A
+        JR      Z, PollJoystickActionUp
+        BIT     1, A
+        JR      Z, PollJoystickActionDown
+        BIT     2, A
+        JR      Z, PollJoystickActionLeft
+        BIT     3, A
+        JR      Z, PollJoystickActionRight
+        LD      A, ACTION_PLACE
+        JR      PollJoystickActionFound
+PollJoystickActionUp:
+        LD      A, ACTION_UP
+        JR      PollJoystickActionFound
+PollJoystickActionDown:
+        LD      A, ACTION_DOWN
+        JR      PollJoystickActionFound
+PollJoystickActionLeft:
+        LD      A, ACTION_LEFT
+        JR      PollJoystickActionFound
+PollJoystickActionRight:
+        LD      A, ACTION_RIGHT
+        JR      PollJoystickActionFound
+PollJoystickActionRotate:
+        LD      A, ACTION_ROTATE
+PollJoystickActionFound:
+        LD      B, A
+        LD      A, 1
+        LD      (joystickLocked), A
+        LD      A, B
+        RET
+PollJoystickActionNone:
+        XOR     A
+        RET
+
+; There is no static presence ID on the original interface: an idle module
+; and an empty slot both read high. Mark it detected after any active input.
+ProbeJoystickModule:
+        LD      A, (joystickDetected)
+        OR      A
+        JR      NZ, ProbeJoystickModuleKnown
+        IN      A, (JOYSTICK_LEFT_PORT)
+        AND     JOYSTICK_IDLE
+        CP      JOYSTICK_IDLE
+        JR      NZ, ProbeJoystickModuleFound
+        IN      A, (JOYSTICK_LEFT_ARM_PORT)
+        AND     JOYSTICK_ARM_IDLE
+        CP      JOYSTICK_ARM_IDLE
+        JR      Z, ProbeJoystickModuleKnown
+ProbeJoystickModuleFound:
+        LD      A, 1
+        LD      (joystickDetected), A
+        RET
+ProbeJoystickModuleKnown:
+        XOR     A
         RET
 
 HandleAction:
@@ -1079,35 +1192,37 @@ SelectMergeCalloutText:
         JR      Z, SelectMergeCalloutTextSixies
         LD      A, (mergeCalloutIndex)
         INC     A
-        CP      MERGE_CALLOUT_TEXT_COUNT
+        CP      MERGE_CALLOUT_GENERIC_COUNT
         JR      C, SelectMergeCalloutTextStore
         XOR     A
 SelectMergeCalloutTextStore:
         LD      (mergeCalloutIndex), A
-        JR      SelectMergeCalloutTextLoad
-SelectMergeCalloutTextFives:
-        LD      A, 5
-        JR      SelectMergeCalloutTextLoad
-SelectMergeCalloutTextSixies:
-        LD      A, 4
-SelectMergeCalloutTextLoad:
-        LD      (mergeCalloutSelected), A
         LD      E, A
         LD      D, 0
-        LD      HL, MergeCalloutTextX
+        LD      HL, MergeCalloutGenericX
         ADD     HL, DE
         LD      A, (HL)
         LD      (mergeCalloutTextX), A
-        LD      A, (mergeCalloutSelected)
+        LD      A, (mergeCalloutIndex)
         ADD     A, A
         LD      E, A
         LD      D, 0
-        LD      HL, MergeCalloutTextPointers
+        LD      HL, MergeCalloutGenericPointers
         ADD     HL, DE
         LD      E, (HL)
         INC     HL
         LD      D, (HL)
         EX      DE, HL
+        RET
+SelectMergeCalloutTextFives:
+        LD      A, 67
+        LD      (mergeCalloutTextX), A
+        LD      HL, mergeCalloutFives
+        RET
+SelectMergeCalloutTextSixies:
+        LD      A, 65
+        LD      (mergeCalloutTextX), A
+        LD      HL, mergeCalloutSixies
         RET
 
 IncrementScore:
@@ -1486,6 +1601,47 @@ DrawHighScoreScreenAttractPrompt:
         LD      D, CURSOR_COLOR
         JP      DrawText
 
+; A native VZ200 interpretation of the supplied C64 credits reference. The
+; existing dice illustration avoids a lossy full-screen artwork conversion.
+DrawCreditsScreen:
+        CALL    ClearVideo
+        LD      HL, HighScoreMascot
+        LD      B, 88
+        LD      C, 15
+        LD      D, 38
+        LD      E, 30
+        CALL    DrawTitleSprite
+        LD      HL, titleText
+        LD      B, 14
+        LD      C, 4
+        LD      D, GRID_COLOR
+        CALL    DrawText
+        LD      HL, creditsDesigned
+        LD      B, 12
+        LD      C, 16
+        LD      D, CURSOR_COLOR
+        CALL    DrawText
+        LD      HL, creditsDeveloped
+        LD      B, 4
+        LD      C, 25
+        LD      D, DIE_COLOR
+        CALL    DrawText
+        LD      HL, creditsName
+        LD      B, 14
+        LD      C, 34
+        LD      D, GRID_COLOR
+        CALL    DrawText
+        LD      HL, creditsCopyright
+        LD      B, 20
+        LD      C, 43
+        LD      D, CURSOR_COLOR
+        CALL    DrawText
+        LD      HL, creditsPrompt
+        LD      B, 35
+        LD      C, 58
+        LD      D, CURSOR_COLOR
+        JP      DrawText
+
 ClearVideo:
         LD      HL, VRAM
         LD      BC, SCREEN_BYTES
@@ -1503,12 +1659,29 @@ DrawExpandedMemoryFound:
         CALL    ClearVideo
         LD      HL, memoryFoundLineOne
         LD      B, 26
-        LD      C, 26
+        LD      C, 18
         LD      D, CURSOR_COLOR
         CALL    DrawText
         LD      HL, memoryFoundLineTwo
         LD      B, 39
-        LD      C, 34
+        LD      C, 26
+        LD      D, DIE_COLOR
+        CALL    DrawText
+        LD      HL, joystickModuleLineOne
+        LD      B, 26
+        LD      C, 36
+        LD      D, GRID_COLOR
+        CALL    DrawText
+        LD      A, (joystickDetected)
+        OR      A
+        JR      Z, DrawJoystickModuleMissing
+        LD      HL, joystickModuleFoundLine
+        JR      DrawJoystickModuleStatus
+DrawJoystickModuleMissing:
+        LD      HL, joystickModuleMissingLine
+DrawJoystickModuleStatus:
+        LD      B, 29
+        LD      C, 44
         LD      D, DIE_COLOR
         JP      DrawText
 
@@ -1553,6 +1726,11 @@ ExpandedMemoryStatusDelayInner:
         LD      A, D
         OR      E
         JR      NZ, ExpandedMemoryStatusDelayInner
+        PUSH    BC
+        CALL    ProbeJoystickModule
+        OR      A
+        CALL    NZ, DrawExpandedMemoryFound
+        POP     BC
         DJNZ    ExpandedMemoryStatusDelayPass
         RET
 
@@ -1693,56 +1871,99 @@ DrawTitleSprite5:
 
 DrawInstructionScreen:
         CALL    ClearVideo
+        CALL    DrawInstructionTitleBox
         LD      HL, instructionTitle
         LD      B, 34
         LD      C, 2
         LD      D, DIE_COLOR
         CALL    DrawText
         LD      HL, instructionPlace
-        LD      B, 9
-        LD      C, 8
+        LD      B, 11
+        LD      C, 10
         LD      D, GRID_COLOR
         CALL    DrawText
         LD      HL, instructionMatch
         LD      B, 19
-        LD      C, 14
+        LD      C, 16
         LD      D, GRID_COLOR
         CALL    DrawText
         LD      HL, instructionMerge
         LD      B, 14
-        LD      C, 20
+        LD      C, 22
         LD      D, GRID_COLOR
         CALL    DrawText
         LD      HL, instructionSixes
         LD      B, 21
-        LD      C, 26
+        LD      C, 28
         LD      D, GRID_COLOR
         CALL    DrawText
         LD      HL, instructionGameOver
         LD      B, 11
-        LD      C, 32
+        LD      C, 34
         LD      D, GRID_COLOR
         CALL    DrawText
+        CALL    DrawInstructionKeysBox
         LD      HL, instructionMove
-        LD      B, 42
+        LD      B, 14
         LD      C, 40
         LD      D, CURSOR_COLOR
         CALL    DrawText
         LD      HL, instructionRotate
-        LD      B, 39
+        LD      B, 17
         LD      C, 46
         LD      D, CURSOR_COLOR
         CALL    DrawText
         LD      HL, instructionPlaceKey
-        LD      B, 19
-        LD      C, 52
-        LD      D, CURSOR_COLOR
-        CALL    DrawText
-        LD      HL, instructionStart
-        LD      B, 20
+        LD      B, 11
         LD      C, 58
         LD      D, CURSOR_COLOR
         JP      DrawText
+
+; The VZ adaptation keeps the reference card's title and control panels
+; while leaving enough scan lines for a readable rules summary and prompt.
+DrawInstructionTitleBox:
+        LD      A, DIE_COLOR
+        LD      B, 4
+        LD      C, 0
+        LD      D, 120
+        CALL    DrawHLine
+        LD      A, DIE_COLOR
+        LD      B, 4
+        LD      C, 7
+        LD      D, 120
+        CALL    DrawHLine
+        LD      A, DIE_COLOR
+        LD      B, 4
+        LD      C, 0
+        LD      D, 8
+        CALL    DrawVLine
+        LD      A, DIE_COLOR
+        LD      B, 123
+        LD      C, 0
+        LD      D, 8
+        JP      DrawVLine
+
+DrawInstructionKeysBox:
+        LD      A, CURSOR_COLOR
+        LD      B, 4
+        LD      C, 39
+        LD      D, 120
+        CALL    DrawHLine
+        LD      A, CURSOR_COLOR
+        LD      B, 4
+        LD      C, 53
+        LD      D, 120
+        CALL    DrawHLine
+        LD      A, CURSOR_COLOR
+        LD      B, 4
+        LD      C, 39
+        LD      D, 15
+        CALL    DrawVLine
+        LD      A, CURSOR_COLOR
+        LD      B, 123
+        LD      C, 39
+        LD      D, 15
+        JP      DrawVLine
 
 ; Copy the static four-color 112x45 title frame at (8, 5). It contains 28
 ; bytes per row; the visible 128-pixel VRAM stride is 32 bytes per row.
@@ -2364,6 +2585,16 @@ GlyphIndex:
         JR      Z, GlyphIndexExclamation
         CP      ' '
         JR      Z, GlyphIndexSpace
+        CP      '.'
+        JR      Z, GlyphIndexDot
+        CP      '+'
+        JR      Z, GlyphIndexPlus
+        CP      '/'
+        JR      Z, GlyphIndexSlash
+        CP      '('
+        JR      Z, GlyphIndexLeftParenthesis
+        CP      ')'
+        JR      Z, GlyphIndexRightParenthesis
         CP      '0'
         JR      C, GlyphIndexSpace
         CP      ':'
@@ -2379,6 +2610,21 @@ GlyphIndexSpace:
         RET
 GlyphIndexExclamation:
         LD      A, 37
+        RET
+GlyphIndexDot:
+        LD      A, 42
+        RET
+GlyphIndexPlus:
+        LD      A, 38
+        RET
+GlyphIndexSlash:
+        LD      A, 39
+        RET
+GlyphIndexLeftParenthesis:
+        LD      A, 40
+        RET
+GlyphIndexRightParenthesis:
+        LD      A, 41
         RET
 
 DrawGlyph:
@@ -2616,27 +2862,34 @@ NeighborFromDown:
         RET
 
 titleText:      DB      "SIXIES", 0
-titlePrompt:    DB      "SPACE RULES", 0
+titlePrompt:    DB      "PRESS SPACE", 0
 highScoreTitle: DB      "HIGH SCORES", 0
 yourScoreLabel: DB      "YOUR SCORE", 0
 bestFiveLabel:  DB      "BEST FIVE", 0
 highScorePrompt: DB    "SPACE NEW GAME", 0
 presentationText: DB     "PRESENTATION", 0
+creditsDesigned: DB      "DESIGNED AND", 0
+creditsDeveloped: DB     "DEVELOPED BY", 0
+creditsName: DB          "DSKILTON", 0
+creditsCopyright: DB     "(C)2026", 0
+creditsPrompt: DB        "PRESS SPACE", 0
 memoryFoundLineOne: DB  "EXPANDED MEMORY", 0
 memoryFoundLineTwo: DB  "FOUND...OK", 0
+joystickModuleLineOne: DB "JOYSTICK MODULE", 0
+joystickModuleFoundLine: DB "DETECTED....OK", 0
+joystickModuleMissingLine: DB "DETECTED....NO", 0
 memoryMissingLineOne: DB "EXPANDED MEMORY", 0
 memoryMissingLineTwo: DB "REQUIRED TO PLAY", 0
 memoryMissingLineThree: DB "INSTALL 16K MODULE", 0
 instructionTitle: DB    "SIXIES RULES", 0
-instructionPlace: DB    "PLACE DICE ON 5X5 GRID", 0
+instructionPlace: DB    "PLACE ROTATE DICE 5X5", 0
 instructionMatch: DB    "MATCH 3+ SAME DICE", 0
 instructionMerge: DB    "THEY MERGE UP A FACE", 0
-instructionSixes: DB    "THREE SIXES CLEAR", 0
-instructionGameOver: DB  "FULL BOARD: GAME OVER", 0
-instructionMove: DB     "WASD MOVE", 0
-instructionRotate: DB   "Q/R ROTATE", 0
-instructionPlaceKey: DB "SPACE/RETURN PLACE", 0
-instructionStart: DB    "N NEW  SPACE PLAY", 0
+instructionSixes: DB    "SIXES CLEAR SPACE", 0
+instructionGameOver: DB  "CHAIN REACTIONS SCORE", 0
+instructionMove: DB     "WASD MOVE Q/E ROTATE", 0
+instructionRotate: DB   "SPACE/RETURN PLACES", 0
+instructionPlaceKey: DB "PRESS ANY KEY TO PLAY", 0
 scoreLabel:     DB      "SCORE", 0
 mergeCalloutYes: DB     "YES!", 0
 mergeCalloutBoom: DB    "BOOM!", 0
@@ -2647,12 +2900,14 @@ mergeCalloutFives: DB   "FIVES!", 0
 mergeCalloutWow: DB     "WOW!", 0
 mergeCalloutWhoa: DB    "WHOA!", 0
 mergeCalloutDang: DB    "DANG!!", 0
-MergeCalloutTextPointers:
+; FIVES and SIXIES are deliberately absent from the generic rotation. They
+; are reserved for merges of value-4 and value-5 dice respectively.
+MergeCalloutGenericPointers:
         DW      mergeCalloutYes, mergeCalloutBoom, mergeCalloutLetsGo
-        DW      mergeCalloutAwesome, mergeCalloutSixies, mergeCalloutFives
-        DW      mergeCalloutWow, mergeCalloutWhoa, mergeCalloutDang
-MergeCalloutTextX:
-        DB      72, 70, 62, 62, 65, 67, 72, 70, 67
+        DW      mergeCalloutAwesome, mergeCalloutWow, mergeCalloutWhoa
+        DW      mergeCalloutDang
+MergeCalloutGenericX:
+        DB      72, 70, 62, 62, 72, 70, 67
 GridSetupToneNotes:
         DB      180, 10, 140, 14, 100, 20, 70, 28
 MergeToneOneNotes:
@@ -2688,7 +2943,8 @@ PixelSetMasks:
                 DB      $80, $20, $08, $02
                 DB      $C0, $30, $0C, $03
 
-; A-Z, 0-9, space, !. Each glyph is five rows, four bits per row.
+; A-Z, 0-9, space, !, +, /, parentheses, and dot. Each glyph is five rows,
+; four bits per row.
 Font4x5:
         DB $06,$09,$0F,$09,$09 ; A
         DB $0E,$09,$0E,$09,$0E ; B
@@ -2728,6 +2984,11 @@ Font4x5:
         DB $06,$09,$07,$01,$06 ; 9
         DB $00,$00,$00,$00,$00 ; space
         DB $04,$04,$04,$00,$04 ; !
+        DB $00,$04,$0E,$04,$00 ; +
+        DB $01,$02,$04,$08,$00 ; /
+        DB $02,$04,$04,$04,$02 ; (
+        DB $04,$02,$02,$02,$04 ; )
+        DB $00,$00,$00,$00,$04 ; .
 
 LeftNeighbors:
         DB $FF,0,1,2,3, $FF,5,6,7,8, $FF,10,11,12,13, $FF,15,16,17,18, $FF,20,21,22,23
@@ -2775,6 +3036,10 @@ scoreCount:     DB      0
 scoreValue:     DB      0
 spaceIndex:     DB      0
 keyLocked:      DB      0
+joystickLocked: DB      0
+joystickDetected: DB    0
+joystickState:  DB      JOYSTICK_IDLE
+joystickArmState: DB    JOYSTICK_ARM_IDLE
 pendingAction:  DB      0
 memoryProbeOriginal: DB 0
 mergeRippleStep: DB     0
@@ -2782,7 +3047,6 @@ mergeRippleRestore: DB  0
 mergeRippleX:    DB      0
 mergeRippleY:    DB      0
 mergeCalloutIndex: DB    0
-mergeCalloutSelected: DB  0
 mergeCalloutTextX: DB     0
 mergeCalloutTimer: DB     0
 mergeCalloutTextPointer: DW 0

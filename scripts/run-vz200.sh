@@ -31,7 +31,7 @@ MAME_BIN="$(command -v mame)"
 
 launchctl remove "$JOB_LABEL" 2>/dev/null || true
 launchctl submit -l "$JOB_LABEL" -o "$LOG_FILE" -e "$LOG_FILE" -- \
-  "$MAME_BIN" vz200 -mem laser210_16k -rompath "$ROM_DIR" -snapshot "$TARGET" -window -skip_gameinfo
+  "$MAME_BIN" vz200 -mem laser210_16k -io joystick -rompath "$ROM_DIR" -snapshot "$TARGET" -window -skip_gameinfo
 launchctl kickstart -k "$JOB_DOMAIN/$JOB_LABEL"
 
 sleep 1
