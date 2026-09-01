@@ -376,10 +376,18 @@ NewGameClear:
         LD      (gameOver), A
         LD      (keyLocked), A
         LD      (mergeCalloutTimer), A
+        CALL    SeedRandomFromTiming
         CALL    PlayGridSetupTone
-        LD      A, $5D                   ; Non-zero deterministic strawman seed.
-        LD      (rngState), A
         JP      GeneratePiece
+
+; Match the C64's per-game timing seed while guaranteeing the LFSR cannot
+; enter its all-zero lock-up state. The Z80 refresh counter advances with the
+; instruction stream, so start timing and input timing vary each new game.
+SeedRandomFromTiming:
+        LD      A, R
+        OR      1
+        LD      (rngState), A
+        RET
 
 RandomByte:
         LD      A, (rngState)

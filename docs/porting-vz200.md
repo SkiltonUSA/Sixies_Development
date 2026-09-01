@@ -188,10 +188,12 @@ the locally installed MAME VZ200 emulator using workspace-local ROM files.
 It deliberately proves the visible and input-facing shape before the planned
 portable C boundary: all 25 cells, generated singles/doubles, cursor movement,
 rotation, placement, score, complete orthogonal flood-fill merges, chain
-resolution, score saturation, and the origin-first double ordering. It uses a
-fixed non-zero seed and does not yet emit the portable event stream or run the
-platform-neutral JSON vectors. Treat it as a strawman, not as a conformant
-port or an excuse to skip milestone 1.
+resolution, score saturation, and the origin-first double ordering. Its rules
+flow is aligned with the C64 source, including timing-derived non-zero seeds,
+RNG call order, value-5 eligibility, double-four rerolls, forced-singles
+endgame, and score saturation. It does not yet emit the portable event stream
+or run the platform-neutral JSON vectors inside the VZ runtime. Treat it as a
+strawman, not as a conformant port or an excuse to skip milestone 1.
 
 The strawman now uses the 16 KB expansion for pre-rendered title animation
 frames and its stack. The initial playable VZ200 target is therefore an
