@@ -5,3 +5,9 @@ __pycache__/
 .DS_Store
 cfg/
 snap/
+ports/vz200/asm/title_frames.asm
+ports/vz200/asm/title_stars.asm
+ports/vz200/asm/high_score_mascot.asm
+ports/vz200/asm/title_bitmap.asm
+ports/vz200/asm/game_over_frame.asm
+ports/vz200/asm/presents_frame.asm

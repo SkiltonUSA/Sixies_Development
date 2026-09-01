@@ -58,6 +58,16 @@ install_mame() {
   mame -help | sed -n '1,3p'
 }
 
+install_ffmpeg() {
+  if command -v ffmpeg >/dev/null 2>&1; then
+    echo "ffmpeg already available at $(command -v ffmpeg)"
+    return
+  fi
+
+  need_cmd brew
+  brew install ffmpeg
+}
+
 write_env_file() {
   mkdir -p "$CONTEXT_DIR"
   cat > "$ENV_FILE" <<EOF
@@ -71,6 +81,7 @@ EOF
 
 install_sjasmplus
 install_mame
+install_ffmpeg
 write_env_file
 
 echo "VZ200 development environment is ready."

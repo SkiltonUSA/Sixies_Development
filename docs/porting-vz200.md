@@ -169,8 +169,12 @@ fully playable on keyboard.
 
 Audio should start minimal. The hardware speaker is driven by the output latch,
 with the speaker lines controlled by bits 0 and 5 in the technical manual's
-documented cassette/speaker/VDC latch. First milestone audio can be limited to
-simple placement, invalid-move, and merge cues. Music is explicitly later work.
+documented cassette/speaker/VDC latch. The current strawman uses those two bits
+for VZ equivalents of every C64 gameplay cue while retaining mode-1 and the
+white background: cursor bounce, placement/rotation `portal_ping`, descending
+denied-placement bonk, fixed new-game sweep, merge arpeggios, and the six-clear
+descending burst. These speaker-only approximations never consume rules RNG;
+music is explicitly later work.
 
 ## Milestones
 
@@ -189,9 +193,9 @@ fixed non-zero seed and does not yet emit the portable event stream or run the
 platform-neutral JSON vectors. Treat it as a strawman, not as a conformant
 port or an excuse to skip milestone 1.
 
-The strawman currently keeps its code and stack in the stock VZ200 user-RAM
-window, so it also boots without an expansion. The expanded-RAM requirement
-remains the target for the future feature-complete port and its asset budget.
+The strawman now uses the 16 KB expansion for pre-rendered title animation
+frames and its stack. The initial playable VZ200 target is therefore an
+expanded-RAM machine, as planned for the feature-complete port.
 
 ### 1. Portable rules engine
 
