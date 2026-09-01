@@ -7,6 +7,10 @@ assembly for the Mode 1 128x64 four-color display.
 
 ## Screenshots
 
+| Presentation | Rules |
+| --- | --- |
+| ![VZ200 presentation screen](docs/vz200/screenshots/presentation.png) | ![VZ200 rules screen](docs/vz200/screenshots/rules.png) |
+
 | Gameplay | High scores |
 | --- | --- |
 | ![VZ200 gameplay screen](docs/vz200/screenshots/gameplay.png) | ![VZ200 high-score screen](docs/vz200/screenshots/high-scores.png) |
