@@ -1258,7 +1258,10 @@ CheckHighScoreQualification:
 CheckHighScoreQualificationFind:
         LD      A, (highScoreInsertIndex)
         CP      HIGH_SCORE_COUNT
-        RET     Z
+        JR      NZ, CheckHighScoreQualificationCompare
+        XOR     A
+        RET
+CheckHighScoreQualificationCompare:
         LD      E, A
         LD      D, 0
         LD      HL, highScoreHi
