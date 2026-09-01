@@ -57,12 +57,12 @@ reconnect it before launching VICE in that case.
 
 `make crunch` uses `exomizer` from `PATH` when available. Set `EXOMIZER=/path/to/exomizer` to use a specific binary; the bundled Albert path remains a fallback for this development machine.
 
-## VZ200 Strawman
+## VZ200 Port
 
-The expanded-RAM VZ200 strawman is a separate Mode 1 Z80 build. It renders a
-complete 5x5 board with score, next-piece display, movement, rotation,
-placement, and origin-first matching merges. It is an interactive prototype,
-not yet a conformance-tested replacement for the portable rules engine.
+Sixies also has an expanded-RAM VZ200 Mode 1 Z80 build with its own attract
+screens, instructions, high scores, one-bit speaker effects, and a complete
+playable 5x5 board. See the [VZ200 README](ports/vz200/README.md) for
+screenshots, requirements, controls, and the MAME workflow.
 
 ```sh
 make setup-vz200-dev
@@ -71,8 +71,7 @@ make run-vz200
 ```
 
 The snapshot is written to `build/vz200/SIXIES.VZ` and launches in the local
-MAME VZ200 emulator. Controls are `W`, `A`, `S`, `D`, `Q`/`R`,
-Space/Return, and `N` for a new game.
+MAME VZ200 emulator.
 
 ## Memory map
 
