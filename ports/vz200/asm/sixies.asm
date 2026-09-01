@@ -949,11 +949,14 @@ RestoreCell:
         CALL    BoardValueAtA
         OR      A
         RET     Z
+        ; Keep the authoritative die face while B/C are prepared for DrawDie.
+        PUSH    AF
         LD      D, DIE_COLOR
         LD      A, (restoreCellX)
         LD      B, A
         LD      A, (restoreCellY)
         LD      C, A
+        POP     AF
         JP      DrawDie
 
 DrawCellCursor:
@@ -1069,7 +1072,8 @@ DrawDie:
         LD      (dieY), A
         LD      A, (dieColor)
         LD      D, 8
-        LD      E, 8
+        ; Fill through the row immediately above the next horizontal grid line.
+        LD      E, 9
         CALL    FillRect
         LD      A, (dieValue)
         CP      1
@@ -1144,9 +1148,22 @@ DrawPip:
         LD      A, (dieY)
         ADD     A, C
         LD      C, A
-        XOR     A
+        LD      A, (dieValue)
+        CP      6
+        JR      NZ, DrawPipLarge
+        ; The nine-pixel die body gives the six face one extra row to center.
+        INC     C
+        JR      DrawPipSix
+DrawPipLarge:
         LD      D, 2
         LD      E, 2
+        JR      DrawPipColor
+DrawPipSix:
+        ; Small pips leave a gutter between the three rows on a six.
+        LD      D, 1
+        LD      E, 1
+DrawPipColor:
+        XOR     A
         JP      FillRect
 
 DrawScore:
