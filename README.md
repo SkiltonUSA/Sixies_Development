@@ -20,8 +20,9 @@ A 5x5 hi-res puzzle game written in 6510 assembly for ACME. Place random single 
 
 Exact platform-neutral behavior is specified in `docs/game-rules.md` and
 exercised by `tests/porting/gameplay-vectors.json`. Game Boy milestones and
-technical decisions are in `docs/porting-gameboy.md`; repository architecture
-and agent invariants are in `AGENTS.md`.
+technical decisions are in `docs/porting-gameboy.md`. VZ200 milestones and
+technical decisions are in `docs/porting-vz200.md`; repository architecture and
+agent invariants are in `AGENTS.md`.
 
 The main grid screen includes a purple-and-white Sixies mascot in the left sidebar below the score. The upcoming single or double dice preview is positioned beneath the mascot so both remain visible.
 
@@ -55,6 +56,23 @@ Use `make run JOYDEV2=5` for the second detected controller. VICE reports
 reconnect it before launching VICE in that case.
 
 `make crunch` uses `exomizer` from `PATH` when available. Set `EXOMIZER=/path/to/exomizer` to use a specific binary; the bundled Albert path remains a fallback for this development machine.
+
+## VZ200 Strawman
+
+The expanded-RAM VZ200 strawman is a separate Mode 1 Z80 build. It renders a
+complete 5x5 board with score, next-piece display, movement, rotation,
+placement, and origin-first matching merges. It is an interactive prototype,
+not yet a conformance-tested replacement for the portable rules engine.
+
+```sh
+make setup-vz200-dev
+make vz200
+make run-vz200
+```
+
+The snapshot is written to `build/vz200/SIXIES.VZ` and launches in the local
+MAME VZ200 emulator. Controls are `W`, `A`, `S`, `D`, `Q`/`R`,
+Space/Return, and `N` for a new game.
 
 ## Memory map
 

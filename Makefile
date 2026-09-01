@@ -6,6 +6,14 @@ SIDKIT_DIR := $(ROOT)/.tools/c64SIDkit
 SIDKIT_PYTHON := $(SIDKIT_DIR)/.venv/bin/python
 TARGET := build/dice_merge.prg
 CRUNCHED_TARGET := build/dice_merge-crunched.prg
+VZ200_DIR := ports/vz200
+VZ200_BUILD_DIR := build/vz200
+VZ200_SOURCE := $(VZ200_DIR)/asm/sixies.asm
+VZ200_BINARY := $(VZ200_BUILD_DIR)/sixies-vz200.bin
+VZ200_SNAPSHOT := $(VZ200_BUILD_DIR)/SIXIES.VZ
+LOCAL_SJASMPLUS := $(ROOT)/.tools/sjasmplus/bin/sjasmplus
+SYSTEM_SJASMPLUS := $(shell command -v sjasmplus 2>/dev/null)
+SJASMPLUS = $(if $(wildcard $(LOCAL_SJASMPLUS)),$(LOCAL_SJASMPLUS),$(SYSTEM_SJASMPLUS))
 SIXIES_MUSIC_SOURCE := src/music/sixies_rhythmic_grammar.asm
 SIXIES_MUSIC_RAW := build/sixies_rhythmic_grammar.bin
 SIXIES_MUSIC_SID := build/Sixies_Rhythmic_Grammar.sid
@@ -131,7 +139,7 @@ BINARY_ASSETS := \
 	$(FONT_CHARSET16) \
 	$(MERGE_CALLOUT_PACKED)
 
-.PHONY: all crunch release music test-porting setup-porting setup-acme setup-sidkit sidkit run clean FORCE
+.PHONY: all crunch release music test-porting setup-porting setup-acme setup-sidkit setup-vz200-dev vz200 run-vz200 sidkit run clean FORCE
 
 all: $(TARGET)
 
@@ -150,6 +158,24 @@ setup-acme:
 
 setup-sidkit:
 	./scripts/setup-c64sidkit.sh
+
+setup-vz200-dev:
+	./scripts/setup-vz200-dev.sh
+
+vz200: $(VZ200_SNAPSHOT)
+
+$(VZ200_BUILD_DIR):
+	mkdir -p "$@"
+
+$(VZ200_BINARY): $(VZ200_SOURCE) | $(VZ200_BUILD_DIR)
+	@if [ ! -x "$(LOCAL_SJASMPLUS)" ]; then ./scripts/setup-vz200-dev.sh; fi
+	@"$(SJASMPLUS)" --nologo "$(VZ200_SOURCE)"
+
+$(VZ200_SNAPSHOT): $(VZ200_BINARY) scripts/package-vz200.py | $(VZ200_BUILD_DIR)
+	@python3 scripts/package-vz200.py "$(VZ200_BINARY)" "$@" --name SIXIES --load-address 0x7AE9
+
+run-vz200: $(VZ200_SNAPSHOT)
+	@bash scripts/run-vz200.sh "$(abspath $(VZ200_SNAPSHOT))"
 
 sidkit: setup-sidkit
 	cd "$(SIDKIT_DIR)" && "$(SIDKIT_PYTHON)" tools/sfx_tweaker.py

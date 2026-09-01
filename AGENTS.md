@@ -121,3 +121,7 @@ Do not silently change game rules while tuning visuals. If behavior changes:
 For the Game Boy work, follow `docs/porting-gameboy.md`. The first milestone is
 a host-testable portable rules engine. The second is a simple monochrome board.
 Animation, sound, title screens, mascot art, and presentation come afterward.
+
+For the VZ200 work, follow `docs/porting-vz200.md`. Start with the same
+portable rules boundary, then target a playable mode-1 board on an expanded-RAM
+machine before attempting stock-6 KB optimization.
