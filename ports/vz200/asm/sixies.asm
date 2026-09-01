@@ -184,6 +184,9 @@ WaitForHighScoreScreenTick:
         JP      Z, ShowHighScoreScreen
         DJNZ    WaitForHighScoreScreenTick
 ShowHighScoreScreen:
+        CALL    CheckHighScoreQualification
+        OR      A
+        CALL    NZ, EnterHighScoreInitials
         CALL    RecordHighScore
         CALL    DrawHighScoreScreen
 HighScoreScreenLoop:
@@ -244,10 +247,14 @@ ExpandedMemoryMissingLoop:
 ; ---------------------------------------------------------------------------
 
 PollAction:
+        PUSH    BC                      ; Attract and timeout loops keep counters in B.
         CALL    PollKeyboardAction
         OR      A
-        RET     NZ
-        JP      PollJoystickAction
+        JR      NZ, PollActionReturn
+        CALL    PollJoystickAction
+PollActionReturn:
+        POP     BC
+        RET
 
 PollKeyboardAction:
         LD      A, (keyLocked)
@@ -1243,8 +1250,44 @@ IncrementScoreDo:
         LD      (scoreHi), A
         RET
 
-; Insert the completed score into the five-entry descending RAM table. Equal
-; scores retain their earlier position, matching the main Sixies rule.
+; Return A=1 and retain the insertion index when the completed score belongs
+; in the five-entry descending RAM table. Equal scores retain their position.
+CheckHighScoreQualification:
+        XOR     A
+        LD      (highScoreInsertIndex), A
+CheckHighScoreQualificationFind:
+        LD      A, (highScoreInsertIndex)
+        CP      HIGH_SCORE_COUNT
+        RET     Z
+        LD      E, A
+        LD      D, 0
+        LD      HL, highScoreHi
+        ADD     HL, DE
+        LD      A, (HL)
+        LD      B, A
+        LD      A, (scoreHi)
+        CP      B
+        JR      C, CheckHighScoreQualificationNext
+        JR      NZ, CheckHighScoreQualificationYes
+        LD      HL, highScoreLo
+        ADD     HL, DE
+        LD      A, (HL)
+        LD      B, A
+        LD      A, (scoreLo)
+        CP      B
+        JR      C, CheckHighScoreQualificationNext
+        JR      Z, CheckHighScoreQualificationNext
+CheckHighScoreQualificationYes:
+        LD      A, 1
+        RET
+CheckHighScoreQualificationNext:
+        LD      A, (highScoreInsertIndex)
+        INC     A
+        LD      (highScoreInsertIndex), A
+        JR      CheckHighScoreQualificationFind
+
+; Insert the completed score into the five-entry descending RAM table. This
+; runs after initials are chosen when CheckHighScoreQualification succeeds.
 RecordHighScore:
         XOR     A
         LD      (highScoreInsertIndex), A
@@ -1528,6 +1571,149 @@ DrawGameOverFrameNextRow:
         LD      C, 58
         LD      D, CURSOR_COLOR
         JP      DrawScoreAt
+
+; Qualifying players choose three initials before their score is committed.
+; Keyboard W/S changes a letter, A/D changes slot, and Space confirms; the
+; joystick maps its stick and Fire button to the same actions.
+EnterHighScoreInitials:
+        LD      HL, highScoreCurrentName
+        LD      (HL), 'A'
+        INC     HL
+        LD      (HL), 'A'
+        INC     HL
+        LD      (HL), 'A'
+        XOR     A
+        LD      (highScoreInitialPosition), A
+        CALL    DrawHighScoreEntryScreen
+EnterHighScoreInitialsLoop:
+        CALL    PollAction
+        OR      A
+        JR      Z, EnterHighScoreInitialsLoop
+        CP      ACTION_UP
+        JR      Z, HighScoreInitialPreviousLetter
+        CP      ACTION_DOWN
+        JR      Z, HighScoreInitialNextLetter
+        CP      ACTION_LEFT
+        JR      Z, HighScoreInitialPreviousSlot
+        CP      ACTION_RIGHT
+        JR      Z, HighScoreInitialNextSlot
+        CP      ACTION_PLACE
+        JR      Z, HighScoreInitialConfirm
+        JR      EnterHighScoreInitialsLoop
+
+HighScoreInitialPreviousLetter:
+        CALL    HighScoreInitialPointer
+        LD      A, (HL)
+        CP      'A'
+        JR      NZ, HighScoreInitialPreviousLetterDecrement
+        LD      A, 'Z'
+        JR      HighScoreInitialStoreLetter
+HighScoreInitialPreviousLetterDecrement:
+        DEC     A
+        JR      HighScoreInitialStoreLetter
+HighScoreInitialNextLetter:
+        CALL    HighScoreInitialPointer
+        LD      A, (HL)
+        INC     A
+        CP      $5B                    ; One byte beyond Z.
+        JR      NZ, HighScoreInitialStoreLetter
+        LD      A, 'A'
+HighScoreInitialStoreLetter:
+        LD      (HL), A
+        CALL    DrawHighScoreEntryInitials
+        JR      EnterHighScoreInitialsLoop
+
+HighScoreInitialPreviousSlot:
+        LD      A, (highScoreInitialPosition)
+        OR      A
+        JR      Z, EnterHighScoreInitialsLoop
+        DEC     A
+        LD      (highScoreInitialPosition), A
+        CALL    DrawHighScoreEntryInitials
+        JR      EnterHighScoreInitialsLoop
+HighScoreInitialNextSlot:
+        LD      A, (highScoreInitialPosition)
+        CP      2
+        JR      Z, EnterHighScoreInitialsLoop
+        INC     A
+        LD      (highScoreInitialPosition), A
+        CALL    DrawHighScoreEntryInitials
+        JR      EnterHighScoreInitialsLoop
+HighScoreInitialConfirm:
+        LD      A, (highScoreInitialPosition)
+        CP      2
+        RET     Z
+        INC     A
+        LD      (highScoreInitialPosition), A
+        CALL    DrawHighScoreEntryInitials
+        JR      EnterHighScoreInitialsLoop
+
+; Output HL = the selected byte within highScoreCurrentName.
+HighScoreInitialPointer:
+        LD      A, (highScoreInitialPosition)
+        LD      E, A
+        LD      D, 0
+        LD      HL, highScoreCurrentName
+        ADD     HL, DE
+        RET
+
+DrawHighScoreEntryScreen:
+        CALL    ClearVideo
+        LD      HL, newHighScoreTitle
+        LD      B, 29
+        LD      C, 4
+        LD      D, DIE_COLOR
+        CALL    DrawText
+        LD      HL, yourScoreLabel
+        LD      B, 39
+        LD      C, 13
+        LD      D, CURSOR_COLOR
+        CALL    DrawText
+        LD      B, 60
+        LD      C, 13
+        LD      D, CURSOR_COLOR
+        CALL    DrawScoreAt
+        LD      HL, enterInitialsLabel
+        LD      B, 29
+        LD      C, 22
+        LD      D, GRID_COLOR
+        CALL    DrawText
+        CALL    DrawHighScoreEntryInitials
+        LD      HL, highScoreEntryMoveLabel
+        LD      B, 17
+        LD      C, 42
+        LD      D, CURSOR_COLOR
+        CALL    DrawText
+        LD      HL, highScoreEntryConfirmLabel
+        LD      B, 19
+        LD      C, 48
+        LD      D, CURSOR_COLOR
+        JP      DrawText
+
+DrawHighScoreEntryInitials:
+        XOR     A
+        LD      B, 58
+        LD      C, 29
+        LD      D, 15
+        LD      E, 8
+        CALL    FillRect
+        LD      HL, highScoreCurrentName
+        LD      B, 58
+        LD      C, 30
+        LD      D, DIE_COLOR
+        CALL    DrawText
+        LD      A, (highScoreInitialPosition)
+        LD      E, A
+        ADD     A, A
+        ADD     A, A
+        ADD     A, E
+        ADD     A, 58
+        LD      B, A
+        LD      C, 36
+        LD      D, 4
+        LD      E, 1
+        LD      A, GRID_COLOR
+        JP      FillRect
 
 DrawHighScoreScreen:
         CALL    ClearVideo
@@ -2864,9 +3050,13 @@ NeighborFromDown:
 titleText:      DB      "SIXIES", 0
 titlePrompt:    DB      "PRESS SPACE", 0
 highScoreTitle: DB      "HIGH SCORES", 0
+newHighScoreTitle: DB   "NEW HIGH SCORE", 0
 yourScoreLabel: DB      "YOUR SCORE", 0
 bestFiveLabel:  DB      "BEST FIVE", 0
 highScorePrompt: DB    "SPACE NEW GAME", 0
+enterInitialsLabel: DB  "ENTER INITIALS", 0
+highScoreEntryMoveLabel: DB "W/S LETTER A/D SLOT", 0
+highScoreEntryConfirmLabel: DB "SPACE FIRE CONFIRM", 0
 presentationText: DB     "PRESENTATION", 0
 creditsDesigned: DB      "DESIGNED AND", 0
 creditsDeveloped: DB     "DEVELOPED BY", 0
@@ -2928,7 +3118,7 @@ MergeTonePointers:
 newLabel:       DB      "N NEW", 0
 scoreText:      DB      "0000", 0
 highScoreNameText: DS    4
-highScoreCurrentName: DB "YOU"
+highScoreCurrentName: DB "AAA", 0
 
 RowBase:        DB      0, 5, 10, 15, 20
 CellX:          DB      2, 11, 20, 29, 38
@@ -3055,6 +3245,7 @@ speakerHalfPeriodUnits: DB 0
 speakerCycles: DB          0
 highScoreInsertIndex: DB 0
 highScoreShiftIndex: DB  0
+highScoreInitialPosition: DB 0
 highScoreCopyDestination: DW 0
 attractMode:    DB      0
 

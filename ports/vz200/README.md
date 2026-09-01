@@ -65,6 +65,10 @@ dice with the same face merge into the next face; groups of sixes disappear.
 The game ends when no legal placement remains. Full rules and conformance
 vectors are in [docs/game-rules.md](../../docs/game-rules.md).
 
+If a completed score qualifies for the top five, enter three initials before
+the score is stored. `W`/`S` changes a letter, `A`/`D` changes the selected
+position, and `Space` or joystick `FIRE` confirms it. Scores are RAM-only.
+
 ## Presentation And Audio
 
 The port includes presentation, title, instruction, game-over, and high-score

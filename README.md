@@ -19,8 +19,8 @@ assembly for the Mode 1 128x64 four-color display.
 
 ## Requirements
 
-- A VZ200 with the 16 KB RAM expansion, or MAME configured as
-  `vz200 -mem laser210_16k`.
+- A VZ200 with the 16 KB RAM expansion and optional joystick interface, or
+  MAME configured as `vz200 -mem laser210_16k -io joystick`.
 - VZ200 MAME ROMs placed in `.tools/mame/roms/vz200`. ROMs are not included
   in the repository.
 - `sjasmplus`, MAME, and `ffmpeg`. The setup target installs missing tools
@@ -46,15 +46,16 @@ build/vz200/sixies-vz200.bin
 build/vz200/SIXIES.VZ
 ```
 
-`make run-vz200` launches `SIXIES.VZ` in MAME. The launcher records MAME
-output in `.context/mame-vz200.log` and the process ID in
-`.context/mame-vz200.pid`.
+`make run-vz200` launches `SIXIES.VZ` in MAME with the VZ joystick interface
+enabled. The launcher records MAME output in `.context/mame-vz200.log` and
+the process ID in `.context/mame-vz200.pid`.
 
 ## Controls
 
-The attract loop rotates through the presentation, title, and high-score
-screens. Press `Space` or `Return` for the rules page, then press a key to
-start a game.
+The attract loop rotates through the presentation, title, high-score, and
+credits screens. Press `Space` or `Return` for the bordered rules card, then
+press any key to start a game. `N` starts a new game directly from an attract
+screen.
 
 - `W`, `A`, `S`, `D`: move the placement cursor.
 - `Q` or `E`: rotate a double die.
@@ -81,11 +82,18 @@ The exact cross-platform game contract is documented in
 hardware-facing presentation port while the shared portable-rules boundary is
 developed separately.
 
+When a score enters the top five, choose three initials before it is saved:
+`W`/`S` changes the letter, `A`/`D` changes the selected position, and
+`Space` or joystick `FIRE` confirms it. High scores remain in RAM until the
+program is reloaded.
+
 ## Presentation And Sound
 
-The VZ200 version includes presentation, title, instruction, game-over, and
-high-score screens. Merge words appear in the sidebar while play continues,
-and the title stars twinkle during the attract cycle.
+The VZ200 version includes presentation, title, instructions, high scores,
+credits, and game-over screens. The instruction card covers 5x5 placement,
+rotation, matching three or more dice, chain scoring, and sixes clearing
+space. Merge words appear in the sidebar while play continues, and the title
+stars twinkle during the attract cycle.
 
 The VZ has a latch-driven one-bit speaker, not a C64 SID. Its square-wave
 effects recreate the C64 gameplay cues in VZ form: cursor bounce,
