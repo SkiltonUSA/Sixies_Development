@@ -1,0 +1,33 @@
+name: Atari 8-bit
+
+on:
+  push:
+    paths:
+      - "atari8/**"
+      - "apple2/assets/**"
+      - "src/assets/**"
+      - "Makefile"
+      - ".github/workflows/atari8.yml"
+  pull_request:
+    paths:
+      - "atari8/**"
+      - "apple2/assets/**"
+      - "src/assets/**"
+      - "Makefile"
+      - ".github/workflows/atari8.yml"
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install cc65 exomizer
+      - run: python3 -m venv .tools/atari8/venv
+      - run: .tools/atari8/venv/bin/pip install Pillow==11.3.0
+      - run: make -C atari8 test crunch
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sixies-atari-xex
+          path: |
+            atari8/build/sixies.xex
+            atari8/build/sixies-crunched.xex

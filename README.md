@@ -97,3 +97,17 @@ Moving a die between grid cells plays the three-frame c64SIDkit `bounce` effect.
 Complete C64 piece generation, placement, merging, scoring, effects, and end-game rules are in the [C64 Game Rules](RULES_README.md).
 
 The port has its own generation probabilities, controls, scoring bonus, and high-score behavior. See the [Apple II Game Rules](apple2/RULES_README.md) when playing that version.
+
+## Atari 8-bit port
+
+A native 6502 port for the 64K Atari 800XL and 128K Atari 130XE is available in
+[`atari8/`](atari8/README.md). It uses the Apple II rule set, a 320x192 ANTIC
+high-resolution bitmap, converted Sixies graphics, native POKEY sound, a shared
+64K/128K XEX, Exomizer release packaging, and a bootable ATR.
+
+```sh
+make -C atari8 setup-tools
+make -C atari8 doctor
+make -C atari8 run64
+make -C atari8 run128
+```

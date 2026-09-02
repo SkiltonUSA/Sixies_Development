@@ -1,0 +1,32 @@
+"$schema" = "https://conductor.build/schemas/settings.repo.schema.json"
+
+[scripts]
+setup = "./atari8/scripts/setup-tools.sh"
+run_mode = "concurrent"
+
+[scripts.run.build-atari]
+command = "make -C atari8"
+icon = "hammer"
+
+[scripts.run.test-atari]
+command = "make -C atari8 test"
+icon = "test-tube"
+
+[scripts.run.run-atari-64k]
+command = "make -C atari8 run64"
+available_in = [ "local" ]
+icon = "play"
+
+[scripts.run.run-atari-128k]
+command = "make -C atari8 run128"
+available_in = [ "local" ]
+icon = "play"
+
+[scripts.run.build-c64]
+command = "make"
+icon = "hammer"
+
+[scripts.run.run-c64]
+command = "make run"
+available_in = [ "local" ]
+icon = "play"

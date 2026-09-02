@@ -129,7 +129,7 @@ BINARY_ASSETS := \
 	$(FONT_CHARSET16) \
 	$(MERGE_CALLOUT_PACKED)
 
-.PHONY: all crunch release music setup-acme setup-sidkit sidkit run clean FORCE
+.PHONY: all crunch release music setup-acme setup-sidkit sidkit run clean FORCE atari atari-test atari-disk atari-run64 atari-run128
 
 all: $(TARGET)
 
@@ -263,3 +263,18 @@ run: $(TARGET)
 
 clean:
 	rm -rf build
+
+atari:
+	$(MAKE) -C atari8
+
+atari-test:
+	$(MAKE) -C atari8 test
+
+atari-disk:
+	$(MAKE) -C atari8 disk
+
+atari-run64:
+	$(MAKE) -C atari8 run64
+
+atari-run128:
+	$(MAKE) -C atari8 run128
