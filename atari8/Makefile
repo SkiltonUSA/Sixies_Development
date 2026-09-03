@@ -23,6 +23,9 @@ ASSET_STAMP := $(ASSET_DIR)/.stamp
 ASSET_SOURCES := \
 	$(ROOT)/apple2/assets/title_dhgr_mono_master.a2fm \
 	$(ROOT)/apple2/assets/title_dhgr_mono_reference.png \
+	$(ROOT)/apple2/assets/grid_master.png \
+	$(ROOT)/apple2/assets/game_grid_dhgr_mono_master.a2fm \
+	$(ROOT)/apple2/assets/game_grid_dhgr_mono_reference.png \
 	$(ROOT)/apple2/assets/presents_master.ppm \
 	$(ROOT)/apple2/assets/game_over_master.png \
 	$(ROOT)/apple2/scripts/generate_instructions.py \
@@ -31,7 +34,7 @@ ASSET_SOURCES := \
 	$(ROOT)/src/assets/main_mascot.asm \
 	$(ROOT)/src/assets/main_mascot_bitmap.bin \
 	$(ROOT)/src/assets/main_mascot_screen.bin \
-	$(ROOT)/src/assets/main_mascot_master.png \
+	$(ATARI_DIR)/assets/high_score_mascot_master.png \
 	$(ROOT)/src/assets/font/SixiesFont_charset.bin \
 	$(ROOT)/src/assets/exclamation_sprites.bin \
 	$(ROOT)/src/assets/exclamation_sprites_data.asm \

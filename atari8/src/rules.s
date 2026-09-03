@@ -475,7 +475,8 @@ resolve_at:
     ldx active_index
     sta board,x
 @animate:
-    jsr render_game
+    jsr redraw_group_cells
+    jsr redraw_score_digits
     lda group_value
     jsr play_merge_sound
     ; Flash the supplied four-point star at the resolved die before the word
@@ -492,7 +493,8 @@ resolve_at:
     jsr show_merge_star
     lda #3
     jsr wait_frames
-    jsr render_game
+    lda active_index
+    jsr show_merge_star
     lda group_value
     cmp #4
     beq @fives
@@ -516,9 +518,12 @@ resolve_at:
 @awesome:
     lda #0
 @show:
+    sta text_index
     jsr show_callout
     lda #8
     jsr wait_frames
+    lda text_index
+    jsr show_callout
     ldx active_index
     lda board,x
     beq @done

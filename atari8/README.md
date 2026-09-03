@@ -10,6 +10,11 @@ orthogonal merging, chains, scoring, game over, keyboard/joystick input,
 instructions, converted artwork, POKEY cues, XEX packaging, and a bootable ATR
 are implemented. The 130XE build detects extended RAM at runtime and caches the
 7.75K title framebuffer in an extended bank. Both targets use one XEX.
+Cursor movement, rotation, placement, and merge animation use dirty-region
+updates, so the ornate gameplay grid is not decompressed or blanked during
+normal play.
+The startup presentation flows from the title to the instruction screen and
+requires a new continue press before the first game begins.
 
 ## Quick start on macOS
 
@@ -86,25 +91,30 @@ screen DMA at `$9000`, because an ANTIC mode-F line may not cross a 4K boundary.
 
 - supplied Apple II DHGR A2FM title, decoded and reference-verified before
   scaling its complete 560x192 composition to ANTIC F;
+- the high-resolution 5x5 grid master and its complete Apple DHGR game-screen
+  counterpart, reference-verified and cropped into the Atari board geometry;
 - Apple Studio313 presentation and illustrated Game Over masters, converted
   into centered Atari-native screens;
 - the supplied boxed instruction-screen design, rebuilt at 320x192 with Atari
   64K/128K labels and the complete WASD/joystick control legend;
 - shared Sixies font;
-- supplied C64 bitmap and screen-map mascot validation, with an edge-aware
-  80x100 monochrome render from the high-resolution master so facial details
-  survive in the Atari sidebar;
+- supplied C64 bitmap and screen-map mascot validation, with the compact
+  high-score mascot master reduced to 80x100 so its eyes, mouth, two dice,
+  gloves, and shoe details survive in the Atari sidebar;
 - supplied ACME assembly dice sprites, centered into Atari 32x24 cells;
 - all ten official exclamation-word masters—Awesome, Boom, Dang, Fives,
-  Let's Go, Sixies, Whoa, Wow, Yeah, and Yes—in a native Atari callout atlas;
+  Let's Go, Sixies, Whoa, Wow, Yeah, and Yes—slightly enlarged and inverted
+  into a white-on-black native Atari callout atlas;
 - the supplied four-point merge star, flashed with XOR at the resolved die;
-- an Atari-native invalid-placement overlay;
+- an Atari-native invalid-placement overlay plus diagonal shading that
+  identifies the occupied cell beneath a hovering piece;
 - ASCII-indexed 8x8 glyph data for the bitmap text renderer.
 
 The generated binaries and PNG inspection atlases are kept in `build/` rather
-than committed. Full-screen title, presentation, instructions, and Game Over
-art use a small 6502 PackBits-style decoder, reducing their in-memory footprint
-while writing directly to the 31-page ANTIC framebuffer. SID and Apple speaker byte streams are hardware-specific, so
+than committed. Full-screen title, presentation, instructions, Game Over, and
+gameplay-grid art use a small 6502 PackBits-style decoder, reducing their
+in-memory footprint while writing directly to the 31-page ANTIC framebuffer.
+SID and Apple speaker byte streams are hardware-specific, so
 their cues and musical intent are translated into native POKEY pitch envelopes
 and a compact title phrase in `src/sound.s`.
 

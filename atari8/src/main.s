@@ -66,6 +66,9 @@ title_loop:
     sta music_enabled
     jsr wait_for_start
     jsr sound_stop_music
+    jsr show_instructions
+    jsr arm_input
+    jsr wait_for_start
 
 begin_game:
     jsr new_game
@@ -88,7 +91,9 @@ game_loop:
     cmp #ACTION_ROTATE
     beq rotate_piece
     cmp #ACTION_PLACE
-    beq place_piece
+    bne :+
+    jmp place_piece
+:
     cmp #ACTION_NEW
     bne :+
     jmp request_new_game
@@ -105,36 +110,44 @@ game_loop:
 
 move_left:
     lda cursor_x
-    beq game_loop
+    beq @done
+    jsr erase_piece_preview
     dec cursor_x
     jsr play_move_sound
-    jsr render_game
+    jsr draw_piece_preview
+@done:
     jmp game_loop
 
 move_right:
     lda cursor_x
     cmp #4
-    beq game_loop
+    beq @done
+    jsr erase_piece_preview
     inc cursor_x
     jsr play_move_sound
-    jsr render_game
+    jsr draw_piece_preview
+@done:
     jmp game_loop
 
 move_up:
     lda cursor_y
-    beq game_loop
+    beq @done
+    jsr erase_piece_preview
     dec cursor_y
     jsr play_move_sound
-    jsr render_game
+    jsr draw_piece_preview
+@done:
     jmp game_loop
 
 move_down:
     lda cursor_y
     cmp #4
-    beq game_loop
+    beq @done
+    jsr erase_piece_preview
     inc cursor_y
     jsr play_move_sound
-    jsr render_game
+    jsr draw_piece_preview
+@done:
     jmp game_loop
 
 rotate_piece:
@@ -143,20 +156,22 @@ rotate_piece:
     beq :+
     jmp game_loop
 :
+    jsr erase_piece_preview
     inc orientation
     lda orientation
     and #3
     sta orientation
     jsr play_rotate_sound
-    jsr render_game
+    jsr draw_piece_preview
     jmp game_loop
 
 place_piece:
     jsr place_current_piece
-    bcc @redraw
+    bcs :+
+    jmp game_loop
+:
     jsr play_place_sound
-@redraw:
-    jsr render_game
+    jsr refresh_turn_display
     jmp game_loop
 
 toggle_audio:

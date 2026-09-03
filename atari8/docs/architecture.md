@@ -23,7 +23,10 @@ giving up the stable monochrome bitmap.
 | Address | Use |
 | --- | --- |
 | `$0082-$0092` | Private zero-page pointers, counters, and unbanked PORTB state |
-| `$2000-$747A` | Code, packed assets, rule state, and renderer state |
+| `$2000-$2FAB` | Game and renderer code |
+| `$3000-$30C9` | 1K-aligned ANTIC display list |
+| `$30CA-$7D2C` | Packed assets and lookup tables |
+| `$7D2D-$7DB8` | Rule and renderer state |
 | `$8000-$8F9F` | First 100 bitmap rows |
 | `$8FA0-$8FFF` | Padding required before the next 4K ANTIC fetch region |
 | `$9000-$9E5F` | Final 92 bitmap rows |
@@ -40,10 +43,12 @@ banking path. A larger second stage can use separate banks for a back buffer,
 animation frames, music patterns, and expanded presentation without penalizing
 the 64K game.
 
-Title, presentation, instructions, and Game Over screens are stored in a
-PackBits-style RLE stream. One shared 6502 routine expands each stream directly
-across the 31 reserved framebuffer pages, including ANTIC's `$8FA0-$8FFF`
-boundary gap. This leaves roughly 2.9K below `$8000` for further 64K work.
+Title, presentation, instructions, Game Over, and the Apple-derived gameplay
+grid are stored in PackBits-style RLE streams. One shared 6502 routine expands
+them directly across the 31 reserved framebuffer pages, including ANTIC's
+`$8FA0-$8FFF` boundary gap. The grid brings the 64K build close to its fixed
+framebuffer boundary, with 583 bytes currently free below `$8000`; future large
+assets should use 130XE banks or load from disk.
 
 ## Boot and build strategy
 
@@ -65,9 +70,10 @@ justify its maintenance cost.
 1. **Split common and banked regions.** Enforce a linker segment below `$4000`
    for every routine and datum touched while extended RAM is selected, then put
    immutable art in explicit banks. Add a link-time assertion for the boundary.
-2. **Redraw dirty cells.** The first renderer disables DMA and rebuilds the full
-   screen. Redrawing the old/new cursor cells, score digits, and changed merge
-   cells would substantially reduce input latency and eliminate blanking.
+2. **Continue specializing dirty rendering.** Cursor movement, rotation,
+   placement, merge groups, score digits, and the piece sidebar now update only
+   their affected regions. Keep full-screen RLE expansion limited to screen
+   transitions, and specialize any future animated overlays the same way.
 3. **Use PMG for transient effects.** A player can become the cursor/invalid
    marker and missiles can render stars, freeing the bitmap renderer from many
    OR blits and enabling color.

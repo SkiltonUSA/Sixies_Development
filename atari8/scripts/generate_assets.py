@@ -8,7 +8,7 @@ import importlib.util
 from pathlib import Path
 import re
 
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageOps
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -18,6 +18,11 @@ ATARI = ROOT / "atari8"
 DHGR_PAGE_BYTES = 8192
 DHGR_WIDTH = 560
 DHGR_HEIGHT = 192
+APPLE_GRID_BOX = (127, 4, 431, 159)
+ATARI_GRID_SIZE = (160, 140)
+ATARI_GRID_POSITION = (80, 26)
+CALLOUT_SIZE = (80, 24)
+CALLOUT_FIT_SIZE = (88, 26)
 C64_RGB = (
     (0x00, 0x00, 0x00), (0xFF, 0xFF, 0xFF), (0x81, 0x33, 0x38),
     (0x75, 0xCE, 0xC8), (0x8E, 0x3C, 0x97), (0x56, 0xAC, 0x4D),
@@ -42,6 +47,36 @@ def contain(image: Image.Image, size: tuple[int, int], threshold: int = 150) -> 
     y = (size[1] - image.height) // 2
     canvas.paste(image, (x, y), alpha.crop(bbox).resize(image.size) if bbox else None)
     return canvas.point(lambda p: 255 if p < threshold else 0, mode="1")
+
+
+def make_callout(image: Image.Image) -> Image.Image:
+    """Invert and slightly enlarge an exclamation for the black playfield."""
+    rgb = image.convert("RGB")
+    intensity = ImageChops.lighter(
+        ImageChops.lighter(rgb.getchannel("R"), rgb.getchannel("G")),
+        rgb.getchannel("B"),
+    )
+    bounds = intensity.point(lambda value: 255 if value >= 16 else 0).getbbox()
+    if bounds is None:
+        raise ValueError("exclamation master has no visible pixels")
+    detail = intensity.crop(bounds)
+    detail.thumbnail(CALLOUT_FIT_SIZE, Image.Resampling.LANCZOS)
+    enlarged = Image.new("L", CALLOUT_FIT_SIZE, 0)
+    enlarged.paste(
+        detail,
+        (
+            (CALLOUT_FIT_SIZE[0] - detail.width) // 2,
+            (CALLOUT_FIT_SIZE[1] - detail.height) // 2,
+        ),
+    )
+    left = (CALLOUT_FIT_SIZE[0] - CALLOUT_SIZE[0]) // 2
+    top = (CALLOUT_FIT_SIZE[1] - CALLOUT_SIZE[1]) // 2
+    enlarged = enlarged.crop(
+        (left, top, left + CALLOUT_SIZE[0], top + CALLOUT_SIZE[1])
+    )
+    # Light lettering and burst pixels become Atari foreground; the masters'
+    # opaque black backgrounds remain transparent against the playfield.
+    return enlarged.point(lambda value: 255 if value >= 96 else 0, mode="1")
 
 
 def pack_1bpp(image: Image.Image) -> bytes:
@@ -176,6 +211,64 @@ def decode_a2fm_title() -> Image.Image:
         if doubled.tobytes() != expected.tobytes():
             raise ValueError("decoded A2FM title does not match its reference PNG")
     return image
+
+
+def decode_a2fm_grid_screen() -> Image.Image:
+    """Decode and verify the supplied complete Apple DHGR game composition."""
+    source = (APPLE / "game_grid_dhgr_mono_master.a2fm").read_bytes()
+    if len(source) != DHGR_PAGE_BYTES * 2:
+        raise ValueError(
+            "A2FM game grid must contain one 8K auxiliary and one 8K main page"
+        )
+
+    auxiliary = source[:DHGR_PAGE_BYTES]
+    main = source[DHGR_PAGE_BYTES:]
+    image = Image.new("L", (DHGR_WIDTH, DHGR_HEIGHT), 0)
+    pixels = image.load()
+    for y in range(DHGR_HEIGHT):
+        row = hgr_offset(y)
+        x = 0
+        for byte_index in range(40):
+            for bank in (auxiliary, main):
+                value = bank[row + byte_index]
+                for bit in range(7):
+                    pixels[x, y] = 255 if value & (1 << bit) else 0
+                    x += 1
+
+    with Image.open(APPLE / "game_grid_dhgr_mono_reference.png") as reference:
+        if reference.size != (DHGR_WIDTH, DHGR_HEIGHT * 2):
+            raise ValueError("DHGR game-grid reference must be 560x384")
+        expected = reference.convert("L").point(lambda value: 255 if value >= 128 else 0)
+        doubled = image.resize(expected.size, Image.Resampling.NEAREST)
+        if doubled.tobytes() != expected.tobytes():
+            raise ValueError("decoded A2FM game grid does not match its reference PNG")
+
+    # The separately supplied high-resolution PNG is the artwork master. Its
+    # presence and geometry are checked here while the already-dithered DHGR
+    # crop below supplies the most legible decorative joints at 320x192.
+    with Image.open(APPLE / "grid_master.png") as master:
+        if master.size != (1254, 1254):
+            raise ValueError("high-resolution grid master must be 1254x1254")
+        rgb = master.convert("RGB")
+        intensity = ImageChops.lighter(
+            ImageChops.lighter(rgb.getchannel("R"), rgb.getchannel("G")),
+            rgb.getchannel("B"),
+        )
+        visible = intensity.point(lambda value: 255 if value >= 24 else 0)
+        if visible.getbbox() is None:
+            raise ValueError("high-resolution grid master has no visible artwork")
+    return image
+
+
+def make_atari_grid_screen() -> Image.Image:
+    """Place the Apple 5x5 grid in the Atari playfield's exact cell geometry."""
+    apple_screen = decode_a2fm_grid_screen()
+    grid = apple_screen.crop(APPLE_GRID_BOX).resize(
+        ATARI_GRID_SIZE, Image.Resampling.NEAREST
+    )
+    screen = Image.new("1", (320, 192), 0)
+    screen.paste(grid, ATARI_GRID_POSITION)
+    return screen
 
 
 def make_atari_title() -> Image.Image:
@@ -372,29 +465,26 @@ def load_c64_mascot() -> Image.Image:
 
 
 def load_detailed_mascot() -> Image.Image:
-    """Create high-contrast 80x100 line art from the full-resolution master."""
-    with Image.open(SHARED / "main_mascot_master.png") as source:
+    """Reduce the compact high-score mascot master to the 80x100 sidebar."""
+    with Image.open(ATARI / "assets" / "high_score_mascot_master.png") as source:
+        if source.size != (1122, 1402):
+            raise ValueError("high-score mascot master must be the supplied 1122x1402 image")
         rgb = source.convert("RGB")
-    grayscale = rgb.convert("L")
-
-    # Treat every non-black mascot color as one silhouette, then keep its
-    # inner/outer edges. This recovers black-on-purple facial boundaries that
-    # disappear when the two-color C64 cells are reduced by luminance alone.
-    visible = Image.new("L", rgb.size)
-    visible.putdata([255 if max(pixel) >= 32 else 0 for pixel in rgb.getdata()])
-    bounds = visible.getbbox()
+    intensity = ImageChops.lighter(
+        ImageChops.lighter(rgb.getchannel("R"), rgb.getchannel("G")),
+        rgb.getchannel("B"),
+    )
+    bounds = intensity.point(lambda value: 255 if value >= 16 else 0).getbbox()
     if bounds is None:
-        raise ValueError("high-resolution mascot master has no visible pixels")
-    eroded = visible.filter(ImageFilter.MinFilter(15))
-    edges = ImageChops.subtract(visible, eroded)
+        raise ValueError("Atari mascot master has no visible pixels")
 
-    # Preserve white eyes, gloves, shoes, and highlights as filled regions.
-    highlights = grayscale.point(lambda value: 255 if value >= 170 else 0)
-    detail = ImageChops.lighter(edges, highlights).crop(bounds)
-    detail.thumbnail((76, 96), Image.Resampling.LANCZOS)
+    # The edited master already uses chunky one-bit contours and a compact 4:5
+    # pose. LANCZOS plus a high threshold preserves its face, dice, and shoes.
+    detail = intensity.crop(bounds)
+    detail.thumbnail((80, 100), Image.Resampling.LANCZOS)
     canvas = Image.new("L", (80, 100), 0)
     canvas.paste(detail, ((80 - detail.width) // 2, (100 - detail.height) // 2))
-    return canvas.point(lambda value: 255 if value >= 80 else 0, mode="1")
+    return canvas.point(lambda value: 255 if value >= 144 else 0, mode="1")
 
 
 def unpack_exclamation(data: bytes, start: int, end: int) -> bytes:
@@ -453,6 +543,17 @@ def load_exclamation_images() -> dict[str, Image.Image]:
     }
 
 
+def make_occupied_shade() -> Image.Image:
+    """Build the clipped diagonal hatch used over an occupied board cell."""
+    image = Image.new("1", (32, 24), 0)
+    pixels = image.load()
+    for y in range(2, 22):
+        for x in range(4, 28):
+            if (x + y) % 8 < 3:
+                pixels[x, y] = 1
+    return image
+
+
 def build(output: Path, previews: Path) -> None:
     output.mkdir(parents=True, exist_ok=True)
     previews.mkdir(parents=True, exist_ok=True)
@@ -473,8 +574,11 @@ def build(output: Path, previews: Path) -> None:
     )
     save_rle_screen(game_over, output / "game_over.rle", previews / "game_over.png")
 
+    grid = make_atari_grid_screen()
+    save_rle_screen(grid, output / "game_grid.rle", previews / "game_grid.png")
+
     # Decode the supplied C64 bitmap and screen data as a build-time integrity
-    # check, then use the high-resolution master to retain facial line detail.
+    # check, then render the supplied Atari-specific monochrome mascot master.
     load_c64_mascot()
     mascot = load_detailed_mascot()
     save_asset(mascot, output / "mascot.bin", previews / "mascot.png")
@@ -495,6 +599,11 @@ def build(output: Path, previews: Path) -> None:
     draw.line((27, 2, 4, 21), fill=1, width=2)
     save_asset(invalid, output / "invalid.bin", previews / "invalid.png")
 
+    occupied = make_occupied_shade()
+    save_asset(
+        occupied, output / "occupied.bin", previews / "occupied.png"
+    )
+
     merge_star = load_merge_star()
     save_asset(
         merge_star, output / "merge_star.bin", previews / "merge_star.png"
@@ -512,11 +621,11 @@ def build(output: Path, previews: Path) -> None:
     callouts = bytearray()
     atlas = Image.new("1", (80, 24 * len(callout_names)), 0)
     for index, name in enumerate(callout_names):
-        art = contain(Image.open(APPLE / f"merge_{name}_master.png"), (80, 24), 170)
+        art = make_callout(Image.open(APPLE / f"merge_{name}_master.png"))
         callouts.extend(pack_1bpp(art))
         atlas.paste(art, (0, index * 24))
     (output / "callouts.bin").write_bytes(callouts)
-    ImageOps.invert(atlas.convert("L")).save(previews / "callouts.png")
+    atlas.convert("L").save(previews / "callouts.png")
 
     font_source = SHARED / "font" / "SixiesFont_charset.bin"
     screen_font = font_source.read_bytes()
@@ -524,8 +633,28 @@ def build(output: Path, previews: Path) -> None:
         raise ValueError(f"expected 512-byte C64 screen-code font, got {len(screen_font)}")
     # Expand the C64 screen-code layout into direct ASCII indexing so the
     # Atari renderer can multiply an ASCII byte by eight without a map table.
-    font = bytearray(2048)
+    # Every game string and custom renderer glyph is below ASCII $80, so a
+    # 128-glyph direct-index table retains the fast 6502 lookup while freeing
+    # 1K of the very tight 64K build.
+    font = bytearray(1024)
+    footer_glyphs = {
+        1: (0xFF, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00),
+        2: (0x0F, 0x30, 0x40, 0x80, 0x80, 0x80, 0x80, 0x80),
+        3: (0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00),
+        4: (0xF0, 0x0C, 0x02, 0x01, 0x01, 0x01, 0x01, 0x01),
+        5: (0x80, 0x80, 0x80, 0x80, 0x80, 0x40, 0x30, 0x0F),
+        6: (0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF),
+        7: (0x01, 0x01, 0x01, 0x01, 0x01, 0x02, 0x0C, 0xF0),
+    }
+    for character, glyph in footer_glyphs.items():
+        font[character * 8 : (character + 1) * 8] = bytes(glyph)
     font[ord("!") * 8 : (ord("!") + 1) * 8] = screen_font[8:16]
+    font[ord("[") * 8 : (ord("[") + 1) * 8] = bytes(
+        (0x3C, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x3C)
+    )
+    font[ord("]") * 8 : (ord("]") + 1) * 8] = bytes(
+        (0x3C, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x3C)
+    )
     for digit in range(10):
         source = (16 + digit) * 8
         target = (ord("0") + digit) * 8
@@ -541,12 +670,14 @@ def build(output: Path, previews: Path) -> None:
         f"presents.rle {len(pack_rle(physical_screen(presents)))} bytes, 320x192 PackBits RLE\n"
         f"instructions.rle {len(pack_rle(physical_screen(instructions)))} bytes, 320x192 PackBits RLE\n"
         f"game_over.rle {len(pack_rle(physical_screen(game_over)))} bytes, 320x192 PackBits RLE\n"
-        "mascot.bin 80x100 1bpp (edge-aware high-resolution source)\n"
+        f"game_grid.rle {len(pack_rle(physical_screen(grid)))} bytes, 320x192 PackBits RLE\n"
+        "mascot.bin 80x100 1bpp (compact high-score mascot master)\n"
         "dice.bin 6x(32x24) 1bpp\n"
         "invalid.bin 32x24 1bpp\n"
+        "occupied.bin 32x24 1bpp (diagonal occupied-cell shade)\n"
         "merge_star.bin 32x24 1bpp (shared C64 four-point star)\n"
         "callouts.bin 10x(80x24) 1bpp\n"
-        "font.bin 256x(8x8) 1bpp\n"
+        "font.bin 128x(8x8) 1bpp\n"
     )
     (output / "MANIFEST.txt").write_text(manifest)
 
