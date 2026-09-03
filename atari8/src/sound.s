@@ -1,5 +1,5 @@
-; POKEY translation of the C64/Apple II game cues. The pitch envelopes and
-; musical intent are preserved; SID register data itself is not portable.
+; POKEY translation of the C64/Apple II game cues. Title music uses the
+; compressed SID2SAPR softbass player; gameplay cues use regular POKEY tones.
 
 .segment "BSS"
 sound_enabled:      .res 1
@@ -7,12 +7,9 @@ sound_frames:       .res 1
 sound_mode:         .res 1
 sound_pitch:        .res 1
 music_enabled:      .res 1
-music_divider:      .res 1
-music_step:         .res 1
 
 .segment "RODATA"
 merge_pitch:        .byte $78,$64,$52,$43,$35,$28
-title_notes:        .byte $60,$50,$43,$50,$3C,$32,$2A,$32,$48,$3C,$30,$3C,$28,$24,$20,$24
 
 .segment "CODE"
 
@@ -31,10 +28,16 @@ sound_init:
     sta AUDC4
     sta sound_frames
     sta sound_mode
-    sta music_divider
-    sta music_step
+    sta music_enabled
     lda #1
     sta sound_enabled
+    rts
+
+; Start the compressed SID2SAPR softbass title music.
+sound_start_music:
+    lda #1
+    sta music_enabled
+    jsr sid_music_start
     rts
 
 sound_toggle:
@@ -165,26 +168,14 @@ sound_update:
 @music:
     lda music_enabled
     beq @done
-    inc music_divider
-    lda music_divider
-    cmp #6
-    bcc @done
-    lda #0
-    sta music_divider
-    ldx music_step
-    lda title_notes,x
-    sta AUDF2
-    lda #$A5
-    sta AUDC2
-    inx
-    txa
-    and #$0F
-    sta music_step
+    jsr sid_music_tick
 @done:
     rts
 
 sound_stop_music:
     lda #0
     sta music_enabled
-    sta AUDC2
+    jsr sid_music_stop      ; silences music channels and restores the OS IRQ
+    lda #0
+    sta AUDCTL              ; restore 64 kHz base clock for sound effects
     rts

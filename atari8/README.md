@@ -62,6 +62,11 @@ The ATR is a 90K single-density PicoBoot406 disk containing the crunched XEX.
 The raw XEX remains useful for fast emulator iteration and debugger labels are
 written to `build/sixies.lbl`.
 
+The ten-entry high-score table is stored with a signature and checksum in
+reserved ATR sector 720. Runtime access uses Atari SIO directly, so no resident
+DOS is required. Disk repackaging validates and carries that sector forward;
+invalid or absent data is replaced with the seeded reference table.
+
 ## Controls
 
 | Input | Action |
@@ -70,33 +75,61 @@ written to `build/sixies.lbl`.
 | `Q` or `E` | Rotate a pair |
 | Fire, `Space`, or `Return` | Start/place/continue |
 | `I` | Instructions |
+| `C` | Credits from the title screen |
 | `M` | Toggle POKEY audio |
+| `.` | Fill the grid and trigger Game Over (test shortcut) |
 | `N` | New-game confirmation or Start from title |
 | `Y` / `N` | Confirm/cancel a new game |
 
+After a top-ten score, type three letters directly. A joystick can also edit
+initials: Up/Down changes the letter, Left/Right selects a position, and Fire
+accepts it. Under Atari800's keyboard-joystick mapping, `W/S` changes the letter,
+`A/D` selects a position, and `Space` accepts it. The high-score page follows
+Game Over and starts the next game when Fire, `Space`, `Return`, or `N` is
+pressed.
+
 The launcher assigns Atari800's second keyboard-joystick layout (`W/A/S/D`) to
 joystick port 2, which the game reads alongside the physical/USB joystick on
-port 1. The native Atari `CH` keyboard path remains enabled as well. This avoids
-SDL consuming the host letters before the Atari OS can report them.
+port 1. The native Atari `CH` keyboard path remains enabled during gameplay;
+the music-backed attract loop polls `KBCODE/SKSTAT` directly while softbass owns
+POKEY's IRQ vector. This avoids SDL consuming movement letters and prevents
+timer IRQ nesting during the title rotation.
+
+At startup, the Studio 313 intro is followed by an unattended attract loop:
+Title (5 seconds), Top 10 (5 seconds), Credits (11 seconds), then back to Title.
+Fire, `Space`, `Return`, `N`, or the console Start key begins from any page.
 
 ## Graphics and assets
 
 The selected playfield is ANTIC mode F (OS GRAPHICS 8): 320x192, one bit per
-pixel. It gives Sixies the same sharp monochrome intent as the C64 high-resolution
+pixel. It gives Sixies the same sharp high-resolution silhouette as the C64
 board and Apple II DHGR art, works consistently on NTSC and PAL displays, and
-leaves 80-pixel sidebars around the 160-pixel board. The display list restarts
-screen DMA at `$9000`, because an ANTIC mode-F line may not cross a 4K boundary.
+leaves 80-pixel sidebars around the 160-pixel board. The gameplay header uses
+gold on black for the Sixies logo, then a display-list interrupt changes the
+board area to cyan on black and a second interrupt restores gold for the bottom
+rule and boxed controls. Presentation, instruction, high-score, and credit pages
+otherwise remain white on black; the instruction page also uses gold for its top
+header and bottom continuation box. The display list restarts screen DMA at
+`$9000`, because an ANTIC mode-F line may not cross a 4K boundary.
 
 `scripts/generate_assets.py` converts the shared source masters at build time:
 
-- supplied Apple II DHGR A2FM title, decoded and reference-verified before
-  scaling its complete 560x192 composition to ANTIC F;
+- the supplied 256x240 flat Sixies title with its logo, mascot, dice, and stars,
+  reduced to a detailed monochrome ANTIC-F composition while preserving space
+  for the start prompt and detected-machine label;
+- the supplied 1983x793 pixel-art Sixies logo, proportionally reduced and
+  centered in the 24-pixel strip directly above the gameplay grid, replacing
+  the earlier small sidebar logo;
 - the high-resolution 5x5 grid master and its complete Apple DHGR game-screen
   counterpart, reference-verified and cropped into the Atari board geometry;
 - Apple Studio313 presentation and illustrated Game Over masters, converted
   into centered Atari-native screens;
 - the supplied boxed instruction-screen design, rebuilt at 320x192 with Atari
   64K/128K labels and the complete WASD/joystick control legend;
+- a native monochrome credits page, based on the supplied compact title/dice/
+  centered-copy mockup and available with `C` from the title screen;
+- a music-backed Title → Top 10 → Credits attract rotation that repeats until
+  a keyboard, fire-button, or console Start action begins the game;
 - shared Sixies font;
 - supplied C64 bitmap and screen-map mascot validation, with the compact
   high-score mascot master reduced to 80x100 so its eyes, mouth, two dice,
@@ -104,8 +137,15 @@ screen DMA at `$9000`, because an ANTIC mode-F line may not cross a 4K boundary.
 - supplied ACME assembly dice sprites, centered into Atari 32x24 cells;
 - all ten official exclamation-word masters—Awesome, Boom, Dang, Fives,
   Let's Go, Sixies, Whoa, Wow, Yeah, and Yes—slightly enlarged and inverted
-  into a white-on-black native Atari callout atlas;
+  into a white-on-black native Atari callout atlas that flashes for half a
+  second over the resolved merge cell, using a saved black backing region for
+  legibility before restoring the exact covered pixels;
 - the supplied four-point merge star, flashed with XOR at the resolved die;
+- a five-step row-and-column grid ripple that travels inward from all four
+  edges toward each resolved merged die, adding four corner-to-die diagonal
+  arms for face-4 merges;
+- outcome-specific Fives and Sixies callouts for exact three-die merges, plus
+  an instantaneous palette flash when a group of sixes is removed;
 - an Atari-native invalid-placement overlay plus diagonal shading that
   identifies the occupied cell beneath a hovering piece;
 - ASCII-indexed 8x8 glyph data for the bitmap text renderer.
@@ -114,9 +154,10 @@ The generated binaries and PNG inspection atlases are kept in `build/` rather
 than committed. Full-screen title, presentation, instructions, Game Over, and
 gameplay-grid art use a small 6502 PackBits-style decoder, reducing their
 in-memory footprint while writing directly to the 31-page ANTIC framebuffer.
-SID and Apple speaker byte streams are hardware-specific, so
-their cues and musical intent are translated into native POKEY pitch envelopes
-and a compact title phrase in `src/sound.s`.
+SID and Apple speaker byte streams are hardware-specific. Gameplay cues use
+native POKEY pitch envelopes in `src/sound.s`; title music is converted with
+`sid2sapr`, LZSS-compressed, and played with timer-driven POKEY softbass. See
+[`docs/sid-music.md`](docs/sid-music.md) for the reproducible pipeline.
 
 See [docs/architecture.md](docs/architecture.md) for the graphics alternatives,
 memory map, boot strategy, reference projects, and prioritized assembly

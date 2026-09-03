@@ -12,11 +12,13 @@ import generate_assets  # noqa: E402
 
 
 class AssetPipelineTests(unittest.TestCase):
-    def test_a2fm_title_matches_reference_and_atari_geometry(self):
+    def test_title_masters_and_atari_geometry(self):
         decoded = generate_assets.decode_a2fm_title()
         self.assertEqual(decoded.size, (560, 192))
         self.assertIsNotNone(decoded.getbbox())
-        self.assertEqual(generate_assets.make_atari_title().size, (320, 110))
+        title = generate_assets.make_atari_title()
+        self.assertEqual(title.size, (196, 147))
+        self.assertIsNotNone(title.getbbox())
 
     def test_apple_grid_masters_build_exact_atari_cell_geometry(self):
         decoded = generate_assets.decode_a2fm_grid_screen()
@@ -24,13 +26,21 @@ class AssetPipelineTests(unittest.TestCase):
         self.assertIsNotNone(decoded.getbbox())
         grid = generate_assets.make_atari_grid_screen()
         self.assertEqual(grid.size, (320, 192))
-        self.assertEqual(grid.getbbox(), (80, 26, 240, 166))
+        self.assertEqual(grid.crop((80, 26, 240, 166)).getbbox(), (0, 0, 160, 140))
+        self.assertIsNotNone(grid.crop((80, 0, 240, 26)).getbbox())
+        self.assertIsNone(grid.crop((248, 46, 312, 62)).getbbox())
         # Decorative DHGR lines intentionally contain small gaps, so inspect a
         # narrow neighborhood around every intended cell boundary.
         for x in (80, 112, 144, 176, 208, 239):
             self.assertIsNotNone(grid.crop((max(0, x - 1), 26, x + 2, 166)).getbbox(), x)
         for y in (26, 54, 82, 110, 138, 165):
             self.assertIsNotNone(grid.crop((80, max(0, y - 1), 240, y + 2)).getbbox(), y)
+
+    def test_game_logo_master_fits_the_atari_header_strip(self):
+        logo = generate_assets.make_game_logo()
+        self.assertEqual(logo.size, (160, 24))
+        self.assertIsNotNone(logo.getbbox())
+        self.assertLessEqual(logo.getbbox()[3], 24)
 
     def test_apple_presentation_art_converts_to_atari_panels(self):
         for name in ("presents_master.ppm", "game_over_master.png"):
@@ -134,7 +144,7 @@ class AssetPipelineTests(unittest.TestCase):
             root = Path(directory)
             generate_assets.build(root / "assets", root / "previews")
             font = (root / "assets" / "font.bin").read_bytes()
-            for character in (*range(1, 8), ord("["), ord("]")):
+            for character in (*range(1, 8), ord("."), ord(">"), ord("["), ord("]")):
                 glyph = font[character * 8 : (character + 1) * 8]
                 self.assertNotEqual(glyph, bytes(8), character)
 

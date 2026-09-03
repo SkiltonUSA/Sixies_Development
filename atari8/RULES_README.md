@@ -22,10 +22,11 @@ older C64 generation variant.
 
 ## Presentation parity in this first port
 
-The native build includes a centered XOR merge-star flash, merge callouts,
-merge tones, invalid-placement sound, instructions, title music, and game-over
-presentation. It does not yet include
-the Apple II's persistent ten-entry high-score file and initials editor, nor the
-full C64/Apple ripple, shake, three-particle falling fireworks, credits, and
-attract-mode animation sequence. Those are presentation/persistence additions; the playable
+The native build includes an inward row-and-column grid ripple with diagonal
+arms for face-4 merges, a whole-screen flash when sixes disappear, a centered
+XOR merge-star flash, outcome-specific merge callouts, merge tones, invalid-placement sound,
+instructions, title music, game-over presentation, and the persistent ten-entry
+high-score table with three-initial entry. It does not yet include the
+full C64/Apple shake and three-particle falling fireworks. Those are
+presentation additions; the playable
 generation, placement, merge, chain, and scoring core above is present.

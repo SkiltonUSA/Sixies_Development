@@ -3,6 +3,8 @@
 ; singles, weighted forced singles, complete orthogonal groups, origin-first
 ; double resolution, and the 50-point value-6 removal bonus.
 
+CALLOUT_FRAMES = 30
+
 .segment "BSS"
 board:              .res 25
 visited:            .res 25
@@ -27,6 +29,7 @@ active_index:       .res 1
 placed_second:      .res 1
 group_value:        .res 1
 group_count:        .res 1
+merged_count:       .res 1
 queue_head:         .res 1
 queue_tail:         .res 1
 scan_index:         .res 1
@@ -42,6 +45,10 @@ cell_columns:       .byte 0,1,2,3,4, 0,1,2,3,4, 0,1,2,3,4, 0,1,2,3,4, 0,1,2,3,4
 cell_rows:          .byte 0,0,0,0,0, 1,1,1,1,1, 2,2,2,2,2, 3,3,3,3,3, 4,4,4,4,4
 pair_first:         .byte 1,1,2,2,3,3
 pair_second:        .byte 2,3,3,4,3,4
+debug_full_board:   .byte 1,2,3,4,5, 2,3,4,5,6, 3,4,5,6,1
+                    .byte 4,5,6,1,2, 5,6,1,2,3
+; Fives (3) and Sixies (5) are outcome-specific and never selected randomly.
+regular_callouts:   .byte 0,1,2,4,6,7,8,9
 
 .segment "CODE"
 
@@ -61,6 +68,21 @@ new_game:
     ora #1
     sta rng_state
     jsr spawn_piece
+    rts
+
+; Fill all 25 cells with a merge-free Latin pattern for the period-key test
+; shortcut. Unlike faces remain orthogonally adjacent, like a blocked game.
+debug_fill_board:
+    ldx #24
+@fill:
+    lda debug_full_board,x
+    sta board,x
+    dex
+    bpl @fill
+    lda #0
+    sta piece_visible
+    lda #1
+    sta game_over
     rts
 
 random8:
@@ -457,6 +479,7 @@ resolve_at:
     bcs :+
     jmp @done
 :
+    sta merged_count
     inc merge_depth
     jsr score_group
     ldy #0
@@ -479,6 +502,12 @@ resolve_at:
     jsr redraw_score_digits
     lda group_value
     jsr play_merge_sound
+    lda group_value
+    cmp #6
+    bne :+
+    jsr flash_six_clear
+:
+    jsr run_merge_grid_ripple
     ; Flash the supplied four-point star at the resolved die before the word
     ; callout. XOR keeps it visible over upgraded dice and cleared six cells.
     lda active_index
@@ -495,20 +524,25 @@ resolve_at:
     jsr wait_frames
     lda active_index
     jsr show_merge_star
+    ; Reserve the named outcome callouts for exactly three matching dice:
+    ; three 4s create a 5 (Fives), and three 5s create a 6 (Sixies).
+    lda merged_count
+    cmp #3
+    bne @generic
     lda group_value
     cmp #4
     beq @fives
     cmp #5
     beq @sixies
+@generic:
     lda merge_depth
     cmp #2
     bcs @awesome
     jsr random8
     and #7
-    cmp #7
-    bne @show
-    lda #9
-    bne @show
+    tax
+    lda regular_callouts,x
+    jmp @show
 @fives:
     lda #3
     bne @show
@@ -520,10 +554,9 @@ resolve_at:
 @show:
     sta text_index
     jsr show_callout
-    lda #8
+    lda #CALLOUT_FRAMES
     jsr wait_frames
-    lda text_index
-    jsr show_callout
+    jsr hide_callout
     ldx active_index
     lda board,x
     beq @done

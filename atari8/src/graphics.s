@@ -7,6 +7,11 @@ BOX_TOP_RIGHT = 4
 BOX_BOTTOM_LEFT = 5
 BOX_BOTTOM = 6
 BOX_BOTTOM_RIGHT = 7
+CALLOUT_UNDERLAY = $9E60
+HIRES_WHITE = $0E
+GAME_GOLD_HUE = $10
+GAME_CYAN_HUE = $A0
+GAME_CYAN_BRIGHT = $AE
 
 .segment "BSS"
 text_column:        .res 1
@@ -26,6 +31,11 @@ score_string:       .res 6
 preview_show_x:     .res 1
 rle_count:          .res 1
 rle_value:          .res 1
+ripple_left:        .res 1
+ripple_right:       .res 1
+ripple_top:         .res 1
+ripple_bottom:      .res 1
+dli_middle_hue:     .res 1
 
 .segment "DLIST"
 ; ANTIC wraps display-list DMA within a 1K block. Keep the complete 202-byte
@@ -33,13 +43,24 @@ rle_value:          .res 1
 display_list:
     .byte $70,$70,$70
     .byte $4F, <SCREEN, >SCREEN
-    .repeat SCREEN_SPLIT-1
+    .repeat 23
+        .byte $0F
+    .endrepeat
+    ; The gameplay logo occupies bitmap rows 1-24. Change from its gold hue
+    ; to cyan after row 24; other pages leave DLI NMIs disabled.
+    .byte $8F
+    .repeat SCREEN_SPLIT-25
         .byte $0F
     .endrepeat
     ; ANTIC DMA cannot cross a 4K boundary. Restart at $9000 after 100
     ; 40-byte rows, leaving the final 96 bytes of the $8xxx page unused.
     .byte $4F, <SCREEN_SECOND, >SCREEN_SECOND
-    .repeat SCREEN_LINES-SCREEN_SPLIT-1
+    .repeat 65
+        .byte $0F
+    .endrepeat
+    ; Switch the horizontal rule and boxed controls back to gold at row 167.
+    .byte $8F
+    .repeat 25
         .byte $0F
     .endrepeat
     .byte $41, <display_list, >display_list
@@ -79,15 +100,13 @@ callout_hi:         .repeat 10, index
 score_div_lo:       .byte <10000,<1000,<100,<10,<1
 score_div_hi:       .byte >10000,>1000,>100,>10,>1
 
-text_sixies:        .asciiz "SIXIES"
 text_score:         .asciiz "SCORE"
-text_next:          .asciiz "PIECE"
 text_new_game:      .asciiz "[N]EW GAME"
 text_instructions:  .asciiz "[I]NSTRUCTIONS"
-text_title_prompt:  .asciiz "PRESS FIRE SPACE OR START"
+text_title_prompt:  .asciiz "FIRE SPACE START   C CREDITS"
 text_64k:           .asciiz "ATARI 800XL 64K"
 text_128k:          .asciiz "ATARI 130XE 128K ENHANCED"
-text_restart:       .asciiz "PRESS FIRE SPACE OR START"
+text_restart:       .asciiz "PRESS TO VIEW HIGH SCORES"
 text_new_confirm:   .asciiz "NEW GAME  Y YES  N NO"
 
 title_logo_asset:   .incbin "build/assets/title_logo.rle"
@@ -103,7 +122,7 @@ merge_star_asset:   .incbin "build/assets/merge_star.bin"
 callout_asset:      .incbin "build/assets/callouts.bin"
 font_asset:         .incbin "build/assets/font.bin"
 
-.segment "CODE"
+.segment "AUXCODE"
 
 video_init:
     lda #0
@@ -117,7 +136,7 @@ video_init:
     sta COLPF2
     sta COLPF3
     sta COLBK
-    lda #$0E
+    lda #HIRES_WHITE
     sta COLOR1
     sta COLPF1
     lda #<display_list
@@ -133,6 +152,43 @@ video_init:
     sta SDMCTL
     sta DMACTL
     rts
+
+; Both marked rows call one scanline-aware handler. This avoids phase errors
+; when a page finishes drawing after the first DLI position in the frame.
+color_band_dli:
+    pha
+    lda VCOUNT
+    cmp #60
+    bcs @footer
+    lda dli_middle_hue
+    jmp @set
+@footer:
+    lda #GAME_GOLD_HUE
+@set:
+    sta WSYNC
+    sta COLPF2
+    pla
+    rti
+
+arm_gameplay_dli:
+    lda #GAME_CYAN_HUE
+    bne arm_color_band_dli
+
+; The instruction page uses the same display-list split rows with a different
+; middle color: gold header, white body, then gold continuation box.
+arm_instructions_dli:
+    lda #0
+arm_color_band_dli:
+    sta dli_middle_hue
+    lda #<color_band_dli
+    sta VDSLST
+    lda #>color_band_dli
+    sta VDSLST+1
+    lda #$C0
+    sta NMIEN
+    rts
+
+.segment "CODE"
 
 ; Expand a complete 7936-byte physical ANTIC screen from zp_asset to $8000.
 ; Packet bit 7 selects repeat/literal; low 7 bits store count minus one.
@@ -635,13 +691,6 @@ draw_mascot:
     jmp blit_or
 
 draw_piece_sidebar:
-    lda #<text_next
-    sta zp_text
-    lda #>text_next
-    sta zp_text+1
-    lda #48
-    ldx #31
-    jsr draw_text
     lda piece_a
     ldx #31
     jsr draw_sidebar_die
@@ -840,20 +889,20 @@ render_game:
     lda #>game_grid_asset
     sta zp_asset+1
     jsr unpack_screen_rle
-    lda #<text_sixies
-    sta zp_text
-    lda #>text_sixies
-    sta zp_text+1
-    lda #4
-    ldx #17
-    jsr draw_text
     jsr draw_score
     jsr draw_board_dice
     jsr draw_piece_preview
     jsr draw_mascot
     jsr draw_piece_sidebar
     jsr draw_game_footer
-    jmp video_update_end
+    ; Mode F takes foreground luminance from PF1 and hue from PF2. Start each
+    ; frame gold for the isolated logo; the display-list interrupt changes
+    ; subsequent rows to cyan while both backgrounds retain zero luminance.
+    lda #GAME_GOLD_HUE
+    sta COLOR2
+    sta COLPF2
+    jsr video_update_end
+    jmp arm_gameplay_dli
 
 show_title:
     jsr video_update_begin
@@ -866,7 +915,7 @@ show_title:
     sta zp_text
     lda #>text_title_prompt
     sta zp_text+1
-    lda #146
+    lda #154
     ldx #8
     jsr draw_text
     lda ram_kb
@@ -883,7 +932,7 @@ show_title:
     lda #>text_64k
     sta zp_text+1
 @machine:
-    lda #166
+    lda #176
     ldx #8
     jsr draw_text
     jmp video_update_end
@@ -904,7 +953,11 @@ show_instructions:
     lda #>instructions_asset
     sta zp_asset+1
     jsr unpack_screen_rle
-    jmp video_update_end
+    lda #GAME_GOLD_HUE
+    sta COLOR2
+    sta COLPF2
+    jsr video_update_end
+    jmp arm_instructions_dli
 
 show_new_game_confirm:
     lda #<text_new_confirm
@@ -933,7 +986,9 @@ show_game_over:
     jsr draw_text
     jmp video_update_end
 
-; A = callout index 0..9. XOR permits the same call to remove the overlay.
+; A = callout index 0..9. Center it on the resolved merge cell, clamping the
+; 80-pixel banner inside the 160-pixel board. Save and black out the covered
+; pixels first so the bright artwork remains readable over dice and grid lines.
 show_callout:
     tax
     lda callout_lo,x
@@ -944,11 +999,29 @@ show_callout:
     sta blit_width
     lda #24
     sta blit_height
-    lda #30
+    ldx active_index
+    lda cell_x_bytes,x
+    sec
+    sbc #3
+    cmp #10
+    bcs @left_ok
+    lda #10
+@left_ok:
+    cmp #21
+    bcc @right_ok
+    lda #20
+@right_ok:
     sta blit_x
-    lda #110
+    lda cell_y_pixels,x
+    clc
+    adc #2
     sta blit_y
-    jmp blit_xor
+    jsr save_callout_underlay
+    jsr clear_bitmap_rect
+    jmp blit_or
+
+hide_callout:
+    jmp restore_callout_underlay
 
 ; A = resolved board-cell index. XOR the supplied four-point star over it.
 show_merge_star:
@@ -969,6 +1042,8 @@ show_merge_star:
     sta blit_height
     jmp blit_xor
 
+.segment "AUXCODE"
+
 ; Wait A display frames and service POKEY each frame.
 wait_frames:
     sta zp_frames
@@ -986,11 +1061,19 @@ wait_frames:
     bne @frame
     rts
 
+.segment "CODE"
+
 video_update_begin:
     lda #0
     sta NMIEN
     sta SDMCTL
     sta DMACTL
+    lda #HIRES_WHITE
+    sta COLOR1
+    sta COLPF1
+    lda #0
+    sta COLOR2
+    sta COLPF2
     rts
 
 video_update_end:
@@ -999,4 +1082,246 @@ video_update_end:
     sta DMACTL
     lda #$40
     sta NMIEN
+    rts
+
+.segment "AUXCODE"
+
+; Flash the complete display when a group of sixes disappears. Swapping the
+; mode-F foreground and background colors is instantaneous and leaves every
+; screen byte untouched, avoiding a full-frame redraw or tear.
+flash_six_clear:
+    lda #$40
+    sta NMIEN
+    lda #GAME_CYAN_BRIGHT
+    sta COLOR4
+    sta COLBK
+    sta COLOR2
+    sta COLPF2
+    lda #0
+    sta COLOR1
+    sta COLPF1
+    lda #5
+    jsr wait_frames
+    lda #0
+    sta COLOR4
+    sta COLBK
+    lda #GAME_GOLD_HUE
+    sta COLOR2
+    sta COLPF2
+    lda #HIRES_WHITE
+    sta COLOR1
+    sta COLPF1
+    jmp arm_gameplay_dli
+
+; Preserve the exact 80x24 bitmap below a callout. X is a linear 0..239
+; buffer index; blit_row selects the physical ANTIC row.
+save_callout_underlay:
+    ldx #0
+    lda #0
+    sta blit_row
+@row:
+    lda blit_y
+    clc
+    adc blit_row
+    jsr set_screen_row
+    ldy blit_x
+    lda #10
+    sta zp_temp
+@byte:
+    lda (zp_screen),y
+    sta CALLOUT_UNDERLAY,x
+    inx
+    iny
+    dec zp_temp
+    bne @byte
+    inc blit_row
+    lda blit_row
+    cmp #24
+    bne @row
+    rts
+
+; Restore the saved bitmap after the half-second callout hold.
+restore_callout_underlay:
+    ldx #0
+    lda #0
+    sta blit_row
+@row:
+    lda blit_y
+    clc
+    adc blit_row
+    jsr set_screen_row
+    ldy blit_x
+    lda #10
+    sta zp_temp
+@byte:
+    lda CALLOUT_UNDERLAY,x
+    sta (zp_screen),y
+    inx
+    iny
+    dec zp_temp
+    bne @byte
+    inc blit_row
+    lda blit_row
+    cmp #24
+    bne @row
+    rts
+
+; Pulse the resolved row and column inward from all four grid edges. A face-4
+; merge also brings four diagonal arms inward from the corners. Each step is
+; inverted for two frames and then restored before advancing.
+run_merge_grid_ripple:
+    lda active_index
+    ldx #0
+@find_row:
+    cmp #5
+    bcc @position_ready
+    sec
+    sbc #5
+    inx
+    bne @find_row
+@position_ready:
+    sta scan_index
+    stx weight_index
+    lda #0
+    sta queue_head
+@step:
+    jsr toggle_merge_ripple_step
+    lda #2
+    jsr wait_frames
+    jsr toggle_merge_ripple_step
+    inc queue_head
+    lda queue_head
+    cmp #5
+    bne @step
+    rts
+
+; Build the current edge positions. queue_ripple_xy removes duplicate cells
+; when orthogonal or diagonal arms converge at the resolved die.
+toggle_merge_ripple_step:
+    lda #0
+    sta group_count
+
+    lda queue_head
+    cmp scan_index
+    bcc @left_ready
+    lda scan_index
+@left_ready:
+    sta ripple_left
+
+    lda #4
+    sec
+    sbc queue_head
+    cmp scan_index
+    bcs @right_ready
+    lda scan_index
+@right_ready:
+    sta ripple_right
+
+    ldx queue_head
+    cpx weight_index
+    bcc @top_ready
+    ldx weight_index
+@top_ready:
+    stx ripple_top
+
+    lda #4
+    sec
+    sbc queue_head
+    tax
+    cpx weight_index
+    bcs @bottom_ready
+    ldx weight_index
+@bottom_ready:
+    stx ripple_bottom
+
+    lda ripple_left
+    ldx weight_index
+    jsr queue_ripple_xy
+    lda ripple_right
+    ldx weight_index
+    jsr queue_ripple_xy
+    lda scan_index
+    ldx ripple_top
+    jsr queue_ripple_xy
+    lda scan_index
+    ldx ripple_bottom
+    jsr queue_ripple_xy
+
+    lda group_value
+    cmp #4
+    bne @done
+    lda ripple_left
+    ldx ripple_top
+    jsr queue_ripple_xy
+    lda ripple_right
+    ldx ripple_top
+    jsr queue_ripple_xy
+    lda ripple_left
+    ldx ripple_bottom
+    jsr queue_ripple_xy
+    lda ripple_right
+    ldx ripple_bottom
+    jsr queue_ripple_xy
+@done:
+    rts
+
+; A = column, X = row. Toggle each candidate no more than once per step.
+queue_ripple_xy:
+    sta zp_temp
+    lda row_offsets,x
+    clc
+    adc zp_temp
+    ldx #0
+@check:
+    cpx group_count
+    beq @add
+    cmp group_queue,x
+    beq @done
+    inx
+    bne @check
+@add:
+    ldx group_count
+    sta group_queue,x
+    inc group_count
+    jmp invert_ripple_cell
+@done:
+    rts
+
+; A = board-cell index. Invert only the 24-line interior, retaining the four
+; vertical grid-border pixels at each side of the 32-pixel cell.
+invert_ripple_cell:
+    tax
+    lda cell_x_bytes,x
+    sta blit_x
+    lda cell_y_pixels,x
+    clc
+    adc #2
+    sta blit_y
+    lda #0
+    sta blit_row
+@row:
+    lda blit_y
+    clc
+    adc blit_row
+    jsr set_screen_row
+    ldy blit_x
+    lda (zp_screen),y
+    eor #$0F
+    sta (zp_screen),y
+    iny
+    lda (zp_screen),y
+    eor #$FF
+    sta (zp_screen),y
+    iny
+    lda (zp_screen),y
+    eor #$FF
+    sta (zp_screen),y
+    iny
+    lda (zp_screen),y
+    eor #$F0
+    sta (zp_screen),y
+    inc blit_row
+    lda blit_row
+    cmp #24
+    bne @row
     rts

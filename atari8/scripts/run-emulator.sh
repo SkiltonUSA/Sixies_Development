@@ -30,6 +30,6 @@ exec atari800 \
     -no-autosave-config \
     "${machine[@]}" \
     -ntsc -nobasic -xlxe_rom "$ROM" \
-    -ntsc-filter-preset monochrome \
+    -ntsc-filter-preset rgb \
     -no-kbdjoy0 -kbdjoy1 -windowed \
     "${image_args[@]}"

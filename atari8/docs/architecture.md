@@ -8,7 +8,7 @@ clock, and disk services.
 
 | Display option | Effective picture | Advantages | Cost / decision |
 | --- | --- | --- | --- |
-| ANTIC F / GRAPHICS 8 | 320x192, 1bpp | Sharpest standard bitmap; portable monochrome; close to C64 hi-res and Apple DHGR | Selected; roughly 7.5K plus a display list |
+| ANTIC F / GRAPHICS 8 | 320x192, 1bpp | Sharpest standard bitmap; portable one-color pixels; close to C64 hi-res and Apple DHGR | Selected; roughly 7.5K plus a display list; gold header/footer and cyan grid area during gameplay |
 | NTSC artifact color in mode F | 320x192 source | Can synthesize extra colors | Phase-, monitor-, and emulator-dependent; poor PAL consistency |
 | ANTIC 4/5 character modes | 160/80-pixel color cells | Low RAM, character animation, four colors per line | Less horizontal detail; art would need a second conversion |
 | GTIA 9/10/11 | 80x192 with 9/16 shades or hues | Strong color/gradient effects | Too coarse for a readable 5x5 board and small dice |
@@ -16,20 +16,22 @@ clock, and disk services.
 
 Player/missile graphics and display-list interrupts remain good future options
 for a colored cursor, star particles, and per-region accent colors without
-giving up the stable monochrome bitmap.
+giving up the stable one-bit bitmap.
 
 ## Memory and runtime
 
 | Address | Use |
 | --- | --- |
 | `$0082-$0092` | Private zero-page pointers, counters, and unbanked PORTB state |
-| `$2000-$2FAB` | Game and renderer code |
+| `$2000-$2FDE` | Game and renderer code |
 | `$3000-$30C9` | 1K-aligned ANTIC display list |
-| `$30CA-$7D2C` | Packed assets and lookup tables |
-| `$7D2D-$7DB8` | Rule and renderer state |
+| `$30CA-$7D29` | Packed assets and lookup tables |
+| `$7D2A-$7EDB` | Auxiliary animation, palette flash, and callout save/restore code |
+| `$7EDC-$7F6C` | Rule and renderer state |
 | `$8000-$8F9F` | First 100 bitmap rows |
 | `$8FA0-$8FFF` | Padding required before the next 4K ANTIC fetch region |
 | `$9000-$9E5F` | Final 92 bitmap rows |
+| `$9E60-$9F4F` | Non-displayed temporary callout underlay |
 | `$4000-$7FFF`, extended bank 2 | 130XE cached title framebuffer while selected |
 
 The 130XE probe writes different signatures into two extended banks and restores
@@ -47,7 +49,7 @@ Title, presentation, instructions, Game Over, and the Apple-derived gameplay
 grid are stored in PackBits-style RLE streams. One shared 6502 routine expands
 them directly across the 31 reserved framebuffer pages, including ANTIC's
 `$8FA0-$8FFF` boundary gap. The grid brings the 64K build close to its fixed
-framebuffer boundary, with 583 bytes currently free below `$8000`; future large
+framebuffer boundary, with 147 bytes currently free below `$8000`; future large
 assets should use 130XE banks or load from disk.
 
 ## Boot and build strategy

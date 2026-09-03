@@ -1,10 +1,14 @@
 ; Atari 8-bit OS shadow registers and hardware registers used by Sixies.
 ; Names follow the Atari Hardware/OS manuals and cc65 atari.inc conventions.
 
+POKMSK          = $0010
 RTCLOK          = $0012
 ATRACT          = $004D
+VDSLST          = $0200
+VIMIRQ          = $0216
 SDLSTL          = $0230
 SDMCTL          = $022F
+SSKCTL          = $0232
 GPRIOR          = $026F
 STICK0          = $0278
 STICK1          = $0279
@@ -40,7 +44,10 @@ AUDC4           = $D207
 AUDCTL          = $D208
 KBCODE          = $D209
 RANDOM          = $D20A
+IRQEN           = $D20E
+IRQST           = $D20E
 SKCTL           = $D20F
+SKSTAT          = $D20F
 
 PORTB           = $D301
 
@@ -48,14 +55,18 @@ DMACTL          = $D400
 CHACTL          = $D401
 DLISTL          = $D402
 DLISTH          = $D403
+WSYNC           = $D40A
 VCOUNT          = $D40B
 NMIEN           = $D40E
 
 ; Atari keyboard scan codes (unshifted). Atari800's second keyboard-joystick
 ; layout also supplies host WASD through STICK1 for reliable emulator input.
 KEY_RETURN      = $0C
+KEY_DELETE      = $34
 KEY_I           = $0D
+KEY_C           = $12
 KEY_SPACE       = $21
+KEY_PERIOD      = $22
 KEY_N           = $23
 KEY_M           = $25
 KEY_E           = $2A
@@ -90,3 +101,5 @@ ACTION_NEW      = 7
 ACTION_INFO     = 8
 ACTION_MUTE     = 9
 ACTION_YES      = 10
+ACTION_DEBUG_FILL = 11
+ACTION_CREDITS  = 12

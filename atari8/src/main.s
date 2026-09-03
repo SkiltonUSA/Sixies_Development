@@ -45,6 +45,16 @@ start:
     jsr sound_init
     jsr video_init
     cli
+    jsr high_scores_init
+.ifdef HIGH_SCORE_DEMO
+    lda #<$0578                 ; 1400, one point above the seeded first place
+    sta score_lo
+    lda #>$0578
+    sta score_hi
+    jsr high_scores_after_game
+@high_score_demo_wait:
+    jmp @high_score_demo_wait
+.endif
     jsr show_presents
     lda #90
     jsr wait_frames
@@ -62,9 +72,8 @@ title_loop:
     jsr cache_title_128
 @title_ready:
     jsr arm_input
-    lda #1
-    sta music_enabled
-    jsr wait_for_start
+    jsr sound_start_music
+    jsr wait_for_title
     jsr sound_stop_music
     jsr show_instructions
     jsr arm_input
@@ -105,6 +114,10 @@ game_loop:
     cmp #ACTION_MUTE
     bne :+
     jmp toggle_audio
+:
+    cmp #ACTION_DEBUG_FILL
+    bne :+
+    jmp debug_game_over
 :
     jmp game_loop
 
@@ -178,6 +191,13 @@ toggle_audio:
     jsr sound_toggle
     jmp game_loop
 
+; Development shortcut: display a completely occupied board, then follow the
+; same Game Over and high-score path as a naturally exhausted grid.
+debug_game_over:
+    jsr debug_fill_board
+    jsr render_game
+    jmp game_loop
+
 instructions:
     jsr show_instructions
 @wait:
@@ -205,8 +225,12 @@ request_new_game:
 
 game_finished:
     jsr show_game_over
+    jsr arm_input
     jsr wait_for_start
-    jmp title_loop
+    jsr high_scores_after_game
+    jsr arm_input
+    jsr wait_for_start
+    jmp begin_game
 
 wait_for_start:
 @wait:
@@ -274,6 +298,10 @@ wait_action:
     beq @place
     cmp #KEY_RETURN
     beq @place
+    cmp #KEY_PERIOD
+    beq @debug_fill
+    cmp #KEY_C
+    beq @credits
     cmp #KEY_N
     beq @new
     cmp #KEY_I
@@ -300,6 +328,12 @@ wait_action:
     rts
 @place:
     lda #ACTION_PLACE
+    rts
+@debug_fill:
+    lda #ACTION_DEBUG_FILL
+    rts
+@credits:
+    lda #ACTION_CREDITS
     rts
 @new:
     lda #ACTION_NEW
@@ -505,4 +539,7 @@ copy_bank_to_screen:
 
 .include "src/rules.s"
 .include "src/sound.s"
+.include "src/sid_music.s"
+.include "src/high_scores.s"
+.include "src/credits.s"
 .include "src/graphics.s"

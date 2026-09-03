@@ -268,13 +268,48 @@ def make_atari_grid_screen() -> Image.Image:
     )
     screen = Image.new("1", (320, 192), 0)
     screen.paste(grid, ATARI_GRID_POSITION)
+    screen.paste(make_game_logo(), (80, 1))
     return screen
 
 
 def make_atari_title() -> Image.Image:
-    """Scale the complete Apple DHGR composition to the Atari title region."""
-    title = decode_a2fm_title().resize((320, 110), Image.Resampling.LANCZOS)
-    return title.point(lambda value: 255 if value >= 96 else 0, mode="1")
+    """Convert the supplied flat Sixies title to an ANTIC-F composition."""
+    with Image.open(ATARI / "assets" / "title_master.png") as source:
+        if source.size != (256, 240):
+            raise ValueError("Atari title master must be the supplied 256x240 image")
+        rgb = source.convert("RGB")
+
+    # Taking the brightest channel retains each saturated mascot and letter
+    # color when reduced to monochrome. 196x147 compensates for ANTIC-F's
+    # narrow NTSC pixels while leaving two unobstructed text rows below it.
+    intensity = ImageChops.lighter(
+        ImageChops.lighter(rgb.getchannel("R"), rgb.getchannel("G")),
+        rgb.getchannel("B"),
+    )
+    title = intensity.resize((196, 147), Image.Resampling.LANCZOS)
+    return title.point(lambda value: 255 if value >= 128 else 0, mode="1")
+
+
+def make_game_logo() -> Image.Image:
+    """Center the supplied Sixies master in the strip above the game grid."""
+    with Image.open(ATARI / "assets" / "game_logo_master.png") as source:
+        if source.size != (1983, 793):
+            raise ValueError("gameplay logo must be the supplied 1983x793 master")
+        rgb = source.convert("RGB")
+
+    intensity = ImageChops.lighter(
+        ImageChops.lighter(rgb.getchannel("R"), rgb.getchannel("G")),
+        rgb.getchannel("B"),
+    )
+    visible = intensity.point(lambda value: 255 if value >= 24 else 0)
+    bounds = visible.getbbox()
+    if bounds is None:
+        raise ValueError("gameplay logo master has no visible pixels")
+    logo = intensity.crop(bounds)
+    logo.thumbnail((152, 24), Image.Resampling.LANCZOS)
+    canvas = Image.new("L", (160, 24), 0)
+    canvas.paste(logo, ((160 - logo.width) // 2, (24 - logo.height) // 2))
+    return canvas.point(lambda value: 255 if value >= 108 else 0, mode="1")
 
 
 def make_atari_presentation(path: Path) -> Image.Image:
@@ -558,7 +593,7 @@ def build(output: Path, previews: Path) -> None:
     output.mkdir(parents=True, exist_ok=True)
     previews.mkdir(parents=True, exist_ok=True)
 
-    title = make_art_screen(make_atari_title(), (0, 18))
+    title = make_art_screen(make_atari_title(), (62, 0))
     save_rle_screen(title, output / "title_logo.rle", previews / "title_logo.png")
 
     presents = make_panel_screen(make_atari_presentation(APPLE / "presents_master.ppm"))
@@ -654,6 +689,12 @@ def build(output: Path, previews: Path) -> None:
     )
     font[ord("]") * 8 : (ord("]") + 1) * 8] = bytes(
         (0x3C, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x3C)
+    )
+    font[ord(".") * 8 : (ord(".") + 1) * 8] = bytes(
+        (0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x00)
+    )
+    font[ord(">") * 8 : (ord(">") + 1) * 8] = bytes(
+        (0x40, 0x20, 0x10, 0x08, 0x10, 0x20, 0x40, 0x00)
     )
     for digit in range(10):
         source = (16 + digit) * 8
