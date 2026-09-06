@@ -1,7 +1,7 @@
 ; ---------------------------------------------------------------------------
-; Native ANTIC-F credits page. The composition follows the supplied mockup:
-; a centered heading, decorative dice on the left, compact centered copy, and
-; one clear return prompt. Text stays native so it remains sharp at 320x192.
+; Native ANTIC-F credits page. Design/studio credits appear first; the centered
+; music credit is revealed two seconds later. Text stays native so it remains
+; sharp at 320x192.
 ; ---------------------------------------------------------------------------
 
 .segment "AUXCODE"
@@ -34,7 +34,8 @@ wait_for_title:
 
 @show_credits:
     jsr show_credits
-    lda #11
+    ; show_credits spends the first two seconds on the design credit alone.
+    lda #9
     jsr wait_attract_seconds
     bcc @return_title
     cmp #ACTION_CREDITS
@@ -154,36 +155,42 @@ poll_attract_input:
 show_credits:
     jsr video_update_begin
     jsr high_score_clear_screen
-
-    lda #<credits_title
-    sta zp_text
-    lda #>credits_title
-    sta zp_text+1
-    lda #8
-    ldx #16
-    jsr draw_text
-
-    lda #28
-    jsr set_screen_row
-    lda #$FF
-    ldy #3
-@line:
-    sta (zp_screen),y
-    iny
-    cpy #37
-    bne @line
-
-    ; Two supplied die faces echo the mockup's illustrated top-left cluster.
-    lda #5
-    ldx #3
-    jsr draw_sidebar_die
-    lda #6
-    ldx #7
-    jsr draw_sidebar_die
+    jsr draw_credits_logo
 
     lda #0
     sta credits_line_index
-@copy:
+@initial_copy:
+    ldx credits_line_index
+    lda credits_text_lo,x
+    sta zp_text
+    lda credits_text_hi,x
+    sta zp_text+1
+    lda credits_text_rows,x
+    pha
+    lda credits_text_columns,x
+    tax
+    pla
+    jsr draw_text
+    ldx credits_line_index
+    inx
+    stx credits_line_index
+    cpx #CREDITS_INITIAL_COUNT
+    bne @initial_copy
+
+    lda #<credits_return
+    sta zp_text
+    lda #>credits_return
+    sta zp_text+1
+    lda #176
+    ldx #10
+    jsr draw_text
+    jsr arm_credits_video
+
+    ; Hold the uncluttered design credit for exactly two NTSC seconds while
+    ; continuing to service the title music, then reveal the music credit.
+    lda #120
+    jsr wait_frames
+@music_copy:
     ldx credits_line_index
     lda credits_text_lo,x
     sta zp_text
@@ -199,44 +206,45 @@ show_credits:
     inx
     stx credits_line_index
     cpx #CREDITS_TEXT_COUNT
-    bne @copy
+    bne @music_copy
+    rts
 
-    lda #<credits_return
-    sta zp_text
-    lda #>credits_return
-    sta zp_text+1
-    lda #176
-    ldx #7
-    jsr draw_text
-    jmp video_update_end
-
-CREDITS_TEXT_COUNT = 10
+CREDITS_INITIAL_COUNT = 2
+CREDITS_TEXT_COUNT = 4
 
 credits_text_lo:
-    .byte <credits_design, <credits_author, <credits_music, <credits_track
-    .byte <credits_composer_first, <credits_composer_last, <credits_sonix
-    .byte <credits_studio, <credits_games, <credits_year
+    .byte <credits_design, <credits_studio
+    .byte <credits_music, <credits_composer
 credits_text_hi:
-    .byte >credits_design, >credits_author, >credits_music, >credits_track
-    .byte >credits_composer_first, >credits_composer_last, >credits_sonix
-    .byte >credits_studio, >credits_games, >credits_year
+    .byte >credits_design, >credits_studio
+    .byte >credits_music, >credits_composer
 credits_text_rows:
-    .byte 42,54,78,90,102,114,126,144,156,164
+    .byte 80,92,116,132
 credits_text_columns:
-    .byte 16,20,21,18,16,16,21,17,22,18
+    .byte 4,7,10,4
 
-credits_title:          .asciiz "CREDITS"
-credits_design:         .asciiz "DESIGN CODE ART"
-credits_author:         .asciiz "DSKILTON"
-credits_music:          .asciiz "MUSIC"
-credits_track:          .asciiz "ETERNITY 1"
-credits_composer_first: .asciiz "PRZEMYSLAW"
-credits_composer_last:  .asciiz "LEWANDOWSKI"
-credits_sonix:          .asciiz "SONIX"
-credits_studio:         .asciiz "STUDIO 313 GAMES"
-credits_games:          .asciiz "PRESENTS"
-credits_year:           .asciiz "COPYRIGHT 2026"
-credits_return:         .asciiz "FIRE STARTS  C RETURNS TITLE"
+credits_design:         .asciiz "DESIGN, CODE AND ART DSKILTON."
+credits_studio:         .asciiz "STUDIO313 GAMES, (C) 2026"
+credits_music:          .asciiz "MUSIC, ETERNITY 1 BY"
+credits_composer:       .asciiz "PRZEMYSLAW LEWANDOWSKI, SONIX"
+credits_return:         .asciiz "PRESS SPACE OR FIRE"
+
+; Draw the reduced 96x24 logo at the top center of the 320-pixel framebuffer
+; using the shared byte-aligned monochrome blitter.
+draw_credits_logo:
+    lda #<credits_logo_asset
+    sta zp_asset
+    lda #>credits_logo_asset
+    sta zp_asset+1
+    lda #14
+    sta blit_x
+    lda #0
+    sta blit_y
+    lda #12
+    sta blit_width
+    lda #24
+    sta blit_height
+    jmp blit_or
 
 .segment "BSS"
 credits_line_index: .res 1

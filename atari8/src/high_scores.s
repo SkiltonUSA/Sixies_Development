@@ -509,7 +509,7 @@ show_high_scores:
     lda #176
     ldx #3
     jsr draw_text
-    jmp video_update_end
+    jmp arm_high_score_video
 
 high_score_clear_screen:
     lda #<SCREEN

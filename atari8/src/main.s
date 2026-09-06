@@ -82,6 +82,7 @@ title_loop:
 begin_game:
     jsr new_game
     jsr render_game
+    jsr run_game_start_spiral
 
 game_loop:
     lda game_over
@@ -475,7 +476,7 @@ cache_title_128:
     cli
     lda #1
     sta title_cached
-    jsr video_update_end
+    jsr arm_title_video
 @done:
     rts
 
@@ -491,7 +492,7 @@ restore_title_128:
     lda zp_saved_portb
     sta PORTB
     cli
-    jmp video_update_end
+    jmp arm_title_video
 
 copy_screen_to_bank:
     lda #<SCREEN

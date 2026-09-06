@@ -22,6 +22,7 @@ COLOR1          = $02C5
 COLOR2          = $02C6
 COLOR3          = $02C7
 COLOR4          = $02C8
+PCOLR0          = $02C0
 
 HPOSP0          = $D000
 COLPM0          = $D012

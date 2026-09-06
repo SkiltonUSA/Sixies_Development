@@ -18,7 +18,7 @@ cursor_y:           .res 1
 orientation:        .res 1
 score_lo:           .res 1
 score_hi:           .res 1
-rng_state:          .res 1
+rng_state:          .res 4
 single_mode:        .res 1
 game_over:          .res 1
 piece_visible:      .res 1
@@ -29,7 +29,6 @@ active_index:       .res 1
 placed_second:      .res 1
 group_value:        .res 1
 group_count:        .res 1
-merged_count:       .res 1
 queue_head:         .res 1
 queue_tail:         .res 1
 scan_index:         .res 1
@@ -47,8 +46,9 @@ pair_first:         .byte 1,1,2,2,3,3
 pair_second:        .byte 2,3,3,4,3,4
 debug_full_board:   .byte 1,2,3,4,5, 2,3,4,5,6, 3,4,5,6,1
                     .byte 4,5,6,1,2, 5,6,1,2,3
-; Fives (3) and Sixies (5) are outcome-specific and never selected randomly.
-regular_callouts:   .byte 0,1,2,4,6,7,8,9
+; Match Apple II first_merge_effects: Awesome (0), Fives (3), and Sixies (5)
+; are reserved and never selected for a first generic merge.
+first_merge_callouts: .byte 1,2,4,6,7,8,9
 
 .segment "CODE"
 
@@ -63,10 +63,16 @@ new_game:
     sta score_hi
     sta game_over
     sta single_mode
+    ; Seed the same four-byte generator used by cc65 rand() on Apple IIe.
     lda RTCLOK+2
     eor RANDOM
-    ora #1
     sta rng_state
+    sta rng_state+2
+    lda RTCLOK+1
+    eor RANDOM
+    sta rng_state+1
+    sta rng_state+3
+    jsr random16
     jsr spawn_piece
     rts
 
@@ -85,29 +91,46 @@ debug_fill_board:
     sta game_over
     rts
 
-random8:
+; cc65's 32-bit LCG (a=$01010101, c=$B3B3B3B3), matching the Apple IIe
+; runtime. Return its 15-bit rand() result in X:A (high:low).
+random16:
+    clc
     lda rng_state
-    asl
-    bcc :+
-    eor #$1D
-:
-    bne :+
-    lda #$A5
-:
+    adc #$B3
     sta rng_state
+    adc rng_state+1
+    sta rng_state+1
+    adc rng_state+2
+    sta rng_state+2
+    eor rng_state
+    and #$7F
+    tax
+    lda rng_state+2
+    adc rng_state+3
+    sta rng_state+3
+    eor rng_state+1
     rts
 
-; X = modulus (1..255), returns A in 0..X-1.
+; X = modulus (1..255), returns the complete 15-bit random value modulo X.
+; Consuming both bytes prevents conditional correlations between the normal
+; pair/single roll and the following face/pair roll.
 random_mod_x:
     stx zp_modulus
-    jsr random8
-@reduce:
+    jsr random16
+    sta zp_choice
+    stx zp_temp
+    lda #0
+    ldy #16
+@bit:
+    asl zp_choice
+    rol zp_temp
+    rol
     cmp zp_modulus
-    bcc @done
-    sec
+    bcc @next
     sbc zp_modulus
-    bcs @reduce
-@done:
+@next:
+    dey
+    bne @bit
     rts
 
 ; A = board value, returns X = count.
@@ -225,6 +248,21 @@ spawn_piece:
 @normal_single:
     ldx eligible_count
     jsr random_mod_x
+    tax
+    cpx #3
+    bcc @base_single
+    lda four_unlocked
+    beq @single_five
+    cpx #3
+    beq @single_four
+@single_five:
+    lda #5
+    bne @store_single
+@single_four:
+    lda #4
+    bne @store_single
+@base_single:
+    txa
     clc
     adc #1
 @store_single:
@@ -479,7 +517,6 @@ resolve_at:
     bcs :+
     jmp @done
 :
-    sta merged_count
     inc merge_depth
     jsr score_group
     ldy #0
@@ -524,11 +561,9 @@ resolve_at:
     jsr wait_frames
     lda active_index
     jsr show_merge_star
-    ; Reserve the named outcome callouts for exactly three matching dice:
-    ; three 4s create a 5 (Fives), and three 5s create a 6 (Sixies).
-    lda merged_count
-    cmp #3
-    bne @generic
+    ; Match the Apple IIe outcomes for every group size: consuming 4s creates
+    ; a five, consuming 5s creates a six, and Awesome is reserved for later
+    ; generic merges in the same placement turn.
     lda group_value
     cmp #4
     beq @fives
@@ -538,10 +573,10 @@ resolve_at:
     lda merge_depth
     cmp #2
     bcs @awesome
-    jsr random8
-    and #7
+    ldx #7
+    jsr random_mod_x
     tax
-    lda regular_callouts,x
+    lda first_merge_callouts,x
     jmp @show
 @fives:
     lda #3
@@ -676,9 +711,5 @@ score_group:
     lda score_hi
     adc score_delta_hi
     sta score_hi
-    bcc @done
-    lda #$FF
-    sta score_lo
-    sta score_hi
-@done:
+    ; cc65 unsigned int scores on Apple IIe wrap naturally at 16 bits.
     rts

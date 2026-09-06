@@ -12,6 +12,7 @@ HIRES_WHITE = $0E
 GAME_GOLD_HUE = $10
 GAME_CYAN_HUE = $A0
 GAME_CYAN_BRIGHT = $AE
+HIGH_SCORE_BLUE_HUE = $80
 
 .segment "BSS"
 text_column:        .res 1
@@ -97,19 +98,22 @@ callout_hi:         .repeat 10, index
                         .byte >(callout_asset + index*240)
                     .endrepeat
 
+; Clockwise 5x5 spiral beginning at the grid's bottom-left cell and ending at
+; its center. This is used once after each new game board becomes visible.
+game_start_spiral:  .byte 20,15,10,5,0, 1,2,3,4,9, 14,19,24,23,22
+                    .byte 21,16,11,6,7, 8,13,18,17,12
+
 score_div_lo:       .byte <10000,<1000,<100,<10,<1
 score_div_hi:       .byte >10000,>1000,>100,>10,>1
 
 text_score:         .asciiz "SCORE"
 text_new_game:      .asciiz "[N]EW GAME"
 text_instructions:  .asciiz "[I]NSTRUCTIONS"
-text_title_prompt:  .asciiz "FIRE SPACE START   C CREDITS"
-text_64k:           .asciiz "ATARI 800XL 64K"
-text_128k:          .asciiz "ATARI 130XE 128K ENHANCED"
 text_restart:       .asciiz "PRESS TO VIEW HIGH SCORES"
 text_new_confirm:   .asciiz "NEW GAME  Y YES  N NO"
 
 title_logo_asset:   .incbin "build/assets/title_logo.rle"
+credits_logo_asset: .incbin "build/assets/credits_logo.bin"
 presents_asset:     .incbin "build/assets/presents.rle"
 instructions_asset: .incbin "build/assets/instructions.rle"
 game_over_asset:    .incbin "build/assets/game_over.rle"
@@ -120,9 +124,47 @@ invalid_asset:      .incbin "build/assets/invalid.bin"
 occupied_asset:     .incbin "build/assets/occupied.bin"
 merge_star_asset:   .incbin "build/assets/merge_star.bin"
 callout_asset:      .incbin "build/assets/callouts.bin"
+
+.segment "HIASSET"
+; The nine-color title is slightly larger than the former monochrome stream.
+; Keep the shared 1K font in otherwise-unused RAM above the music buffers so
+; the complete 64K build still leaves safe room below the framebuffer.
 font_asset:         .incbin "build/assets/font.bin"
 
+; This list can drive a full-screen GTIA-10 title or the color-banded high-score
+; and credits pages. The title leaves every bitmap row in the same GTIA mode;
+; its only DLI runs after row 191 to prepare the palette for the next frame.
+title_display_list:
+title_top_dli:
+    .byte $70
+    .byte $70,$70
+    .byte $4F, <SCREEN, >SCREEN
+    .repeat 28
+        .byte $0F
+    .endrepeat
+title_high_score_split:
+    .byte $0F
+    .repeat SCREEN_SPLIT-30
+        .byte $0F
+    .endrepeat
+    .byte $4F, <SCREEN_SECOND, >SCREEN_SECOND
+    .repeat 57
+        .byte $0F
+    .endrepeat
+title_footer_dli:
+    .byte $8F
+    .repeat 32
+        .byte $0F
+    .endrepeat
+title_frame_end_dli:
+    .byte $8F
+    .byte $41, <title_display_list, >title_display_list
+
 .segment "AUXCODE"
+
+title_gtia10_colors:
+    ; PCOLR0-3, then COLOR0-4. Pixel nibbles 0-8 select these directly.
+    .byte $00,$0E,$08,$1E,$28,$48,$C8,$88,$68
 
 video_init:
     lda #0
@@ -188,7 +230,156 @@ arm_color_band_dli:
     sta NMIEN
     rts
 
-.segment "CODE"
+; The title uses DLI-only NMI operation so the OS VBI cannot rewrite GTIA state.
+; A final-row DLI restores all nine colors during vertical blank before the
+; next frame begins and advances the clock used by the attract-page rotation.
+title_mode_dli:
+    pha
+    txa
+    pha
+    lda VCOUNT
+    cmp #106
+    bcc @footer
+    ldx #8
+@palette:
+    lda title_gtia10_colors,x
+    sta COLPM0,x
+    dex
+    bpl @palette
+    lda #$80
+    sta PRIOR
+    inc RTCLOK+2
+    bne :+
+    inc RTCLOK+1
+    bne :+
+    inc RTCLOK
+:
+    pla
+    tax
+    pla
+    rti
+@footer:
+    lda #0
+    sta WSYNC
+    sta PRIOR
+    sta COLPF2
+    sta COLBK
+    lda #HIRES_WHITE
+    sta COLPF1
+    pla
+    tax
+    pla
+    rti
+
+; High scores reuse the title display-list allocation with different DLI marks:
+; the first interrupt explicitly selects blue before the visible bitmap, and a
+; second keeps the title and divider blue through row 29 before selecting white
+; for the table. Driving both transitions here avoids OS-VBI color timing jitter.
+high_score_color_dli:
+    pha
+    lda VCOUNT
+    cmp #20
+    bcs @body
+    lda #0
+    sta WSYNC
+    lda #HIRES_WHITE
+    sta COLPF1
+    lda #HIGH_SCORE_BLUE_HUE
+    sta COLPF2
+    pla
+    rti
+@body:
+    lda #0
+    sta WSYNC
+    sta COLPF2
+    pla
+    rti
+
+arm_high_score_video:
+    lda #$F0
+    sta title_top_dli
+    lda #$8F
+    sta title_high_score_split
+    lda #$0F
+    sta title_footer_dli
+    sta title_frame_end_dli
+    lda #HIGH_SCORE_BLUE_HUE
+    sta COLOR2
+    sta COLPF2
+    lda #HIRES_WHITE
+    sta COLOR1
+    sta COLPF1
+    lda #0
+    sta GPRIOR
+    sta PRIOR
+    lda #<title_display_list
+    sta SDLSTL
+    sta DLISTL
+    lda #>title_display_list
+    sta SDLSTL+1
+    sta DLISTH
+    lda #<high_score_color_dli
+    sta VDSLST
+    lda #>high_score_color_dli
+    sta VDSLST+1
+@wait_vblank:
+    lda VCOUNT
+    cmp #$7C
+    bcc @wait_vblank
+    lda #$22
+    sta SDMCTL
+    sta DMACTL
+    lda #$C0
+    sta NMIEN
+    rts
+
+arm_title_video:
+    ; Restore the DLI bytes after the shared list has shown high scores.
+    lda #$70
+    sta title_top_dli
+    lda #$0F
+    sta title_high_score_split
+    lda #$0F
+    sta title_footer_dli
+    lda #$8F
+    sta title_frame_end_dli
+    ldx #8
+@palette:
+    lda title_gtia10_colors,x
+    sta PCOLR0,x
+    sta COLPM0,x
+    dex
+    bpl @palette
+    lda #$80
+    sta GPRIOR
+    sta PRIOR
+    lda #<title_display_list
+    sta SDLSTL
+    sta DLISTL
+    lda #>title_display_list
+    sta SDLSTL+1
+    sta DLISTH
+    lda #<title_mode_dli
+    sta VDSLST
+    lda #>title_mode_dli
+    sta VDSLST+1
+    ; Reveal the completed framebuffer only during vertical blank. Enabling
+    ; ANTIC in the active picture can start the display list part-way through
+    ; a frame, which looks like a one-frame title flash on real hardware and
+    ; in accurate emulator video modes.
+@wait_vblank:
+    lda VCOUNT
+    cmp #$7C
+    bcc @wait_vblank
+    lda #$22
+    sta SDMCTL
+    sta DMACTL
+    ; DLI only: title_mode_dli owns the GTIA palette and RTCLOK cadence.
+    lda #$80
+    sta NMIEN
+    rts
+
+.segment "AUXCODE"
 
 ; Expand a complete 7936-byte physical ANTIC screen from zp_asset to $8000.
 ; Packet bit 7 selects repeat/literal; low 7 bits store count minus one.
@@ -248,6 +439,8 @@ rle_write_byte:
     inc zp_screen+1
 :
     rts
+
+.segment "CODE"
 
 set_screen_row:
     stx zp_temp
@@ -911,31 +1104,7 @@ show_title:
     lda #>title_logo_asset
     sta zp_asset+1
     jsr unpack_screen_rle
-    lda #<text_title_prompt
-    sta zp_text
-    lda #>text_title_prompt
-    sta zp_text+1
-    lda #154
-    ldx #8
-    jsr draw_text
-    lda ram_kb
-    cmp #128
-    bne @64
-    lda #<text_128k
-    sta zp_text
-    lda #>text_128k
-    sta zp_text+1
-    bne @machine
-@64:
-    lda #<text_64k
-    sta zp_text
-    lda #>text_64k
-    sta zp_text+1
-@machine:
-    lda #176
-    ldx #8
-    jsr draw_text
-    jmp video_update_end
+    jmp arm_title_video
 
 show_presents:
     jsr video_update_begin
@@ -1068,6 +1237,16 @@ video_update_begin:
     sta NMIEN
     sta SDMCTL
     sta DMACTL
+    sta GPRIOR
+    sta PRIOR
+    sta COLOR4
+    sta COLBK
+    lda #<display_list
+    sta SDLSTL
+    sta DLISTL
+    lda #>display_list
+    sta SDLSTL+1
+    sta DLISTH
     lda #HIRES_WHITE
     sta COLOR1
     sta COLPF1
@@ -1082,6 +1261,45 @@ video_update_end:
     sta DMACTL
     lda #$40
     sta NMIEN
+    rts
+
+; Credits use four deterministic DLI events: blue before the bitmap, white
+; below the logo, gold/yellow above the prompt, and blue again at frame end.
+; The final event prepares the next frame without depending on OS VBI timing.
+credits_color_dli:
+    pha
+    lda VCOUNT
+    cmp #20
+    bcc @blue
+    cmp #106
+    bcs @blue
+    cmp #80
+    bcs @footer
+    lda #0
+    beq @set
+@footer:
+    lda #GAME_GOLD_HUE
+    bne @set
+@blue:
+    lda #HIGH_SCORE_BLUE_HUE
+@set:
+    sta WSYNC
+    sta COLPF2
+    pla
+    rti
+
+arm_credits_video:
+    ; The high-score setup already installs this display list and reveals it
+    ; during vertical blank. Replace its handler and enable the two remaining
+    ; DLI marks before ANTIC reaches the next visible frame.
+    jsr arm_high_score_video
+    lda #$8F
+    sta title_footer_dli
+    sta title_frame_end_dli
+    lda #<credits_color_dli
+    sta VDSLST
+    lda #>credits_color_dli
+    sta VDSLST+1
     rts
 
 .segment "AUXCODE"
@@ -1195,6 +1413,45 @@ run_merge_grid_ripple:
     bne @step
     rts
 
+.segment "CODE"
+
+; Flash every board square in a clockwise inward spiral. Reusing the merge
+; cell inverter avoids a full-screen redraw and preserves the grid borders.
+run_game_start_spiral:
+    lda #0
+    sta text_index
+@next:
+    lda sound_enabled
+    beq @silent
+    ; POKEY pitches rise as AUDF falls. Three divider steps per square carry
+    ; the 25-note spiral from $98 to $50, just under one octave.
+    lda #$98
+    sec
+    sbc text_index
+    sbc text_index
+    sbc text_index
+    sta AUDF1
+    lda #$A6
+    sta AUDC1
+@silent:
+    ldx text_index
+    lda game_start_spiral,x
+    jsr invert_ripple_cell
+    lda #2
+    jsr wait_frames
+    lda #0
+    sta AUDC1
+    ldx text_index
+    lda game_start_spiral,x
+    jsr invert_ripple_cell
+    inc text_index
+    lda text_index
+    cmp #25
+    bne @next
+    rts
+
+.segment "AUXCODE"
+
 ; Build the current edge positions. queue_ripple_xy removes duplicate cells
 ; when orthogonal or diagonal arms converge at the resolved die.
 toggle_merge_ripple_step:
@@ -1247,9 +1504,10 @@ toggle_merge_ripple_step:
     ldx ripple_bottom
     jsr queue_ripple_xy
 
+    ; Apple IIe adds diagonal arms when consuming face 5 or face 6.
     lda group_value
-    cmp #4
-    bne @done
+    cmp #5
+    bcc @done
     lda ripple_left
     ldx ripple_top
     jsr queue_ripple_xy

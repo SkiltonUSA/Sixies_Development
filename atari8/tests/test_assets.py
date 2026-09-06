@@ -17,8 +17,11 @@ class AssetPipelineTests(unittest.TestCase):
         self.assertEqual(decoded.size, (560, 192))
         self.assertIsNotNone(decoded.getbbox())
         title = generate_assets.make_atari_title()
-        self.assertEqual(title.size, (196, 147))
+        self.assertEqual(title.size, (80, 192))
+        self.assertEqual(title.mode, "P")
         self.assertIsNotNone(title.getbbox())
+        self.assertLessEqual(max(title.getdata()), 8)
+        self.assertIsNotNone(title.crop((0, 160, 80, 192)).getbbox())
 
     def test_apple_grid_masters_build_exact_atari_cell_geometry(self):
         decoded = generate_assets.decode_a2fm_grid_screen()
@@ -41,6 +44,13 @@ class AssetPipelineTests(unittest.TestCase):
         self.assertEqual(logo.size, (160, 24))
         self.assertIsNotNone(logo.getbbox())
         self.assertLessEqual(logo.getbbox()[3], 24)
+
+    def test_credits_logo_is_byte_aligned_for_the_shared_blitter(self):
+        logo = generate_assets.make_credits_logo()
+        self.assertEqual(logo.size, (96, 24))
+        self.assertIsNotNone(logo.getbbox())
+        packed = generate_assets.pack_1bpp(logo)
+        self.assertEqual(len(packed), 288)
 
     def test_apple_presentation_art_converts_to_atari_panels(self):
         for name in ("presents_master.ppm", "game_over_master.png"):
@@ -138,6 +148,12 @@ class AssetPipelineTests(unittest.TestCase):
                 packed = (root / "assets" / name).read_bytes()
                 self.assertLess(len(packed), 7936, name)
                 self.assertEqual(len(generate_assets.unpack_rle(packed)), 7936, name)
+
+    def test_title_art_fills_all_gtia10_rows(self):
+        title = generate_assets.make_atari_title()
+        self.assertEqual(title.size, (80, 192))
+        self.assertEqual(generate_assets.GTIA10_ART_HEIGHT, 192)
+        self.assertIsNotNone(title.crop((0, 160, 80, 192)).getbbox())
 
     def test_footer_font_contains_line_box_and_bracket_glyphs(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -25,7 +25,8 @@ ASSET_STAMP := $(ASSET_DIR)/.stamp
 ASSET_SOURCES := \
 	$(ROOT)/apple2/assets/title_dhgr_mono_master.a2fm \
 	$(ROOT)/apple2/assets/title_dhgr_mono_reference.png \
-	$(ATARI_DIR)/assets/title_master.png \
+	$(ATARI_DIR)/assets/title_gtia10_master.png \
+	$(ATARI_DIR)/assets/credits_logo_master.png \
 	$(ATARI_DIR)/assets/game_logo_master.png \
 	$(ROOT)/apple2/assets/grid_master.png \
 	$(ROOT)/apple2/assets/game_grid_dhgr_mono_master.a2fm \
