@@ -2,7 +2,7 @@
 ; This keeps the Apple IIe merge/scoring core, with the Atari progression
 ; requested for dealing pieces: 75% pairs and milestone-unlocked 4/5 pieces.
 ; Forced singles, complete orthogonal groups, origin-first double resolution,
-; and the 50-point value-6 removal bonus remain unchanged.
+; and higher-face creation/removal bonuses remain unchanged.
 
 CALLOUT_FRAMES = 30
 
@@ -62,6 +62,8 @@ debug_full_board:   .byte 1,2,3,4,5, 2,3,4,5,6, 3,4,5,6,1
 ; Match Apple II first_merge_effects: Awesome (0), Fives (3), and Sixies (5)
 ; are reserved and never selected for a first generic merge.
 first_merge_callouts: .byte 1,2,4,6,7,8,9
+; Awarded when a merge creates a 5, creates a 6, or removes a group of 6s.
+merge_score_bonus:   .byte 0,0,0,0,25,50,100
 
 .segment "CODE"
 
@@ -744,12 +746,11 @@ score_group:
 :
     dex
     bne @multiply
-    lda group_value
-    cmp #6
-    bne @add
+    ldx group_value
+    lda merge_score_bonus,x
+    beq @add
     clc
-    lda score_delta_lo
-    adc #50
+    adc score_delta_lo
     sta score_delta_lo
     bcc @add
     inc score_delta_hi
@@ -757,7 +758,8 @@ score_group:
     ; Apply one multiplier across the complete placement resolution, including
     ; an origin merge followed by the partner die. merge_depth is incremented
     ; before this call: first x1, second x2, third x3, and so forth. The six
-    ; clear bonus is part of the multiplied award. Arithmetic wraps at 16 bits.
+    ; higher-face create/clear bonus is part of the multiplied award.
+    ; Arithmetic wraps at 16 bits.
     lda score_delta_lo
     sta zp_choice
     lda score_delta_hi

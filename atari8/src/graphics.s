@@ -36,6 +36,11 @@ ripple_left:        .res 1
 ripple_right:       .res 1
 ripple_top:         .res 1
 ripple_bottom:      .res 1
+firework_frame:     .res 1
+firework_base_x:    .res 1
+firework_base_y:    .res 1
+shake_row:          .res 1
+shake_cycles:       .res 1
 dli_middle_hue:     .res 1
 
 .segment "DLIST"
@@ -102,6 +107,13 @@ callout_hi:         .repeat 10, index
 ; its center. This is used once after each new game board becomes visible.
 game_start_spiral:  .byte 20,15,10,5,0, 1,2,3,4,9, 14,19,24,23,22
                     .byte 21,16,11,6,7, 8,13,18,17,12
+
+; Byte-aligned Atari approximation of the Apple IIe's nine-frame, three-star
+; firework. Horizontal steps are in 8-pixel bitmap bytes; Y offsets retain the
+; original rise, outward arc, and fall.
+firework_side_x:    .byte 0,1,1,1,1,1,2,2,2
+firework_side_y:    .byte 0,$FB,$F8,$F6,$F9,$FE,7,19,32
+firework_center_y:  .byte 0,$F9,$F4,$F1,$F4,$FB,5,18,32
 
 score_div_lo:       .byte <10000,<1000,<100,<10,<1
 score_div_hi:       .byte >10000,>1000,>100,>10,>1
@@ -1264,15 +1276,10 @@ show_callout:
 hide_callout:
     jmp restore_callout_underlay
 
-; A = resolved board-cell index. XOR the supplied four-point star over it.
-show_merge_star:
-    tax
-    lda cell_x_bytes,x
-    sta blit_x
-    lda cell_y_pixels,x
-    clc
-    adc #2
-    sta blit_y
+; XOR one supplied four-point star at blit_x/blit_y. The caller keeps every
+; draw paired with a matching erase, so dice and grid pixels are restored
+; exactly without a backing buffer or full redraw.
+xor_merge_star_xy:
     lda #<merge_star_asset
     sta zp_asset
     lda #>merge_star_asset
@@ -1282,6 +1289,17 @@ show_merge_star:
     lda #24
     sta blit_height
     jmp blit_xor
+
+; A = resolved board-cell index. Retained as a small primitive for diagnostics.
+show_merge_star:
+    tax
+    lda cell_x_bytes,x
+    sta blit_x
+    lda cell_y_pixels,x
+    clc
+    adc #2
+    sta blit_y
+    jmp xor_merge_star_xy
 
 .segment "AUXCODE"
 
@@ -1493,6 +1511,154 @@ run_merge_grid_ripple:
     lda queue_head
     cmp #5
     bne @step
+    rts
+
+; Burst three XOR stars from the resolved die along the same nine-frame arcs
+; used by the Apple IIe port. The center particle rises and falls while the two
+; side particles spread by up to 16 pixels. The bottom is clamped so the full
+; 24-line Atari sprite never indexes beyond the 192-line framebuffer.
+run_merge_star_firework:
+    lda reduced_flashing
+    beq :+
+    rts
+:
+    ldx active_index
+    lda cell_x_bytes,x
+    sta firework_base_x
+    lda cell_y_pixels,x
+    clc
+    adc #2
+    sta firework_base_y
+    lda #0
+    sta firework_frame
+@frame:
+    jsr toggle_merge_firework_frame
+    lda #2
+    jsr wait_frames
+    jsr toggle_merge_firework_frame
+    inc firework_frame
+    lda firework_frame
+    cmp #9
+    bne @frame
+    rts
+
+toggle_merge_firework_frame:
+    ldx firework_frame
+    lda firework_base_x
+    sta blit_x
+    lda firework_base_y
+    clc
+    adc firework_center_y,x
+    jsr set_firework_y
+    jsr xor_merge_star_xy
+
+    lda firework_frame
+    beq @done
+    tax
+    lda firework_base_x
+    sec
+    sbc firework_side_x,x
+    sta blit_x
+    lda firework_base_y
+    clc
+    adc firework_side_y,x
+    jsr set_firework_y
+    jsr xor_merge_star_xy
+
+    ldx firework_frame
+    lda firework_base_x
+    clc
+    adc firework_side_x,x
+    sta blit_x
+    lda firework_base_y
+    clc
+    adc firework_side_y,x
+    jsr set_firework_y
+    jmp xor_merge_star_xy
+@done:
+    rts
+
+set_firework_y:
+    cmp #169
+    bcc :+
+    lda #168
+:
+    sta blit_y
+    rts
+
+; Shake only the 160x140 grid rectangle. Each cycle rotates its 20 bitmap
+; bytes right, then two places left, then right again. The paired inverse
+; operations leave the framebuffer byte-for-byte unchanged after two cycles.
+run_merge_grid_shake:
+    lda reduced_flashing
+    beq :+
+    rts
+:
+    lda #2
+    sta shake_cycles
+@cycle:
+    jsr shift_grid_rows_right
+    lda #1
+    jsr wait_frames
+    jsr shift_grid_rows_left
+    jsr shift_grid_rows_left
+    lda #1
+    jsr wait_frames
+    jsr shift_grid_rows_right
+    dec shake_cycles
+    bne @cycle
+    rts
+
+shift_grid_rows_right:
+    lda #26
+    sta shake_row
+@row:
+    lda shake_row
+    jsr set_screen_row
+    ldy #29
+    lda (zp_screen),y
+    sta zp_choice
+@byte:
+    dey
+    lda (zp_screen),y
+    iny
+    sta (zp_screen),y
+    dey
+    cpy #10
+    bne @byte
+    ldy #10
+    lda zp_choice
+    sta (zp_screen),y
+    inc shake_row
+    lda shake_row
+    cmp #166
+    bne @row
+    rts
+
+shift_grid_rows_left:
+    lda #26
+    sta shake_row
+@row:
+    lda shake_row
+    jsr set_screen_row
+    ldy #10
+    lda (zp_screen),y
+    sta zp_choice
+@byte:
+    iny
+    lda (zp_screen),y
+    dey
+    sta (zp_screen),y
+    iny
+    cpy #29
+    bne @byte
+    ldy #29
+    lda zp_choice
+    sta (zp_screen),y
+    inc shake_row
+    lda shake_row
+    cmp #166
+    bne @row
     rts
 
 .segment "CODE"

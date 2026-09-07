@@ -67,10 +67,10 @@ after every asset/code change rather than relying on historical free-byte counts
 | Module / entry point | Contract |
 | --- | --- |
 | `rules.s`: `placement_valid` | Reads cursor/orientation/board; carry indicates valid; computes active/partner indices without changing board |
-| `rules.s`: `resolve_at` | A is origin; commits complete groups/chains and 16-bit score; merge depth supplies the placement-wide ×1, ×2, ×3… multiplier before presentation |
+| `rules.s`: `resolve_at` | A is origin; commits groups/chains and 16-bit score; creation/clear bonuses (+25/+50/+100) precede the placement-wide ×1, ×2, ×3… multiplier |
 | `rules.s`: `measure_board_pressure` | One 25-cell scan computes occupied count, four count, and temporary four eligibility before each deal |
 | `rules.s`: `spawn_piece` | Applies density rescue first, then 75/25 normal generation; useful singles use empty-neighbor weights and fall back safely |
-| `effects.s`: `present_merge` | Owns ripple/star/award/chain-badge/callout sequence; preserves board/origin/partner/value, reuses finished group queue and renderer scratch |
+| `effects.s`: `present_merge` | Owns shake/ripple/firework/award/chain-badge/callout sequence; preserves board/origin/partner/value, reuses finished group queue and renderer scratch |
 | `graphics.s`: `draw_piece_sidebar` | Mirrors the hovering pair's right/down/left/up orientation and die order in the next-piece panel |
 | `main.s`: `poll_action` | Nonblocking ACTION or NONE; preserves X/Y, clobbers A/flags and `zp_temp`; joystick fire state distinguishes pending placement from consumed rotation |
 | `main.s`: `service_animation_input` | Saves shared input scratch; retains one movement/rotation, discards placement, applies mute/reduced-flashing settings without drawing |

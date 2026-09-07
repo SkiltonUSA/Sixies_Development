@@ -16,7 +16,12 @@ class BuildContractTests(unittest.TestCase):
         rules = (ATARI / "src" / "rules.s").read_text()
         self.assertIn("pair_first:         .byte 1,1,2,3,3,3,3,4", rules)
         self.assertIn("pair_second:        .byte 2,3,3,1,2,3,4,5", rules)
-        self.assertRegex(rules, r"cmp #6\s+bne @add\s+clc\s+lda score_delta_lo\s+adc #50")
+        self.assertIn("merge_score_bonus:   .byte 0,0,0,0,25,50,100", rules)
+        self.assertRegex(
+            rules,
+            r"ldx group_value\s+lda merge_score_bonus,x\s+beq @add\s+clc\s+"
+            r"adc score_delta_lo",
+        )
         self.assertIn("jsr resolve_at", rules)
 
     def test_hires_and_128k_paths_are_present(self):
@@ -410,13 +415,14 @@ class BuildContractTests(unittest.TestCase):
         self.assertNotIn("jsr render_game", resolve)
         self.assertIn("jsr redraw_group_cells", resolve)
         self.assertIn("jsr redraw_score_digits", resolve)
+        self.assertIn("jsr run_merge_grid_shake", resolve)
         self.assertIn("jsr run_merge_grid_ripple", resolve)
+        self.assertIn("jsr run_merge_star_firework", resolve)
         self.assertIn("jsr flash_six_clear", resolve)
         self.assertIn("jsr show_merge_score", resolve)
         self.assertIn("jsr show_chain_reaction_sidebar", resolve)
         self.assertIn("jsr shoot_chain_multiplier", resolve)
         self.assertIn("jmp arm_chain_reaction_sidebar", resolve)
-        self.assertEqual(resolve.count("jsr show_merge_star"), 4)
         self.assertEqual(resolve.count("jsr show_callout"), 1)
         self.assertEqual(resolve.count("jsr hide_callout"), 2)
         self.assertIn("CALLOUT_FRAMES = 30", rules)
@@ -494,6 +500,43 @@ class BuildContractTests(unittest.TestCase):
         invert = ripple.split("invert_ripple_cell:", 1)[1]
         for mask in ("eor #$0F", "eor #$FF", "eor #$F0"):
             self.assertIn(mask, invert)
+
+    def test_merge_stars_burst_as_three_particle_fireworks(self):
+        graphics = (ATARI / "src" / "graphics.s").read_text()
+        firework = graphics.split("run_merge_star_firework:", 1)[1].split(
+            "run_merge_grid_shake:", 1
+        )[0]
+        self.assertIn("firework_side_x:    .byte 0,1,1,1,1,1,2,2,2", graphics)
+        self.assertIn("firework_center_y:  .byte 0,$F9,$F4,$F1,$F4,$FB,5,18,32", graphics)
+        self.assertIn("cmp #9", firework)
+        self.assertEqual(
+            firework.count("jsr xor_merge_star_xy")
+            + firework.count("jmp xor_merge_star_xy"),
+            3,
+        )
+        self.assertIn("cmp #169", firework)
+
+    def test_face_four_five_and_six_merges_shake_and_restore_grid_only(self):
+        effects = (ATARI / "src" / "effects.s").read_text()
+        presentation = effects.split("present_merge:", 1)[1].split(
+            "@merge_value:", 1
+        )[0]
+        self.assertRegex(
+            presentation,
+            r"lda group_value\s+cmp #4\s+bcc :\+\s+"
+            r"jsr run_merge_grid_shake",
+        )
+        graphics = (ATARI / "src" / "graphics.s").read_text()
+        shake = graphics.split("run_merge_grid_shake:", 1)[1].split(
+            '.segment "CODE"', 1
+        )[0]
+        directions = re.findall(r"jsr shift_grid_rows_(right|left)", shake)
+        self.assertEqual(directions, ["right", "left", "left", "right"])
+        self.assertIn("lda #2\n    sta shake_cycles", shake)
+        self.assertIn("lda #26", shake)
+        self.assertIn("cmp #166", shake)
+        self.assertIn("ldy #10", shake)
+        self.assertIn("ldy #29", shake)
 
     def test_special_merge_feedback_matches_apple_outcomes(self):
         rules = (ATARI / "src" / "rules.s").read_text()

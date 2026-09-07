@@ -506,8 +506,8 @@ def make_atari_instructions() -> Image.Image:
     rules = (
         "PLACE ONE OR TWO DICE ON THE 5 X 5 GRID.",
         "MATCH 3 EDGE-TOUCHING DICE OF SAME VALUE.",
-        "THEY MERGE INTO THE NEXT NUMBER.",
-        "THREE SIXES CLEAR FOR A 50 POINT BONUS.",
+        "CREATE FIVE BONUS 25  SIX BONUS 50",
+        "CLEAR SIXES BONUS 100 AND MERGE VALUE",
         "CHAIN REACTIONS BUILD YOUR SCORE.",
         "A FULL GRID ENDS THE GAME.",
     )

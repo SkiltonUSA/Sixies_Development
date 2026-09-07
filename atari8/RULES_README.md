@@ -50,10 +50,11 @@ Atari design described below.
   origin. Values 1-5 advance by one; a group of 6s disappears.
 - A pair resolves its origin first, then its second die if that cell still
   exists. New dice are resolved repeatedly at the same origin for chains.
-- A merge's base award is `face value × connected count`. Removing 6s adds 50
-  to that base award. Chain position multiplies the complete award: the first
-  merge from a placement is ×1, the second ×2, the third ×3, and so forth.
-  Chain depth continues if the placed pair's second die reacts after the first.
+- A merge's base award is `face value × connected count`. Creating a 5 adds
+  25, creating a 6 adds 50, and removing a group of 6s adds 100. Chain position
+  multiplies the complete base-plus-bonus award: the first merge from a
+  placement is ×1, the second ×2, the third ×3, and so forth. Chain depth
+  continues if the placed pair's second die reacts after the first.
 - The score uses the Apple IIe's 16-bit unsigned arithmetic.
 - `FIVES` identifies any merge consuming 4s, `SIXIES` identifies any merge
   consuming 5s, and `AWESOME` is reserved for later generic merges in a turn.
@@ -63,14 +64,13 @@ Atari design described below.
 ## Presentation parity in this first port
 
 The native build includes an inward row-and-column grid ripple with diagonal
-arms for face-5 and face-6 merges, a whole-screen flash when sixes disappear,
-a centered XOR merge-star flash, the multiplied `+points` award below the
+arms for face-5 and face-6 merges, a grid-only shake for face-4 through face-6
+events, a whole-screen flash when sixes disappear, a three-particle XOR star
+firework, the multiplied `+points` award below the
 permanent score, an outward-moving `2X`/`3X` chain badge, outcome-specific merge
 callouts, a `CHAIN REACTION!` panel below the next-piece dice that remains for
 one additional non-blocking second, merge tones, invalid-placement sound,
 instructions, title music,
 game-over presentation, and the persistent ten-entry high-score table with
-three-initial entry. It does not yet include the
-full C64/Apple shake and three-particle falling fireworks. Those are
-presentation additions; the playable
-generation, placement, merge, chain, and scoring core above is present.
+three-initial entry. The playable generation, placement, merge, chain, scoring,
+and high-face presentation effects are present.

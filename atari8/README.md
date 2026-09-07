@@ -30,10 +30,11 @@ contain a 4 while 1s and 2s become less common. At 18 filled cells, half of
 deals attempt a useful matching single; at 22 filled cells this rises to 75%.
 When a pair no longer fits, every deal attempts a matching single.
 
-Merge scoring rewards chains. The base award remains face value multiplied by
-the connected group size, plus 50 when sixes clear. The first merge from one
-placement scores ×1, the second ×2, the third ×3, and so forth across both dice
-of a pair. The final total retains the Apple IIe core's 16-bit wrap behavior.
+Merge scoring rewards higher faces and chains. The base award is face value
+multiplied by connected group size. Creating a 5 adds 25, creating a 6 adds 50,
+and removing a group of 6s adds 100. The complete award then scores ×1 for the
+first merge from one placement, ×2 for the second, ×3 for the third, and so
+forth across both dice of a pair. The final total retains 16-bit wrap behavior.
 
 ## Quick start on macOS
 
@@ -188,7 +189,9 @@ bottom continuation box. The display list restarts screen DMA at
   into a white-on-black native Atari callout atlas that flashes for half a
   second over the resolved merge cell, using a saved black backing region for
   legibility before restoring the exact covered pixels;
-- the supplied four-point merge star, flashed with XOR at the resolved die;
+- the supplied four-point merge star, animated as the Apple IIe-style
+  three-particle firework: one star rises while two spread outward, then all
+  three fall and restore their exact grid underlay;
 - a compact `+points` overlay below the permanent score and an animated chain
   badge (`2X`, `3X`, and so forth) that shoots away from later chain merges;
 - the supplied `CHAIN REACTION!` burst, reduced to a native 80×32 monochrome
@@ -197,6 +200,8 @@ bottom continuation box. The display list restarts screen DMA at
 - a five-step row-and-column grid ripple that travels inward from all four
   edges toward each resolved merged die, adding four corner-to-die diagonal
   arms for face-5 and face-6 merges (Apple rules);
+- a grid-only horizontal shake when face-4 or face-5 dice merge, or face-6
+  dice clear;
 - outcome-specific Fives and Sixies callouts for groups consuming 4s and 5s, plus
   an instantaneous palette flash when a group of sixes is removed;
 - an Atari-native invalid-placement overlay plus diagonal shading that

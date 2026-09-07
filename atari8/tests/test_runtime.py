@@ -148,7 +148,7 @@ class CompiledRuntimeTests(unittest.TestCase):
     def test_merge_award_is_formatted_over_each_cell_and_restores_pixels(self):
         m = self.m
         for award, expected in ((1, b"    +1\0"), (15, b"   +15\0"),
-                                (296, b"  +296\0"), (65535, b"+65535\0")):
+                                (496, b"  +496\0"), (65535, b"+65535\0")):
             m.set("score_delta_lo", award & 255)
             m.set("score_delta_hi", award >> 8)
             m.call("format_merge_score")
@@ -238,7 +238,8 @@ class CompiledRuntimeTests(unittest.TestCase):
 
     def rules_only(self):
         self.m.stub("redraw_group_cells", "redraw_score_digits", "play_merge_sound",
-                    "flash_six_clear", "run_merge_grid_ripple", "show_merge_star",
+                    "flash_six_clear", "run_merge_grid_shake",
+                    "run_merge_grid_ripple", "run_merge_star_firework",
                     "show_callout", "hide_callout", "wait_frames")
 
     def test_chain_and_six_clear_score_with_apple_16_bit_wrap(self):
@@ -257,7 +258,7 @@ class CompiledRuntimeTests(unittest.TestCase):
         m.set("merge_depth", 0)
         m.call("resolve_at", a=0)
         self.assertEqual(m.region("board", 25), [0]*25)
-        self.assertEqual((m.get("score_hi"), m.get("score_lo")), (0, 62))
+        self.assertEqual((m.get("score_hi"), m.get("score_lo")), (0, 112))
 
     def test_pair_boundaries_and_occupied_partner_reject_without_mutation(self):
         m = self.m
@@ -293,12 +294,18 @@ class CompiledRuntimeTests(unittest.TestCase):
         m.call("place_current_piece")
         self.assertTrue(m.cpu.p & 1)
         self.assertEqual(m.region("board", 25), [2, 5]+[0]*23)
-        self.assertEqual(m.get("score_lo"), 27)
+        self.assertEqual(m.get("score_lo"), 77)
 
-    def test_chain_multiplier_includes_group_size_and_six_bonus(self):
+    def test_chain_multiplier_includes_group_size_and_face_bonuses(self):
         m = self.m
         # Invoke the scoring boundary directly to isolate ×1..×4 arithmetic.
-        cases = ((1, 3, 1, 3), (2, 4, 2, 16), (5, 3, 3, 45), (6, 4, 4, 296))
+        cases = (
+            (1, 3, 1, 3),
+            (2, 4, 2, 16),
+            (4, 3, 1, 37),
+            (5, 3, 3, 195),
+            (6, 4, 4, 496),
+        )
         for face, count, depth, expected in cases:
             m.set("group_value", face)
             m.set("group_count", count)
@@ -319,8 +326,19 @@ class CompiledRuntimeTests(unittest.TestCase):
         m.memory[0x2FC] = 0x25  # M during the first effect frame
         m.call("resolve_at", a=0, ticks=True)
         self.assertEqual(m.region("board", 25), [5]+[0]*24)
-        self.assertEqual(m.get("score_lo"), 12)
+        self.assertEqual(m.get("score_lo"), 37)
         self.assertEqual(m.get("sound_enabled"), 0)
+
+    def test_firework_and_grid_shake_restore_the_exact_bitmap(self):
+        m = self.m
+        m.call("new_game")
+        m.call("render_game")
+        m.set("active_index", 12)
+        before = bytes(m.memory[0x8000:0x9F00])
+        m.call("run_merge_star_firework", ticks=True)
+        self.assertEqual(bytes(m.memory[0x8000:0x9F00]), before)
+        m.call("run_merge_grid_shake", ticks=True)
+        self.assertEqual(bytes(m.memory[0x8000:0x9F00]), before)
 
     def test_sidebar_is_clean_and_confirmation_leaves_header_untouched(self):
         from PIL import Image

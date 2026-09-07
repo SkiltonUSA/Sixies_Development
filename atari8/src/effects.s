@@ -23,28 +23,17 @@ present_merge:
     lda group_value
     jsr play_merge_sound
     lda group_value
+    cmp #4
+    bcc :+
+    jsr run_merge_grid_shake
+    lda group_value
+:
     cmp #6
     bne :+
     jsr flash_six_clear
 :
     jsr run_merge_grid_ripple
-    lda reduced_flashing
-    bne @merge_value
-    ; Each XOR pulse is paired even if reduced flashing changes mid-effect.
-    lda active_index
-    jsr show_merge_star
-    lda #3
-    jsr wait_frames
-    lda active_index
-    jsr show_merge_star
-    lda #2
-    jsr wait_frames
-    lda active_index
-    jsr show_merge_star
-    lda #3
-    jsr wait_frames
-    lda active_index
-    jsr show_merge_star
+    jsr run_merge_star_firework
 
 @merge_value:
     ; Always show the actual award, even with reduced flashing enabled.
