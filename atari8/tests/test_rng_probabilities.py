@@ -49,7 +49,7 @@ def call(mpu: MPU, address: int, x: int = 0) -> int:
 
 
 class RuntimeProbabilityTests(unittest.TestCase):
-    def test_compiled_rng_reaches_every_apple_piece_at_expected_frequency(self) -> None:
+    def test_compiled_generator_has_requested_opening_distribution(self) -> None:
         symbols = labels()
         memory = [0] * 0x10000
         load_xex(memory)
@@ -57,27 +57,31 @@ class RuntimeProbabilityTests(unittest.TestCase):
         state = symbols["rng_state"]
         memory[state : state + 4] = [1, 0, 1, 0]
 
-        # srand() on Apple IIe advances once while installing its seed.
+        # Use the same initial advance as new_game, then execute the real linked
+        # spawn routine so branches and multiple random draws are covered.
         call(mpu, symbols["random16"])
         singles: Counter[int] = Counter()
-        pairs: Counter[int] = Counter()
-        pair_count = 0
-        single_count = 0
-        for _ in range(9000):
-            if call(mpu, symbols["random_mod_x"], 3) == 0:
-                single_count += 1
-                singles[call(mpu, symbols["random_mod_x"], 3)] += 1
+        pairs: Counter[tuple[int, int]] = Counter()
+        for _ in range(12000):
+            call(mpu, symbols["spawn_piece"])
+            if memory[symbols["piece_count"]] == 2:
+                pairs[(memory[symbols["piece_a"]], memory[symbols["piece_b"]])] += 1
             else:
-                pair_count += 1
-                pairs[call(mpu, symbols["random_mod_x"], 6)] += 1
+                singles[memory[symbols["piece_a"]]] += 1
 
-        self.assertGreater(pair_count, 5800)
-        self.assertLess(pair_count, 6200)
-        self.assertEqual(set(singles), {0, 1, 2})
-        self.assertEqual(set(pairs), {0, 1, 2, 3, 4, 5})
-        for count in (*singles.values(), *pairs.values()):
+        self.assertGreater(sum(pairs.values()), 8700)
+        self.assertLess(sum(pairs.values()), 9300)
+        self.assertEqual(set(singles), {1, 2, 3})
+        self.assertEqual(set(pairs), {(1,2), (1,3), (2,3), (3,1), (3,2), (3,3)})
+        self.assertGreater(pairs[(3,3)], 480)
+        self.assertLess(pairs[(3,3)], 720)
+        for count in singles.values():
             self.assertGreater(count, 850)
             self.assertLess(count, 1150)
+        for pair, count in pairs.items():
+            if pair != (3,3):
+                self.assertGreater(count, 1450)
+                self.assertLess(count, 1900)
 
 
 if __name__ == "__main__":

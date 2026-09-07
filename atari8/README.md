@@ -16,6 +16,25 @@ normal play.
 The startup presentation flows from the title to the instruction screen and
 requires a new continue press before the first game begins.
 
+Normal deals are 75% pairs and 25% singles. The opening ordered-pair pool is
+`1+2`, `1+3`, `2+3`, `3+1`, `3+2`, and `3+3`; `1+1`, `2+1`, and `2+2` are
+excluded. `3+3` has a fixed 5% overall chance, while the other available pairs
+share the remaining 70%. Merging at least four 4s unlocks `3+4` and single `4`
+deals for that game. Clearing at least four 6s unlocks `4+5` and single `5`. See
+[`RULES_README.md`](RULES_README.md) for the complete progression and forced-
+single behavior.
+
+Adaptive deal weighting keeps later play moving. Four or more 4s currently on
+the grid activate a temporary high-four mode: roughly half of normal deals
+contain a 4 while 1s and 2s become less common. At 18 filled cells, half of
+deals attempt a useful matching single; at 22 filled cells this rises to 75%.
+When a pair no longer fits, every deal attempts a matching single.
+
+Merge scoring rewards chains. The base award remains face value multiplied by
+the connected group size, plus 50 when sixes clear. The first merge from one
+placement scores ×1, the second ×2, the third ×3, and so forth across both dice
+of a pair. The final total retains the Apple IIe core's 16-bit wrap behavior.
+
 ## Quick start on macOS
 
 From an existing checkout:
@@ -32,7 +51,7 @@ For a fresh checkout:
 ```sh
 git clone https://github.com/SkiltonUSA/Sixies_Development.git
 cd Sixies_Development
-git switch Sixies-C64-Game-Beta
+git switch atari-800
 make -C atari8 setup-tools
 make -C atari8 doctor
 ```
@@ -56,6 +75,8 @@ both XL and XE machine profiles.
 | `make -C atari8 crunch` | `build/sixies-crunched.xex` |
 | `make -C atari8 disk` | `build/sixies.atr` |
 | `make -C atari8 test` | XEX contract, rules, memory-path, and asset tests |
+| `make -C atari8 debug` | Separate `build/sixies-debug.xex` with period shortcut |
+| `make -C atari8 run-debug` | Launch the debug XEX (no persistent disk attached) |
 | `make -C atari8 doctor` | Complete build, tests, compression, ATR, and format checks |
 
 The ATR is a 90K single-density PicoBoot406 disk containing the crunched XEX.
@@ -66,20 +87,37 @@ The ten-entry high-score table is stored with a signature and checksum in
 reserved ATR sector 720. Runtime access uses Atari SIO directly, so no resident
 DOS is required. Disk repackaging validates and carries that sector forward;
 invalid or absent data is replaced with the seeded reference table.
+The score page reports `SAVED` or `SESSION ONLY`. If a write fails, scores
+remain in RAM; insert/enable a writable disk and press `R` or joystick Up to
+retry from the post-game score page. A standalone XEX without a disk cannot
+persist scores.
 
 ## Controls
 
 | Input | Action |
 | --- | --- |
 | Joystick 1 or `W/A/S/D` | Move the piece |
-| `Q` or `E` | Rotate a pair |
-| Fire, `Space`, or `Return` | Start/place/continue |
+| `Q` / `E` | Rotate a pair counterclockwise / clockwise |
+| Hold Fire + Left / Right | Rotate a pair; release does **not** place after rotating |
+| Tap and release Fire | Place during gameplay; press starts/continues on menus |
+| `Space` or `Return` | Start/place/continue |
 | `I` | Instructions |
 | `C` | Credits from the title screen |
 | `M` | Toggle POKEY audio |
-| `.` | Fill the grid and trigger Game Over (test shortcut) |
+| `F` | Reduce flashing (skip spiral, ripple, star pulses and six-clear flash) |
+| `.` | Fill grid/Game Over in the **debug build only** |
 | `N` | New-game confirmation or Start from title |
-| `Y` / `N` | Confirm/cancel a new game |
+| `Y` or Fire / `N` or Left | Confirm/cancel a new game |
+
+The gameplay sidebars stay visually clean; the instruction page lists the
+sound, effect and rotation controls. The right-sidebar dice rotate with the
+hovering pair, including its anchor/partner order. Settings last for the current session.
+During merge feedback the latest movement or
+rotation is remembered, mute works immediately, and placement presses are
+discarded until resolution finishes. The actual multiplied award appears as
+`+points` in the left sidebar below the permanent score. On later merges a
+`2X`, `3X`, and so forth bitmap badge shoots diagonally from the die. Reduced flashing keeps these
+values and the readable half-second callout; every covered pixel is restored.
 
 After a top-ten score, type three letters directly. A joystick can also edit
 initials: Up/Down changes the letter, Left/Right selects a position, and Fire
@@ -98,6 +136,15 @@ timer IRQ nesting during the title rotation.
 At startup, the Studio 313 intro is followed by an unattended attract loop:
 Title (5 seconds), Top 10 (5 seconds), Credits (11 seconds), then back to Title.
 Fire, `Space`, `Return`, `N`, or the console Start key begins from any page.
+Credits remain responsive during their two-second music-credit reveal delay.
+Timing is currently tuned for the launcher's NTSC/60 Hz profile: 30 frames is
+half a second. PAL video works, but fixed-frame effects/attract intervals take
+20% longer, and the current music rate conversion is NTSC-specific.
+
+At the beginning of a game, the grid is shown without the hovering piece while
+the 25-square spiral travels from the bottom-left edge into the center. The
+starting dice appear at the center only after that final square is restored;
+the right-sidebar next-piece preview remains available throughout the intro.
 
 ## Graphics and assets
 
@@ -108,8 +155,9 @@ leaves 80-pixel sidebars around the 160-pixel board. The gameplay header uses
 gold on black for the Sixies logo, then a display-list interrupt changes the
 board area to cyan on black and a second interrupt restores gold for the bottom
 rule and boxed controls. Presentation, instruction, high-score, and credit pages
-otherwise remain white on black; the instruction page also uses gold for its top
-header and bottom continuation box. The display list restarts screen DMA at
+otherwise use white on black, with a blue high-score header and blue credits
+header/yellow credits footer. Instructions use gold for their top header and
+bottom continuation box. The display list restarts screen DMA at
 `$9000`, because an ANTIC mode-F line may not cross a 4K boundary.
 
 `scripts/generate_assets.py` converts the shared source masters at build time:
@@ -141,10 +189,15 @@ header and bottom continuation box. The display list restarts screen DMA at
   second over the resolved merge cell, using a saved black backing region for
   legibility before restoring the exact covered pixels;
 - the supplied four-point merge star, flashed with XOR at the resolved die;
+- a compact `+points` overlay below the permanent score and an animated chain
+  badge (`2X`, `3X`, and so forth) that shoots away from later chain merges;
+- the supplied `CHAIN REACTION!` burst, reduced to a native 80×32 monochrome
+  panel below the right-sidebar dice; it remains for one second after the chain
+  presentation while normal gameplay continues, then clears automatically;
 - a five-step row-and-column grid ripple that travels inward from all four
   edges toward each resolved merged die, adding four corner-to-die diagonal
-  arms for face-4 merges;
-- outcome-specific Fives and Sixies callouts for exact three-die merges, plus
+  arms for face-5 and face-6 merges (Apple rules);
+- outcome-specific Fives and Sixies callouts for groups consuming 4s and 5s, plus
   an instantaneous palette flash when a group of sixes is removed;
 - an Atari-native invalid-placement overlay plus diagonal shading that
   identifies the occupied cell beneath a hovering piece;
@@ -152,7 +205,7 @@ header and bottom continuation box. The display list restarts screen DMA at
 
 The generated binaries and PNG inspection atlases are kept in `build/` rather
 than committed. Full-screen title, presentation, instructions, Game Over, and
-gameplay-grid art use a small 6502 PackBits-style decoder, reducing their
+gameplay-grid art use a lossless PackBits/backreference decoder, reducing their
 in-memory footprint while writing directly to the 31-page ANTIC framebuffer.
 SID and Apple speaker byte streams are hardware-specific. Gameplay cues use
 native POKEY pitch envelopes in `src/sound.s`; title music is converted with
@@ -168,7 +221,9 @@ rules and current parity boundary.
 
 The port lives in this existing GitHub repository rather than splitting shared
 art and rule sources into another repository. `.github/workflows/atari8.yml`
-builds, tests, crunches, and uploads both XEX variants. Repository-level
+builds the disk before integration tests and uploads both release XEX variants
+and the bootable ATR. Pillow and py65 are pinned; CI builds pinned disk tools
+without downloading a ROM or installing an emulator. Repository-level
 Conductor scripts provide Build Atari, Test Atari, Run Atari 64K, and Run Atari
 128K actions. Shared Conductor settings become available to all workspaces once
 they are merged into the repository's default branch.

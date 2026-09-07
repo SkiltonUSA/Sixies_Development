@@ -7,11 +7,12 @@ sound_frames:       .res 1
 sound_mode:         .res 1
 sound_pitch:        .res 1
 music_enabled:      .res 1
+sound_last_frame:   .res 1
 
 .segment "RODATA"
 merge_pitch:        .byte $78,$64,$52,$43,$35,$28
 
-.segment "CODE"
+.segment "LOGIC"
 
 sound_init:
     lda #3
@@ -31,7 +32,7 @@ sound_init:
     sta music_enabled
     lda #1
     sta sound_enabled
-    rts
+    jmp sound_arm_frame
 
 ; Start the compressed SID2SAPR softbass title music.
 sound_start_music:
@@ -64,6 +65,7 @@ play_move_sound:
     sta sound_frames
     lda #1
     sta sound_mode
+    jsr sound_arm_frame
 @done:
     rts
 
@@ -78,6 +80,7 @@ play_rotate_sound:
     sta sound_frames
     lda #2
     sta sound_mode
+    jsr sound_arm_frame
 @done:
     rts
 
@@ -92,6 +95,7 @@ play_place_sound:
     sta sound_frames
     lda #3
     sta sound_mode
+    jsr sound_arm_frame
 @done:
     rts
 
@@ -107,6 +111,7 @@ play_invalid_sound:
     sta sound_frames
     lda #4
     sta sound_mode
+    jsr sound_arm_frame
 @done:
     rts
 
@@ -128,12 +133,42 @@ play_merge_sound:
     sta sound_frames
     lda #5
     sta sound_mode
-    rts
+    jmp sound_arm_frame
 @muted:
     pla
     rts
 
+; A = POKEY divider. Shared two-frame ascending spiral cue.
+play_spiral_sound:
+    pha
+    lda sound_enabled
+    beq @muted
+    pla
+    sta AUDF1
+    lda #$A6
+    sta AUDC1
+    lda #2
+    sta sound_frames
+    lda #1
+    sta sound_mode
+    jmp sound_arm_frame
+@muted:
+    pla
+    rts
+
+sound_arm_frame:
+    lda RTCLOK+2
+    sta sound_last_frame
+    rts
+
+; Safe to call from busy input loops or frame waits. One envelope step at most
+; per OS display tick, including $FF->$00 wrap. Effects clobber A/flags only;
+; title-music service can also clobber X/Y and the SAPR decoder's own scratch.
 sound_update:
+    lda RTCLOK+2
+    cmp sound_last_frame
+    beq @done
+    sta sound_last_frame
     lda sound_enabled
     beq @done
     lda sound_frames

@@ -10,7 +10,7 @@ ATARICOM := $(TOOLS_DIR)/bin/ataricom
 
 SOURCE := src/main.s
 INCLUDES := src/hardware.inc src/rules.s src/graphics.s src/sound.s \
-	src/sid_music.s src/high_scores.s src/credits.s \
+	src/sid_music.s src/high_scores.s src/credits.s src/ui.s src/effects.s \
 	assets/music/eternity_1_intro_softbass.lz16
 CONFIG := cfg/sixies.cfg
 OBJECT := $(BUILD_DIR)/sixies.o
@@ -25,7 +25,7 @@ ASSET_STAMP := $(ASSET_DIR)/.stamp
 ASSET_SOURCES := \
 	$(ROOT)/apple2/assets/title_dhgr_mono_master.a2fm \
 	$(ROOT)/apple2/assets/title_dhgr_mono_reference.png \
-	$(ATARI_DIR)/assets/title_gtia10_master.png \
+	$(ATARI_DIR)/assets/title_master.png \
 	$(ATARI_DIR)/assets/credits_logo_master.png \
 	$(ATARI_DIR)/assets/game_logo_master.png \
 	$(ROOT)/apple2/assets/grid_master.png \
@@ -40,6 +40,7 @@ ASSET_SOURCES := \
 	$(ROOT)/src/assets/main_mascot_bitmap.bin \
 	$(ROOT)/src/assets/main_mascot_screen.bin \
 	$(ATARI_DIR)/assets/high_score_mascot_master.png \
+	$(ATARI_DIR)/assets/chain_reaction_master.png \
 	$(ROOT)/src/assets/font/SixiesFont_charset.bin \
 	$(ROOT)/src/assets/exclamation_sprites.bin \
 	$(ROOT)/src/assets/exclamation_sprites_data.asm \
@@ -97,9 +98,21 @@ $(DISK): $(CRUNCHED) scripts/package_disk.sh scripts/preserve_high_scores.py
 
 disk: $(DISK)
 
-test: $(TARGET)
+test: $(DISK)
 	@if [ ! -x "$(VENV_PYTHON)" ]; then ./scripts/setup-tools.sh; fi
 	"$(VENV_PYTHON)" -m unittest discover -s tests -p 'test_*.py'
+
+# Explicit development binary: period fills the board and enters Game Over.
+# Separate object/output prevents debug controls leaking into the release XEX.
+.PHONY: debug run-debug
+$(BUILD_DIR)/sixies-debug.xex: $(SOURCE) $(INCLUDES) $(CONFIG) $(ASSET_STAMP)
+	ca65 -g -D DEBUG_CONTROLS=1 -I . -o "$(BUILD_DIR)/sixies-debug.o" "$(SOURCE)"
+	ld65 -C "$(CONFIG)" -o "$@" "$(BUILD_DIR)/sixies-debug.o"
+
+debug: $(BUILD_DIR)/sixies-debug.xex
+
+run-debug: $(BUILD_DIR)/sixies-debug.xex
+	./scripts/run-emulator.sh "$<" 64
 
 run run64: $(DISK)
 	./scripts/run-emulator.sh "$(DISK)" 64

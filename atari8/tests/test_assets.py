@@ -17,11 +17,9 @@ class AssetPipelineTests(unittest.TestCase):
         self.assertEqual(decoded.size, (560, 192))
         self.assertIsNotNone(decoded.getbbox())
         title = generate_assets.make_atari_title()
-        self.assertEqual(title.size, (80, 192))
-        self.assertEqual(title.mode, "P")
+        self.assertEqual(title.size, (196, 147))
+        self.assertEqual(title.mode, "1")
         self.assertIsNotNone(title.getbbox())
-        self.assertLessEqual(max(title.getdata()), 8)
-        self.assertIsNotNone(title.crop((0, 160, 80, 192)).getbbox())
 
     def test_apple_grid_masters_build_exact_atari_cell_geometry(self):
         decoded = generate_assets.decode_a2fm_grid_screen()
@@ -78,6 +76,19 @@ class AssetPipelineTests(unittest.TestCase):
         self.assertEqual(star.crop((0, 0, 4, 24)).getbbox(), None)
         self.assertEqual(star.crop((28, 0, 32, 24)).getbbox(), None)
 
+    def test_chain_reaction_master_fits_the_right_sidebar(self):
+        with Image.open(ATARI / "assets" / "chain_reaction_master.png") as source:
+            self.assertEqual(source.size, (1536, 1024))
+        art = generate_assets.make_chain_reaction()
+        self.assertEqual(art.size, (80, 32))
+        bounds = art.getbbox()
+        self.assertIsNotNone(bounds)
+        self.assertGreaterEqual(bounds[0], 1)
+        self.assertGreaterEqual(bounds[1], 1)
+        self.assertLessEqual(bounds[2], 79)
+        self.assertLessEqual(bounds[3], 31)
+        self.assertEqual(len(generate_assets.pack_1bpp(art)), 10 * 32)
+
     def test_occupied_shade_is_diagonal_and_stays_inside_cell(self):
         shade = generate_assets.make_occupied_shade()
         self.assertEqual(shade.size, (32, 24))
@@ -132,6 +143,7 @@ class AssetPipelineTests(unittest.TestCase):
                 "invalid.bin": 4 * 24,
                 "occupied.bin": 4 * 24,
                 "merge_star.bin": 4 * 24,
+                "chain_reaction.bin": 10 * 32,
                 "callouts.bin": 10 * 10 * 24,
                 "font.bin": 1024,
             }
@@ -149,18 +161,19 @@ class AssetPipelineTests(unittest.TestCase):
                 self.assertLess(len(packed), 7936, name)
                 self.assertEqual(len(generate_assets.unpack_rle(packed)), 7936, name)
 
-    def test_title_art_fills_all_gtia10_rows(self):
+    def test_title_art_leaves_clear_hires_footer_rows(self):
         title = generate_assets.make_atari_title()
-        self.assertEqual(title.size, (80, 192))
-        self.assertEqual(generate_assets.GTIA10_ART_HEIGHT, 192)
-        self.assertIsNotNone(title.crop((0, 160, 80, 192)).getbbox())
+        self.assertEqual(title.size, (196, 147))
+        screen = generate_assets.make_art_screen(title, (62, 0))
+        self.assertEqual(screen.size, (320, 192))
+        self.assertIsNone(screen.crop((0, 147, 320, 192)).getbbox())
 
     def test_footer_font_contains_line_box_and_bracket_glyphs(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             generate_assets.build(root / "assets", root / "previews")
             font = (root / "assets" / "font.bin").read_bytes()
-            for character in (*range(1, 8), ord("."), ord(">"), ord("["), ord("]")):
+            for character in (*range(1, 8), *map(ord, ".>[]/:+-")):
                 glyph = font[character * 8 : (character + 1) * 8]
                 self.assertNotEqual(glyph, bytes(8), character)
 
@@ -190,6 +203,8 @@ class AssetPipelineTests(unittest.TestCase):
                 self.assertEqual(dice.size, (192, 24))
             with Image.open(root / "previews" / "callouts.png") as callouts:
                 self.assertEqual(callouts.size, (80, 240))
+            with Image.open(root / "previews" / "chain_reaction.png") as chain:
+                self.assertEqual(chain.size, (80, 32))
 
 
 if __name__ == "__main__":

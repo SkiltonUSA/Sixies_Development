@@ -1,7 +1,8 @@
 ; Platform-independent Sixies rules, implemented in 6502 assembly.
-; This follows apple2/RULES_README.md: 2/3 paired pieces, unlockable 4/5
-; singles, weighted forced singles, complete orthogonal groups, origin-first
-; double resolution, and the 50-point value-6 removal bonus.
+; This keeps the Apple IIe merge/scoring core, with the Atari progression
+; requested for dealing pieces: 75% pairs and milestone-unlocked 4/5 pieces.
+; Forced singles, complete orthogonal groups, origin-first double resolution,
+; and the 50-point value-6 removal bonus remain unchanged.
 
 CALLOUT_FRAMES = 30
 
@@ -19,11 +20,14 @@ orientation:        .res 1
 score_lo:           .res 1
 score_hi:           .res 1
 rng_state:          .res 4
-single_mode:        .res 1
 game_over:          .res 1
 piece_visible:      .res 1
 four_unlocked:      .res 1
 five_unlocked:      .res 1
+four_active:        .res 1
+four_pressure:      .res 1
+four_board_count:   .res 1
+occupied_count:     .res 1
 eligible_count:     .res 1
 active_index:       .res 1
 placed_second:      .res 1
@@ -42,8 +46,17 @@ score_delta_hi:     .res 1
 row_offsets:        .byte 0, 5, 10, 15, 20
 cell_columns:       .byte 0,1,2,3,4, 0,1,2,3,4, 0,1,2,3,4, 0,1,2,3,4, 0,1,2,3,4
 cell_rows:          .byte 0,0,0,0,0, 1,1,1,1,1, 2,2,2,2,2, 3,3,3,3,3, 4,4,4,4,4
-pair_first:         .byte 1,1,2,2,3,3
-pair_second:        .byte 2,3,3,4,3,4
+; Six opening ordered pairs. 1+1, 2+1, and 2+2 are deliberately absent.
+; Index 6 (3+4) unlocks after merging 4+ fours; index 7 (4+5) unlocks after
+; clearing 4+ sixes. Singles 4 and 5 use the same milestone flags.
+pair_first:         .byte 1,1,2,3,3,3,3,4
+pair_second:        .byte 2,3,3,1,2,3,4,5
+; All unlocked pairs except 3+3. That pair has a fixed 1/15 share of pair
+; deals (5% of normal turns); these choices divide the remaining 70%.
+other_pair_index:   .byte 0,1,2,3,4,6,7
+pressure_other_pair_index: .byte 0,1,2,3,4,7
+four_pressure_singles:     .byte 1,2,3,3,4,4,4,4,4,4
+four_pressure_singles_five:.byte 1,2,3,3,4,4,4,4,4,5
 debug_full_board:   .byte 1,2,3,4,5, 2,3,4,5,6, 3,4,5,6,1
                     .byte 4,5,6,1,2, 5,6,1,2,3
 ; Match Apple II first_merge_effects: Awesome (0), Fives (3), and Sixies (5)
@@ -62,7 +75,9 @@ new_game:
     sta score_lo
     sta score_hi
     sta game_over
-    sta single_mode
+    sta four_unlocked
+    sta five_unlocked
+    sta chain_banner_frames
     ; Seed the same four-byte generator used by cc65 rand() on Apple IIe.
     lda RTCLOK+2
     eor RANDOM
@@ -113,7 +128,8 @@ random16:
 
 ; X = modulus (1..255), returns the complete 15-bit random value modulo X.
 ; Consuming both bytes prevents conditional correlations between the normal
-; pair/single roll and the following face/pair roll.
+; pair/single roll and the following face/pair roll. Z reflects returned A;
+; the loop's final DEY must not leak its always-zero condition to callers.
 random_mod_x:
     stx zp_modulus
     jsr random16
@@ -131,22 +147,36 @@ random_mod_x:
 @next:
     dey
     bne @bit
+    cmp #0
     rts
 
-; A = board value, returns X = count.
-count_board_value:
-    sta zp_target
+; Measure density and the dynamic four-die pressure condition in one board
+; scan. Clobbers A/X/flags; results are used only by the following spawn.
+measure_board_pressure:
+    lda #0
+    sta occupied_count
+    sta four_board_count
     ldx #0
-    ldy #0
 @loop:
-    lda board,y
-    cmp zp_target
-    bne :+
+    lda board,x
+    beq @next
+    inc occupied_count
+    cmp #4
+    bne @next
+    inc four_board_count
+@next:
     inx
-:
-    iny
-    cpy #25
+    cpx #25
     bne @loop
+    lda #0
+    ldx four_board_count
+    cpx #4
+    bcc :+
+    lda #1
+:
+    sta four_pressure
+    ora four_unlocked
+    sta four_active
     rts
 
 has_empty_cell:
@@ -192,39 +222,77 @@ has_adjacent_empty_pair:
 spawn_piece:
     lda #0
     sta piece_visible
-    lda #4
-    jsr count_board_value
-    cpx #3
-    lda #0
-    rol
-    sta four_unlocked
-    lda #5
-    jsr count_board_value
-    cpx #4
-    lda #0
-    rol
-    sta five_unlocked
+    jsr measure_board_pressure
 
     lda #3
     clc
-    adc four_unlocked
+    adc four_active
     adc five_unlocked
     sta eligible_count
 
     jsr has_adjacent_empty_pair
     sta zp_adjacent
-    eor #1
-    sta single_mode
     lda zp_adjacent
-    beq @single
-    ldx #3
+    beq @matching_single
+
+    ; Density rescue progressively replaces ordinary deals with a useful
+    ; matching single. 18..21 occupied cells: 50%; 22..24: 75%.
+    lda occupied_count
+    cmp #22
+    bcc @medium_density
+    ldx #4
+    jsr random_mod_x
+    beq @normal_deal
+    jmp @matching_single
+@medium_density:
+    cmp #18
+    bcc @normal_deal
+    ldx #2
+    jsr random_mod_x
+    beq @matching_single
+
+@normal_deal:
+    ; Otherwise normal play is one single in four.
+    ldx #4
     jsr random_mod_x
     beq @single
 
 @pair:
-    ldx #6
+    ldx #15
+    jsr random_mod_x
+    beq @double_three
+    sta zp_choice
+    lda four_pressure
+    beq @normal_pair_pool
+    lda zp_choice
+    cmp #8
+    bcc @pressure_four_pair
+    lda #5
+    clc
+    adc five_unlocked
+    tax
     jsr random_mod_x
     tax
+    lda pressure_other_pair_index,x
+    tax
+    bpl @store_pair
+@pressure_four_pair:
+    ldx #6
+    bpl @store_pair
+@normal_pair_pool:
+    lda #5
+    clc
+    adc four_unlocked
+    adc five_unlocked
+    tax
+    jsr random_mod_x
+    tax
+    lda other_pair_index,x
+    tax
+    bpl @store_pair
+@double_three:
+    ldx #5
+@store_pair:
     lda #2
     sta piece_count
     lda pair_first,x
@@ -233,25 +301,41 @@ spawn_piece:
     sta piece_b
     jmp @position
 
+@matching_single:
+    lda #1
+    sta piece_count
+    lda #0
+    sta piece_b
+    jsr weighted_surrounding_face
+    bne @store_single
+    ; No eligible neighboring face: fall back to the current single pool.
+    jmp @normal_single
+
 @single:
     lda #1
     sta piece_count
     lda #0
     sta piece_b
-    lda single_mode
-    beq @normal_single
-    ldx #3
-    jsr random_mod_x
-    beq @normal_single
-    jsr weighted_surrounding_face
-    bne @store_single
 @normal_single:
+    lda four_pressure
+    beq @uniform_single
+    ldx #10
+    jsr random_mod_x
+    tax
+    lda five_unlocked
+    beq @pressure_without_five
+    lda four_pressure_singles_five,x
+    bne @store_single
+@pressure_without_five:
+    lda four_pressure_singles,x
+    bne @store_single
+@uniform_single:
     ldx eligible_count
     jsr random_mod_x
     tax
     cpx #3
     bcc @base_single
-    lda four_unlocked
+    lda four_active
     beq @single_five
     cpx #3
     beq @single_four
@@ -308,7 +392,7 @@ weighted_surrounding_face:
     bcs @next
     cmp #4
     bne :+
-    lda four_unlocked
+    lda four_active
     beq @next
     lda #4
 :
@@ -517,6 +601,7 @@ resolve_at:
     bcs :+
     jmp @done
 :
+    jsr update_piece_unlocks
     inc merge_depth
     jsr score_group
     ldy #0
@@ -535,67 +620,32 @@ resolve_at:
     ldx active_index
     sta board,x
 @animate:
-    jsr redraw_group_cells
-    jsr redraw_score_digits
-    lda group_value
-    jsr play_merge_sound
-    lda group_value
-    cmp #6
-    bne :+
-    jsr flash_six_clear
-:
-    jsr run_merge_grid_ripple
-    ; Flash the supplied four-point star at the resolved die before the word
-    ; callout. XOR keeps it visible over upgraded dice and cleared six cells.
-    lda active_index
-    jsr show_merge_star
-    lda #3
-    jsr wait_frames
-    lda active_index
-    jsr show_merge_star
-    lda #2
-    jsr wait_frames
-    lda active_index
-    jsr show_merge_star
-    lda #3
-    jsr wait_frames
-    lda active_index
-    jsr show_merge_star
-    ; Match the Apple IIe outcomes for every group size: consuming 4s creates
-    ; a five, consuming 5s creates a six, and Awesome is reserved for later
-    ; generic merges in the same placement turn.
-    lda group_value
-    cmp #4
-    beq @fives
-    cmp #5
-    beq @sixies
-@generic:
-    lda merge_depth
-    cmp #2
-    bcs @awesome
-    ldx #7
-    jsr random_mod_x
-    tax
-    lda first_merge_callouts,x
-    jmp @show
-@fives:
-    lda #3
-    bne @show
-@sixies:
-    lda #5
-    bne @show
-@awesome:
-    lda #0
-@show:
-    sta text_index
-    jsr show_callout
-    lda #CALLOUT_FRAMES
-    jsr wait_frames
-    jsr hide_callout
+    jsr present_merge
     ldx active_index
     lda board,x
     beq @done
     jmp @again
+@done:
+    rts
+
+; Unlocks are event milestones and remain set until new_game. A face may exist
+; through ordinary merging before it becomes eligible to be dealt. Inputs are
+; group_value/group_count from find_group; clobbers A/flags, preserves X/Y.
+update_piece_unlocks:
+    lda group_count
+    cmp #4
+    bcc @done
+    lda group_value
+    cmp #4
+    bne :+
+    lda #1
+    sta four_unlocked
+    rts
+:
+    cmp #6
+    bne @done
+    lda #1
+    sta five_unlocked
 @done:
     rts
 
@@ -704,6 +754,31 @@ score_group:
     bcc @add
     inc score_delta_hi
 @add:
+    ; Apply one multiplier across the complete placement resolution, including
+    ; an origin merge followed by the partner die. merge_depth is incremented
+    ; before this call: first x1, second x2, third x3, and so forth. The six
+    ; clear bonus is part of the multiplied award. Arithmetic wraps at 16 bits.
+    lda score_delta_lo
+    sta zp_choice
+    lda score_delta_hi
+    sta zp_temp
+    lda #0
+    sta score_delta_lo
+    sta score_delta_hi
+    ldx merge_depth
+    bne @chain_add
+    ldx #1                    ; Safe default for direct diagnostic calls.
+@chain_add:
+    clc
+    lda score_delta_lo
+    adc zp_choice
+    sta score_delta_lo
+    lda score_delta_hi
+    adc zp_temp
+    sta score_delta_hi
+    dex
+    bne @chain_add
+
     clc
     lda score_lo
     adc score_delta_lo

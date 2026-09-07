@@ -8,7 +8,7 @@ import importlib.util
 from pathlib import Path
 import re
 
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageOps
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -23,23 +23,8 @@ ATARI_GRID_SIZE = (160, 140)
 ATARI_GRID_POSITION = (80, 26)
 CALLOUT_SIZE = (80, 24)
 CALLOUT_FIT_SIZE = (88, 26)
-# GTIA mode 10 displays two four-bit pixels in each ANTIC-F byte. Its pixels
-# are four color clocks wide, so the 80x192 logical image fills the complete
-# 320x192 title page without switching to an ANTIC-F text footer.
-GTIA10_SIZE = (80, 192)
-GTIA10_ART_HEIGHT = 192
 CREDITS_LOGO_SIZE = (96, 24)
-GTIA10_COLORS = (
-    (0x00, (0, 0, 0)),       # PCOLR0: black
-    (0x0E, (238, 238, 238)), # PCOLR1: white
-    (0x08, (126, 126, 126)), # PCOLR2: gray
-    (0x1E, (238, 205, 54)),  # PCOLR3: gold
-    (0x28, (218, 122, 38)),  # COLOR0: orange
-    (0x48, (188, 52, 62)),   # COLOR1: red
-    (0xC8, (72, 164, 74)),   # COLOR2: green
-    (0x88, (54, 91, 190)),   # COLOR3: blue
-    (0x68, (142, 67, 174)),  # COLOR4: purple
-)
+CHAIN_REACTION_SIZE = (80, 32)
 C64_RGB = (
     (0x00, 0x00, 0x00), (0xFF, 0xFF, 0xFF), (0x81, 0x33, 0x38),
     (0x75, 0xCE, 0xC8), (0x8E, 0x3C, 0x97), (0x56, 0xAC, 0x4D),
@@ -111,25 +96,22 @@ def pack_1bpp(image: Image.Image) -> bytes:
     return bytes(output)
 
 
-def pack_gtia10(image: Image.Image) -> bytes:
-    """Pack an 80-pixel indexed GTIA-10 screen as two pixels per byte."""
-    if image.size != GTIA10_SIZE:
-        raise ValueError(f"GTIA-10 screen must be {GTIA10_SIZE}, got {image.size}")
-    output = bytearray()
-    for y in range(image.height):
-        for x in range(0, image.width, 2):
-            left = image.getpixel((x, y))
-            right = image.getpixel((x + 1, y))
-            if left > 8 or right > 8:
-                raise ValueError("GTIA-10 pixel index must be in the range 0-8")
-            output.append((left << 4) | right)
-    return bytes(output)
-
-
 def pack_rle(data: bytes) -> bytes:
-    """Pack bytes as 1-128 byte literal/repeat packets for the 6502 decoder."""
+    """PackBits plus $80,distance,length overlapping backreferences (1..255).
+
+    $80 was unused by the encoder (one-byte repeats are literals). Short
+    backreferences preserve every source pixel while reusing nearby scanlines.
+    """
     output = bytearray()
     index = 0
+    literals = bytearray()
+
+    def flush() -> None:
+        if literals:
+            output.append(len(literals) - 1)
+            output.extend(literals)
+            literals.clear()
+
     while index < len(data):
         repeat = 1
         while (
@@ -138,27 +120,28 @@ def pack_rle(data: bytes) -> bytes:
             and data[index + repeat] == data[index]
         ):
             repeat += 1
-        if repeat >= 3:
+        best_length, best_distance = 0, 0
+        for distance in range(1, min(index, 255) + 1):
+            length = 0
+            while (length < 255 and index + length < len(data)
+                   and data[index + length] == data[index + length - distance]):
+                length += 1
+            if length > best_length:
+                best_length, best_distance = length, distance
+        if best_length >= 5 and best_length > repeat + 1:
+            flush()
+            output.extend((0x80, best_distance, best_length))
+            index += best_length
+        elif repeat >= 3:
+            flush()
             output.extend((0x80 | (repeat - 1), data[index]))
             index += repeat
-            continue
-
-        literal_start = index
-        index += repeat
-        while index < len(data) and index - literal_start < 128:
-            next_repeat = 1
-            while (
-                index + next_repeat < len(data)
-                and next_repeat < 128
-                and data[index + next_repeat] == data[index]
-            ):
-                next_repeat += 1
-            if next_repeat >= 3:
-                break
-            index += min(next_repeat, 128 - (index - literal_start))
-        literal = data[literal_start:index]
-        output.append(len(literal) - 1)
-        output.extend(literal)
+        else:
+            literals.append(data[index])
+            index += 1
+            if len(literals) == 128:
+                flush()
+    flush()
     return bytes(output)
 
 
@@ -170,7 +153,16 @@ def unpack_rle(data: bytes) -> bytes:
         packet = data[index]
         index += 1
         count = (packet & 0x7F) + 1
-        if packet & 0x80:
+        if packet == 0x80:
+            if index + 2 > len(data):
+                raise ValueError("truncated RLE backreference")
+            distance, length = data[index:index + 2]
+            index += 2
+            if not length or not 0 < distance <= len(output):
+                raise ValueError("invalid RLE backreference")
+            for _ in range(length):
+                output.append(output[-distance])
+        elif packet & 0x80:
             if index >= len(data):
                 raise ValueError("truncated RLE repeat packet")
             output.extend(bytes((data[index],)) * count)
@@ -193,12 +185,6 @@ def physical_screen(image: Image.Image) -> bytes:
     return logical[:4000] + bytes(96) + logical[4000:] + bytes(160)
 
 
-def physical_gtia10_screen(image: Image.Image) -> bytes:
-    """Expand indexed GTIA-10 pixels into the existing split framebuffer."""
-    logical = pack_gtia10(image)
-    return logical[:4000] + bytes(96) + logical[4000:] + bytes(160)
-
-
 def save_rle_screen(image: Image.Image, binary: Path, preview: Path) -> None:
     physical = physical_screen(image)
     packed = pack_rle(physical)
@@ -207,23 +193,6 @@ def save_rle_screen(image: Image.Image, binary: Path, preview: Path) -> None:
     binary.write_bytes(packed)
     preview.parent.mkdir(parents=True, exist_ok=True)
     ImageOps.invert(image.convert("L")).save(preview)
-
-
-def save_gtia10_rle_screen(image: Image.Image, binary: Path, preview: Path) -> None:
-    """Write the packed screen and a square-pixel simulation of its output."""
-    physical = physical_gtia10_screen(image)
-    packed = pack_rle(physical)
-    if unpack_rle(packed) != physical:
-        raise ValueError(f"RLE verification failed for {binary.name}")
-    binary.write_bytes(packed)
-
-    palette = []
-    for _, rgb in GTIA10_COLORS:
-        palette.extend(rgb)
-    palette.extend((0, 0, 0) * (256 - len(GTIA10_COLORS)))
-    simulated = image.copy()
-    simulated.putpalette(palette)
-    simulated.convert("RGB").resize((320, 192), Image.Resampling.NEAREST).save(preview)
 
 
 def save_asset(image: Image.Image, binary: Path, preview: Path) -> None:
@@ -328,77 +297,21 @@ def make_atari_grid_screen() -> Image.Image:
 
 
 def make_atari_title() -> Image.Image:
-    """Fill the title page with the supplied art in nine GTIA-10 colors."""
-    with Image.open(ATARI / "assets" / "title_gtia10_master.png") as source:
-        if source.size != (1536, 1024):
-            raise ValueError("GTIA-10 title master must be the approved 1536x1024 image")
+    """Convert the supplied flat Sixies title to an ANTIC-F composition."""
+    with Image.open(ATARI / "assets" / "title_master.png") as source:
+        if source.size != (256, 240):
+            raise ValueError("Atari title master must be the supplied 256x240 image")
         rgb = source.convert("RGB")
 
-    # Cover the complete television raster, cropping only the excess vertical
-    # margin needed to convert the 3:2 master to Atari's 5:3 display shape.
-    physical = ImageOps.fit(rgb, (320, 192), Image.Resampling.LANCZOS)
-    canvas = physical.resize(GTIA10_SIZE, Image.Resampling.LANCZOS)
-    indexed = Image.new("P", GTIA10_SIZE, 0)
-    source_pixels = canvas.load()
-    target_pixels = indexed.load()
-    palette_rgb = tuple(rgb_value for _, rgb_value in GTIA10_COLORS)
-    for y in range(GTIA10_ART_HEIGHT):
-        for x in range(GTIA10_SIZE[0]):
-            red, green, blue = source_pixels[x, y]
-            target_pixels[x, y] = min(
-                range(len(palette_rgb)),
-                key=lambda index: (
-                    (red - palette_rgb[index][0]) ** 2
-                    + (green - palette_rgb[index][1]) ** 2
-                    + (blue - palette_rgb[index][2]) ** 2
-                ),
-            )
-    # Remove single-pixel color noise left by the high-resolution halftone.
-    # Besides reading more cleanly at 80 logical pixels, this keeps the packed
-    # full-screen artwork small enough for the 64K memory map.
-    cleaned = indexed.filter(ImageFilter.ModeFilter(3)).filter(
-        ImageFilter.ModeFilter(3)
+    # Taking the brightest channel retains each saturated mascot and letter
+    # color when reduced to monochrome. 196x147 compensates for ANTIC-F's
+    # narrow NTSC pixels while leaving two unobstructed text rows below it.
+    intensity = ImageChops.lighter(
+        ImageChops.lighter(rgb.getchannel("R"), rgb.getchannel("G")),
+        rgb.getchannel("B"),
     )
-    draw = ImageDraw.Draw(cleaned)
-
-    # Retain the mascot's friendly expression after the aggressive 80-pixel
-    # reduction. Coordinates are logical GTIA pixels (four screen pixels wide).
-    draw.ellipse((33, 23, 38, 39), fill=1)
-    draw.ellipse((39, 23, 44, 39), fill=1)
-    draw.ellipse((36, 28, 38, 36), fill=0)
-    draw.ellipse((39, 28, 41, 36), fill=0)
-    draw.rectangle((36, 50, 42, 52), fill=5)
-
-    # The former hi-res footer cannot coexist with a full-screen GTIA mode.
-    # Preserve its essential prompt as a compact two-line 3x5 low-res caption.
-    tiny_font = {
-        "A": (0b010, 0b101, 0b111, 0b101, 0b101),
-        "E": (0b111, 0b100, 0b110, 0b100, 0b111),
-        "F": (0b111, 0b100, 0b110, 0b100, 0b100),
-        "I": (0b111, 0b010, 0b010, 0b010, 0b111),
-        "O": (0b010, 0b101, 0b101, 0b101, 0b010),
-        "P": (0b110, 0b101, 0b110, 0b100, 0b100),
-        "R": (0b110, 0b101, 0b110, 0b101, 0b101),
-        "S": (0b011, 0b100, 0b010, 0b001, 0b110),
-        "T": (0b111, 0b010, 0b010, 0b010, 0b010),
-    }
-
-    def draw_tiny_line(text: str, y: int) -> None:
-        width = len(text) * 3
-        start_x = (GTIA10_SIZE[0] - width) // 2
-        for character_index, character in enumerate(text):
-            if character == " ":
-                continue
-            for row, bits in enumerate(tiny_font[character]):
-                for column in range(3):
-                    if bits & (0b100 >> column):
-                        cleaned.putpixel(
-                            (start_x + character_index * 3 + column, y + row), 1
-                        )
-
-    draw.rectangle((9, 181, 70, 191), fill=0)
-    draw_tiny_line("PRESS FIRE TO START", 184)
-    return cleaned
+    title = intensity.resize((196, 147), Image.Resampling.LANCZOS)
+    return title.point(lambda value: 255 if value >= 128 else 0, mode="1")
 
 
 def make_game_logo() -> Image.Image:
@@ -447,6 +360,65 @@ def make_credits_logo() -> Image.Image:
         ),
     )
     return canvas.point(lambda value: 255 if value >= 128 else 0, mode="1")
+
+
+def make_chain_reaction() -> Image.Image:
+    """Reassemble the supplied comic letters for the 80px right sidebar."""
+    with Image.open(ATARI / "assets" / "chain_reaction_master.png") as source:
+        if source.size != (1536, 1024):
+            raise ValueError("chain-reaction master must be the supplied 1536x1024 image")
+        rgb = source.convert("RGB")
+    intensity = ImageChops.lighter(
+        ImageChops.lighter(rgb.getchannel("R"), rgb.getchannel("G")),
+        rgb.getchannel("B"),
+    )
+    bounds = intensity.point(lambda value: 255 if value >= 20 else 0).getbbox()
+    if bounds is None:
+        raise ValueError("chain-reaction master has no visible artwork")
+
+    # The complete portrait-oriented burst would leave only about five pixels
+    # per character. Extract its supplied white comic faces and deliberately
+    # give every letter one output pixel of separation. Each tuple is the
+    # source face box followed by its target width.
+    white = intensity.point(lambda value: 255 if value >= 200 else 0, mode="1")
+    chain_letters = (
+        ((410, 294, 560, 506), 9),
+        ((568, 278, 718, 480), 9),
+        ((718, 266, 874, 456), 9),
+        ((888, 250, 960, 438), 5),
+        ((962, 222, 1152, 436), 10),
+    )
+    reaction_letters = (
+        ((186, 632, 348, 842), 8),
+        ((356, 614, 470, 812), 7),
+        ((486, 608, 632, 790), 8),
+        ((634, 598, 768, 782), 8),
+        ((776, 594, 902, 772), 8),
+        ((910, 590, 976, 766), 4),
+        ((984, 590, 1124, 768), 8),
+        ((1134, 574, 1284, 762), 8),
+        ((1292, 528, 1396, 760), 5),
+    )
+
+    def assemble_word(letters, height: int) -> Image.Image:
+        width = sum(target_width for _, target_width in letters) + len(letters) - 1
+        word = Image.new("1", (width, height), 0)
+        x = 0
+        for box, target_width in letters:
+            glyph = white.crop(box).convert("L").resize(
+                (target_width, height), Image.Resampling.LANCZOS
+            )
+            glyph = glyph.point(lambda value: 255 if value >= 96 else 0, mode="1")
+            word.paste(glyph, (x, 0))
+            x += target_width + 1
+        return word
+
+    chain = assemble_word(chain_letters, 14)
+    reaction = assemble_word(reaction_letters, 15)
+    canvas = Image.new("L", CHAIN_REACTION_SIZE, 0)
+    canvas.paste(chain, ((CHAIN_REACTION_SIZE[0] - chain.width) // 2, 1))
+    canvas.paste(reaction, ((CHAIN_REACTION_SIZE[0] - reaction.width) // 2, 16))
+    return canvas.convert("1")
 
 
 def make_atari_presentation(path: Path) -> Image.Image:
@@ -542,12 +514,13 @@ def make_atari_instructions() -> Image.Image:
     for index, line in enumerate(rules):
         text(line, 55 + index * 10)
 
-    double_box(8, 116, 311, 160)
+    double_box(8, 116, 311, 167)
     text("CONTROLS", 121)
     controls = (
-        "WASD OR JOYSTICK MOVE   Q OR E ROTATE",
-        "SPACE RETURN OR FIRE PLACE   N NEW GAME",
-        "[M] SOUND   [I] INSTRUCTIONS",
+        "WASD OR STICK MOVE   Q OR E ROTATE",
+        "HOLD FIRE AND LEFT OR RIGHT TO ROTATE",
+        "SPACE RETURN OR RELEASE FIRE TO PLACE",
+        "[N] NEW  [M] SOUND  [F] REDUCE FLASH",
     )
     for index, line in enumerate(controls):
         text(line, 131 + index * 9)
@@ -730,8 +703,8 @@ def build(output: Path, previews: Path) -> None:
     output.mkdir(parents=True, exist_ok=True)
     previews.mkdir(parents=True, exist_ok=True)
 
-    title = make_atari_title()
-    save_gtia10_rle_screen(title, output / "title_logo.rle", previews / "title_logo.png")
+    title = make_art_screen(make_atari_title(), (62, 0))
+    save_rle_screen(title, output / "title_logo.rle", previews / "title_logo.png")
 
     credits_logo = make_credits_logo()
     credits_logo_data = pack_1bpp(credits_logo)
@@ -786,6 +759,13 @@ def build(output: Path, previews: Path) -> None:
         merge_star, output / "merge_star.bin", previews / "merge_star.png"
     )
 
+    chain_reaction = make_chain_reaction()
+    save_asset(
+        chain_reaction,
+        output / "chain_reaction.bin",
+        previews / "chain_reaction.png",
+    )
+
     callout_names = (
         "awesome", "boom", "dang", "fives", "lets_go",
         "sixies", "whoa", "wow", "yeah", "yes",
@@ -825,6 +805,14 @@ def build(output: Path, previews: Path) -> None:
     }
     for character, glyph in footer_glyphs.items():
         font[character * 8 : (character + 1) * 8] = bytes(glyph)
+    punctuation = {
+        "/": (0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0, 0),
+        ":": (0, 0x18, 0x18, 0, 0x18, 0x18, 0, 0),
+        "+": (0, 0x10, 0x10, 0x7C, 0x10, 0x10, 0, 0),
+        "-": (0, 0, 0, 0x7C, 0, 0, 0, 0),
+    }
+    for character, glyph in punctuation.items():
+        font[ord(character)*8:(ord(character)+1)*8] = bytes(glyph)
     font[ord("!") * 8 : (ord("!") + 1) * 8] = screen_font[8:16]
     font[ord("[") * 8 : (ord("[") + 1) * 8] = bytes(
         (0x3C, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x3C)
@@ -858,7 +846,7 @@ def build(output: Path, previews: Path) -> None:
     (output / "font.bin").write_bytes(font)
 
     manifest = (
-        f"title_logo.rle {len(pack_rle(physical_gtia10_screen(title)))} bytes, 80x192 GTIA-10 PackBits RLE\n"
+        f"title_logo.rle {len(pack_rle(physical_screen(title)))} bytes, 320x192 PackBits RLE\n"
         f"credits_logo.bin {len(credits_logo_data)} bytes, 96x24 1bpp\n"
         f"presents.rle {len(pack_rle(physical_screen(presents)))} bytes, 320x192 PackBits RLE\n"
         f"instructions.rle {len(pack_rle(physical_screen(instructions)))} bytes, 320x192 PackBits RLE\n"
@@ -869,6 +857,7 @@ def build(output: Path, previews: Path) -> None:
         "invalid.bin 32x24 1bpp\n"
         "occupied.bin 32x24 1bpp (diagonal occupied-cell shade)\n"
         "merge_star.bin 32x24 1bpp (shared C64 four-point star)\n"
+        "chain_reaction.bin 80x32 1bpp (right-sidebar chain banner)\n"
         "callouts.bin 10x(80x24) 1bpp\n"
         "font.bin 128x(8x8) 1bpp\n"
     )

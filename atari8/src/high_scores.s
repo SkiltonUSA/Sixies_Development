@@ -46,6 +46,8 @@ high_score_digit:     .res 1
 high_score_visible:   .res 1
 high_score_line:      .res 16
 high_score_chars:     .res 4
+high_score_save_status: .res 1 ; 0=loaded, 1=saved, 2=session only
+high_score_retry_enabled: .res 1
 
 .segment "AUXCODE"
 
@@ -54,6 +56,8 @@ high_score_chars:     .res 4
 high_scores_init:
     lda #0
     sta high_score_editing
+    sta high_score_save_status
+    sta high_score_retry_enabled
     jsr high_scores_disk_read
     bcs @defaults
     jsr high_scores_valid
@@ -115,7 +119,13 @@ high_scores_save:
     sta high_score_sector+5
     lda #$50                    ; POKEY/SIO PUT SECTOR without verify
     ldx #$80                    ; computer-to-disk transfer
-    jmp high_scores_sio
+    jsr high_scores_sio
+    php
+    lda #1
+    adc #0                      ; carry clear=1 saved, carry set=2 RAM only
+    sta high_score_save_status
+    plp
+    rts
 
 high_scores_disk_read:
     lda #$52                    ; SIO READ SECTOR
@@ -195,6 +205,8 @@ high_score_rank:
 ; Called after the Game Over page has been acknowledged. It inserts and edits
 ; a qualifying score, or simply presents the current table otherwise.
 high_scores_after_game:
+    lda #1
+    sta high_score_retry_enabled
     jsr high_score_rank
     sta high_score_ranked
     cmp #HIGH_SCORE_COUNT
@@ -509,6 +521,7 @@ show_high_scores:
     lda #176
     ldx #3
     jsr draw_text
+    jsr draw_save_status
     jmp arm_high_score_video
 
 high_score_clear_screen:

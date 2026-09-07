@@ -77,6 +77,8 @@ KEY_Q           = $2F
 KEY_D           = $3A
 KEY_S           = $3E
 KEY_A           = $3F
+KEY_F           = $38
+KEY_R           = $28
 
 SCREEN          = $8000
 SCREEN_BYTES    = 40
@@ -104,3 +106,6 @@ ACTION_MUTE     = 9
 ACTION_YES      = 10
 ACTION_DEBUG_FILL = 11
 ACTION_CREDITS  = 12
+ACTION_ROTATE_BACK = 13
+ACTION_FLASH    = 14
+ACTION_RETRY    = 15

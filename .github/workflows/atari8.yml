@@ -5,6 +5,8 @@ on:
     paths:
       - "atari8/**"
       - "apple2/assets/**"
+      - "apple2/src/**"
+      - "apple2/scripts/**"
       - "src/assets/**"
       - "Makefile"
       - ".github/workflows/atari8.yml"
@@ -12,6 +14,8 @@ on:
     paths:
       - "atari8/**"
       - "apple2/assets/**"
+      - "apple2/src/**"
+      - "apple2/scripts/**"
       - "src/assets/**"
       - "Makefile"
       - ".github/workflows/atari8.yml"
@@ -23,11 +27,19 @@ jobs:
       - uses: actions/checkout@v4
       - run: brew install cc65 exomizer
       - run: python3 -m venv .tools/atari8/venv
-      - run: .tools/atari8/venv/bin/pip install Pillow==11.3.0
-      - run: make -C atari8 test crunch
+      - run: .tools/atari8/venv/bin/pip install Pillow==11.3.0 py65==1.2.0
+      - name: Build pinned disk tools (no emulator or ROM required)
+        run: |
+          git clone --filter=blob:none https://github.com/HiassofT/AtariSIO.git .tools/atari8/AtariSIO
+          git -C .tools/atari8/AtariSIO checkout --detach bbccb15265259a1408f36d7ed9b89bb08bbb711d
+          make -C .tools/atari8/AtariSIO/tools -f Makefile.posix
+          mkdir -p .tools/atari8/bin
+          cp .tools/atari8/AtariSIO/tools/dir2atr .tools/atari8/bin/dir2atr
+      - run: make -C atari8 test debug
       - uses: actions/upload-artifact@v4
         with:
-          name: sixies-atari-xex
+          name: sixies-atari
           path: |
             atari8/build/sixies.xex
             atari8/build/sixies-crunched.xex
+            atari8/build/sixies.atr

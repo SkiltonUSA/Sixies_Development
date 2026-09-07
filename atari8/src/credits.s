@@ -4,15 +4,17 @@
 ; sharp at 320x192.
 ; ---------------------------------------------------------------------------
 
-.segment "AUXCODE"
+.segment "LOGIC"
 
 ; Unattended title rotation, matching the other Sixies ports:
 ; Title (5 seconds) -> Top 10 (5 seconds) -> Credits (11 seconds) -> repeat.
 ; A start action on any card leaves the rotation; C opens Credits from Title or
-; Top 10 and returns from Credits. Keeping this controller in HIRAM avoids
-; moving the page-aligned display list in the tight 64K memory map.
+; Top 10 and returns from Credits. LOGIC keeps growth independent of the
+; bank-safe CODE segment and its following aligned display list.
 wait_for_title:
 @title:
+    lda #0
+    sta credits_reveal_frames
     lda #5
     jsr wait_attract_seconds
     bcc @top_scores
@@ -34,8 +36,7 @@ wait_for_title:
 
 @show_credits:
     jsr show_credits
-    ; show_credits spends the first two seconds on the design credit alone.
-    lda #9
+    lda #11
     jsr wait_attract_seconds
     bcc @return_title
     cmp #ACTION_CREDITS
@@ -78,6 +79,24 @@ wait_attract_seconds:
     sta zp_temp
     lda zp_frames
     sta attract_last_frame
+    lda credits_reveal_frames
+    beq @timer
+    sec
+    sbc zp_temp
+    bcc @reveal
+    beq @reveal
+    sta credits_reveal_frames
+    jmp @timer
+@reveal:
+    ; Drawing uses shared scratch, so preserve the elapsed-frame count.
+    lda zp_temp
+    pha
+    lda #0
+    sta credits_reveal_frames
+    jsr reveal_music_credit
+    pla
+    sta zp_temp
+@timer:
     sec
     lda attract_ticks_lo
     sbc zp_temp
@@ -186,10 +205,12 @@ show_credits:
     jsr draw_text
     jsr arm_credits_video
 
-    ; Hold the uncluttered design credit for exactly two NTSC seconds while
-    ; continuing to service the title music, then reveal the music credit.
+    ; The attract controller reveals this later without blocking input.
     lda #120
-    jsr wait_frames
+    sta credits_reveal_frames
+    rts
+
+reveal_music_credit:
 @music_copy:
     ldx credits_line_index
     lda credits_text_lo,x
@@ -252,3 +273,4 @@ attract_seconds:    .res 1
 attract_ticks_lo:   .res 1
 attract_ticks_hi:   .res 1
 attract_last_frame: .res 1
+credits_reveal_frames: .res 1

@@ -109,8 +109,12 @@ score_div_hi:       .byte >10000,>1000,>100,>10,>1
 text_score:         .asciiz "SCORE"
 text_new_game:      .asciiz "[N]EW GAME"
 text_instructions:  .asciiz "[I]NSTRUCTIONS"
+text_title_prompt:  .asciiz "PRESS FIRE TO START"
+text_64k:           .asciiz "ATARI 800XL 64K"
+text_128k:          .asciiz "ATARI 130XE 128K ENHANCED"
 text_restart:       .asciiz "PRESS TO VIEW HIGH SCORES"
-text_new_confirm:   .asciiz "NEW GAME  Y YES  N NO"
+text_new_confirm:   .asciiz "Y/FIRE: NEW GAME"
+text_new_cancel:    .asciiz "N/LEFT: CANCEL"
 
 title_logo_asset:   .incbin "build/assets/title_logo.rle"
 credits_logo_asset: .incbin "build/assets/credits_logo.bin"
@@ -123,17 +127,15 @@ dice_asset:         .incbin "build/assets/dice.bin"
 invalid_asset:      .incbin "build/assets/invalid.bin"
 occupied_asset:     .incbin "build/assets/occupied.bin"
 merge_star_asset:   .incbin "build/assets/merge_star.bin"
+chain_reaction_asset: .incbin "build/assets/chain_reaction.bin"
 callout_asset:      .incbin "build/assets/callouts.bin"
 
 .segment "HIASSET"
-; The nine-color title is slightly larger than the former monochrome stream.
 ; Keep the shared 1K font in otherwise-unused RAM above the music buffers so
 ; the complete 64K build still leaves safe room below the framebuffer.
 font_asset:         .incbin "build/assets/font.bin"
 
-; This list can drive a full-screen GTIA-10 title or the color-banded high-score
-; and credits pages. The title leaves every bitmap row in the same GTIA mode;
-; its only DLI runs after row 191 to prepare the palette for the next frame.
+; Shared color-banded ANTIC-F list for the high-score and credits pages.
 title_display_list:
 title_top_dli:
     .byte $70
@@ -161,10 +163,6 @@ title_frame_end_dli:
     .byte $41, <title_display_list, >title_display_list
 
 .segment "AUXCODE"
-
-title_gtia10_colors:
-    ; PCOLR0-3, then COLOR0-4. Pixel nibbles 0-8 select these directly.
-    .byte $00,$0E,$08,$1E,$28,$48,$C8,$88,$68
 
 video_init:
     lda #0
@@ -230,47 +228,6 @@ arm_color_band_dli:
     sta NMIEN
     rts
 
-; The title uses DLI-only NMI operation so the OS VBI cannot rewrite GTIA state.
-; A final-row DLI restores all nine colors during vertical blank before the
-; next frame begins and advances the clock used by the attract-page rotation.
-title_mode_dli:
-    pha
-    txa
-    pha
-    lda VCOUNT
-    cmp #106
-    bcc @footer
-    ldx #8
-@palette:
-    lda title_gtia10_colors,x
-    sta COLPM0,x
-    dex
-    bpl @palette
-    lda #$80
-    sta PRIOR
-    inc RTCLOK+2
-    bne :+
-    inc RTCLOK+1
-    bne :+
-    inc RTCLOK
-:
-    pla
-    tax
-    pla
-    rti
-@footer:
-    lda #0
-    sta WSYNC
-    sta PRIOR
-    sta COLPF2
-    sta COLBK
-    lda #HIRES_WHITE
-    sta COLPF1
-    pla
-    tax
-    pla
-    rti
-
 ; High scores reuse the title display-list allocation with different DLI marks:
 ; the first interrupt explicitly selects blue before the visible bitmap, and a
 ; second keeps the title and divider blue through row 29 before selecting white
@@ -333,56 +290,21 @@ arm_high_score_video:
     sta NMIEN
     rts
 
+; Reveal a completed monochrome ANTIC-F title only during vertical blank.
+; Both direct rendering and the 128K cached-screen path enter here.
 arm_title_video:
-    ; Restore the DLI bytes after the shared list has shown high scores.
-    lda #$70
-    sta title_top_dli
-    lda #$0F
-    sta title_high_score_split
-    lda #$0F
-    sta title_footer_dli
-    lda #$8F
-    sta title_frame_end_dli
-    ldx #8
-@palette:
-    lda title_gtia10_colors,x
-    sta PCOLR0,x
-    sta COLPM0,x
-    dex
-    bpl @palette
-    lda #$80
-    sta GPRIOR
-    sta PRIOR
-    lda #<title_display_list
-    sta SDLSTL
-    sta DLISTL
-    lda #>title_display_list
-    sta SDLSTL+1
-    sta DLISTH
-    lda #<title_mode_dli
-    sta VDSLST
-    lda #>title_mode_dli
-    sta VDSLST+1
-    ; Reveal the completed framebuffer only during vertical blank. Enabling
-    ; ANTIC in the active picture can start the display list part-way through
-    ; a frame, which looks like a one-frame title flash on real hardware and
-    ; in accurate emulator video modes.
 @wait_vblank:
     lda VCOUNT
     cmp #$7C
     bcc @wait_vblank
-    lda #$22
-    sta SDMCTL
-    sta DMACTL
-    ; DLI only: title_mode_dli owns the GTIA palette and RTCLOK cadence.
-    lda #$80
-    sta NMIEN
-    rts
+    jmp video_update_end
 
-.segment "AUXCODE"
+.segment "LOGIC"
 
 ; Expand a complete 7936-byte physical ANTIC screen from zp_asset to $8000.
 ; Packet bit 7 selects repeat/literal; low 7 bits store count minus one.
+; $80,distance,length copies prior output, including overlaps. Clobbers A/Y,
+; zp_asset, zp_screen, zp_text, rle_count/value. Trusted build-time assets only.
 unpack_screen_rle:
     lda #<SCREEN
     sta zp_screen
@@ -391,6 +313,7 @@ unpack_screen_rle:
 @packet:
     jsr rle_read_byte
     cmp #$80
+    beq @backreference
     bcs @repeat
     clc
     adc #1
@@ -413,6 +336,29 @@ unpack_screen_rle:
     jsr rle_write_byte
     dec rle_count
     bne @repeat_loop
+    beq @check_done
+@backreference:
+    jsr rle_read_byte
+    sta rle_value
+    sec
+    lda zp_screen
+    sbc rle_value
+    sta zp_text
+    lda zp_screen+1
+    sbc #0
+    sta zp_text+1
+    jsr rle_read_byte
+    sta rle_count
+@copy:
+    ldy #0
+    lda (zp_text),y
+    jsr rle_write_byte
+    inc zp_text
+    bne :+
+    inc zp_text+1
+:
+    dec rle_count
+    bne @copy
 @check_done:
     lda zp_screen+1
     cmp #>SCREEN_PHYSICAL_END
@@ -884,19 +830,55 @@ draw_mascot:
     jmp blit_or
 
 draw_piece_sidebar:
+    lda #64
+    sta blit_y
+    lda piece_count
+    cmp #2
+    beq @pair
+    lda piece_a
+    ldx #33
+    jmp draw_sidebar_die
+@pair:
+    lda orientation
+    beq @right
+    cmp #1
+    beq @down
+    cmp #2
+    beq @left
+@up:
+    lda piece_b
+    ldx #33
+    jsr draw_sidebar_die
+    lda #88
+    sta blit_y
+    lda piece_a
+    ldx #33
+    jmp draw_sidebar_die
+@right:
     lda piece_a
     ldx #31
     jsr draw_sidebar_die
-    lda piece_count
-    cmp #2
-    bne @done
     lda piece_b
     ldx #35
+    jmp draw_sidebar_die
+@down:
+    lda piece_a
+    ldx #33
     jsr draw_sidebar_die
-@done:
-    rts
+    lda #88
+    sta blit_y
+    lda piece_b
+    ldx #33
+    jmp draw_sidebar_die
+@left:
+    lda piece_b
+    ldx #31
+    jsr draw_sidebar_die
+    lda piece_a
+    ldx #35
+    jmp draw_sidebar_die
 
-; A=value, X=x byte; fixed y=64.
+; A=value, X=x byte, blit_y=top row.
 draw_sidebar_die:
     stx blit_x
     sec
@@ -910,8 +892,6 @@ draw_sidebar_die:
     sta blit_width
     lda #24
     sta blit_height
-    lda #64
-    sta blit_y
     jmp blit_or
 
 draw_score:
@@ -988,10 +968,40 @@ redraw_piece_sidebar:
     sta blit_y
     lda #8
     sta blit_width
-    lda #24
+    lda #48
     sta blit_height
     jsr clear_bitmap_rect
     jmp draw_piece_sidebar
+
+; Show the supplied chain-reaction burst below either preview orientation.
+; This area of the right sidebar has no persistent artwork, so clearing it is
+; sufficient when the merge presentation ends.
+show_chain_reaction_sidebar:
+    lda #30
+    sta blit_x
+    lda #120
+    sta blit_y
+    lda #10
+    sta blit_width
+    lda #32
+    sta blit_height
+    jsr clear_bitmap_rect
+    lda #<chain_reaction_asset
+    sta zp_asset
+    lda #>chain_reaction_asset
+    sta zp_asset+1
+    jmp blit_or
+
+hide_chain_reaction_sidebar:
+    lda #30
+    sta blit_x
+    lda #120
+    sta blit_y
+    lda #10
+    sta blit_width
+    lda #32
+    sta blit_height
+    jmp clear_bitmap_rect
 
 refresh_turn_display:
     jsr redraw_score_digits
@@ -1097,14 +1107,44 @@ render_game:
     jsr video_update_end
     jmp arm_gameplay_dli
 
+.segment "AUXCODE"
+
 show_title:
+    ; Keep this renderer in high RAM: the gameplay spiral and rising tone use
+    ; the final bytes below the fixed $3000 display-list boundary.
     jsr video_update_begin
     lda #<title_logo_asset
     sta zp_asset
     lda #>title_logo_asset
     sta zp_asset+1
     jsr unpack_screen_rle
+    lda #<text_title_prompt
+    sta zp_text
+    lda #>text_title_prompt
+    sta zp_text+1
+    lda #160
+    ldx #10
+    jsr draw_text
+    lda ram_kb
+    cmp #128
+    bne @64
+    lda #<text_128k
+    sta zp_text
+    lda #>text_128k
+    sta zp_text+1
+    bne @machine
+@64:
+    lda #<text_64k
+    sta zp_text
+    lda #>text_64k
+    sta zp_text+1
+@machine:
+    lda #181
+    ldx #1
+    jsr draw_text
     jmp arm_title_video
+
+.segment "CODE"
 
 show_presents:
     jsr video_update_begin
@@ -1129,13 +1169,45 @@ show_instructions:
     jmp arm_instructions_dli
 
 show_new_game_confirm:
+    lda #10
+    sta blit_x
+    lda #86
+    sta blit_y
+    lda #20
+    sta blit_width
+    lda #40
+    sta blit_height
+    jsr clear_bitmap_rect
+    ; A centered opaque panel over the grid, never over the header logo.
+    lda #86
+    jsr set_screen_row
+    jsr draw_confirm_rule
+    lda #125
+    jsr set_screen_row
+    jsr draw_confirm_rule
     lda #<text_new_confirm
     sta zp_text
     lda #>text_new_confirm
     sta zp_text+1
-    lda #16
-    ldx #10
+    lda #96
+    ldx #12
     jsr draw_text
+    lda #<text_new_cancel
+    sta zp_text
+    lda #>text_new_cancel
+    sta zp_text+1
+    lda #112
+    ldx #13
+    jmp draw_text
+
+draw_confirm_rule:
+    ldy #10
+    lda #$FF
+@line:
+    sta (zp_screen),y
+    iny
+    cpy #30
+    bne @line
     rts
 
 show_game_over:
@@ -1226,6 +1298,7 @@ wait_frames:
     lda #0
     sta ATRACT
     jsr sound_update
+    jsr service_animation_input
     dec zp_frames
     bne @frame
     rts
@@ -1308,6 +1381,10 @@ arm_credits_video:
 ; mode-F foreground and background colors is instantaneous and leaves every
 ; screen byte untouched, avoiding a full-frame redraw or tear.
 flash_six_clear:
+    lda reduced_flashing
+    beq :+
+    rts
+:
     lda #$40
     sta NMIEN
     lda #GAME_CYAN_BRIGHT
@@ -1331,8 +1408,9 @@ flash_six_clear:
     sta COLPF1
     jmp arm_gameplay_dli
 
-; Preserve the exact 80x24 bitmap below a callout. X is a linear 0..239
-; buffer index; blit_row selects the physical ANTIC row.
+; Preserve a byte-aligned overlay below a callout, score, or chain badge.
+; Inputs are blit_x/y/width/height and width*height must not exceed 240.
+; X is the linear underlay index; blit_row selects the physical ANTIC row.
 save_callout_underlay:
     ldx #0
     lda #0
@@ -1343,7 +1421,7 @@ save_callout_underlay:
     adc blit_row
     jsr set_screen_row
     ldy blit_x
-    lda #10
+    lda blit_width
     sta zp_temp
 @byte:
     lda (zp_screen),y
@@ -1354,11 +1432,11 @@ save_callout_underlay:
     bne @byte
     inc blit_row
     lda blit_row
-    cmp #24
+    cmp blit_height
     bne @row
     rts
 
-; Restore the saved bitmap after the half-second callout hold.
+; Restore the exact bitmap saved for the current overlay dimensions/position.
 restore_callout_underlay:
     ldx #0
     lda #0
@@ -1369,7 +1447,7 @@ restore_callout_underlay:
     adc blit_row
     jsr set_screen_row
     ldy blit_x
-    lda #10
+    lda blit_width
     sta zp_temp
 @byte:
     lda CALLOUT_UNDERLAY,x
@@ -1380,7 +1458,7 @@ restore_callout_underlay:
     bne @byte
     inc blit_row
     lda blit_row
-    cmp #24
+    cmp blit_height
     bne @row
     rts
 
@@ -1388,6 +1466,10 @@ restore_callout_underlay:
 ; merge also brings four diagonal arms inward from the corners. Each step is
 ; inverted for two frames and then restored before advancing.
 run_merge_grid_ripple:
+    lda reduced_flashing
+    beq :+
+    rts
+:
     lda active_index
     ldx #0
 @find_row:
@@ -1418,11 +1500,13 @@ run_merge_grid_ripple:
 ; Flash every board square in a clockwise inward spiral. Reusing the merge
 ; cell inverter avoids a full-screen redraw and preserves the grid borders.
 run_game_start_spiral:
+    lda reduced_flashing
+    beq :+
+    rts
+:
     lda #0
     sta text_index
 @next:
-    lda sound_enabled
-    beq @silent
     ; POKEY pitches rise as AUDF falls. Three divider steps per square carry
     ; the 25-note spiral from $98 to $50, just under one octave.
     lda #$98
@@ -1430,17 +1514,12 @@ run_game_start_spiral:
     sbc text_index
     sbc text_index
     sbc text_index
-    sta AUDF1
-    lda #$A6
-    sta AUDC1
-@silent:
+    jsr play_spiral_sound
     ldx text_index
     lda game_start_spiral,x
     jsr invert_ripple_cell
     lda #2
     jsr wait_frames
-    lda #0
-    sta AUDC1
     ldx text_index
     lda game_start_spiral,x
     jsr invert_ripple_cell

@@ -1,21 +1,48 @@
 # Atari Sixies rules
 
-The Atari rules core intentionally follows `apple2/RULES_README.md`, not the
-older C64 generation variant.
+The Atari merge, chain, scoring, forced-single, and RNG behavior follows the
+Apple IIe core. Its dealt-piece probabilities and progression use the revised
+Atari design described below.
 
 ## Implemented rules
 
 - The board is 5x5 and groups connect only across horizontal or vertical edges.
-- Normal generation is two-thirds pairs and one-third singles.
-- The six pair choices are `1+2`, `1+3`, `2+3`, `2+4`, `3+3`, and `3+4`.
-- Each approved pair therefore has a one-in-nine overall chance during normal
-  play. Before higher singles unlock, standalone 1, 2, and 3 dice also each
-  have a one-in-nine overall chance.
-- Singles 1-3 begin unlocked. A single 4 unlocks with three board 4s; a single
-  5 unlocks with four board 5s. Value 5 never occurs in a pair.
-- If no adjacent empty cells remain, generation switches to singles. Two-thirds
-  of those singles are weighted by eligible faces next to empty cells. Pair
-  generation returns when adjacency returns.
+- Normal generation is 75% pairs and 25% singles.
+- The six opening ordered pairs are `1+2`, `1+3`, `2+3`, `3+1`, `3+2`, and
+  `3+3`. The combinations `1+1`, `2+1`, and `2+2` never appear. `3+3` has a
+  fixed 5% overall chance; the other opening pairs each have a 14% chance.
+- Opening singles are 1, 2, and 3 with equal weighting, giving each an
+  approximately 8.33% overall chance during normal play.
+- Merging one connected group of four or more 4s permanently unlocks `3+4`
+  and single `4` for the rest of that game. Fours can still be created by
+  merging 3s before they are eligible to be dealt.
+- Clearing one connected group of four or more 6s permanently unlocks `4+5`
+  and single `5` for the rest of that game. Fives can still be created by
+  merging 4s before they are eligible to be dealt.
+- `3+3` remains fixed at 5% after each unlock. All other currently available
+  pairs share the remaining 70%: about 11.67% each after the 4 milestone and
+  exactly 10% each after the 6 milestone.
+- Both deal milestones reset when a new game begins; removing their triggering
+  dice later does not lock them again during the current game.
+- Whenever at least four 4s are currently on the board, temporary four-pressure
+  weighting takes priority over the ordinary unlocked pool. During a normal
+  deal, `3+4` receives 35% and single `4` receives 15% (12.5% if single `5` is
+  unlocked). Together, approximately half of deals contain a 4. `3+3` remains
+  5%. Opening pairs containing 1 or 2 fall from 14% to 7% each, and single 1
+  and 2 fall from about 8.33% to 2.5% each. This pressure ends when fewer than
+  four 4s remain; permanent milestone unlocks are unaffected.
+- If no adjacent empty cells remain, generation switches to matching singles;
+  pair generation returns when adjacency returns.
+- Crowded-board rescue begins before pairs become impossible. At 18-21 occupied
+  cells, 50% of turns attempt a matching single; the other half use the normal
+  75/25 deal. At 22-24 occupied cells, the matching attempt rises to 75%. If
+  no adjacent pair fits, every deal attempts a matching single.
+- Matching faces are weighted by empty neighboring squares. An empty square
+  touching two equal eligible dice receives twice their weight, favoring moves
+  that complete a merge. Faces 1-3 are always eligible; 4 uses either its
+  milestone or active four-pressure condition, and 5 requires its milestone.
+  Sixes are never dealt. If no eligible matching neighbor exists, generation
+  falls back to the current normal single pool.
 - Random rolls use the Apple IIe/cc65 four-byte generator. This avoids the
   conditional bias of the earlier one-byte Atari LFSR, which could omit `1+2`
   pairs after the preceding pair/single roll.
@@ -23,7 +50,10 @@ older C64 generation variant.
   origin. Values 1-5 advance by one; a group of 6s disappears.
 - A pair resolves its origin first, then its second die if that cell still
   exists. New dice are resolved repeatedly at the same origin for chains.
-- Every merge scores `face value * connected count`. Removing 6s adds 50.
+- A merge's base award is `face value × connected count`. Removing 6s adds 50
+  to that base award. Chain position multiplies the complete award: the first
+  merge from a placement is ×1, the second ×2, the third ×3, and so forth.
+  Chain depth continues if the placed pair's second die reacts after the first.
 - The score uses the Apple IIe's 16-bit unsigned arithmetic.
 - `FIVES` identifies any merge consuming 4s, `SIXIES` identifies any merge
   consuming 5s, and `AWESOME` is reserved for later generic merges in a turn.
@@ -34,10 +64,13 @@ older C64 generation variant.
 
 The native build includes an inward row-and-column grid ripple with diagonal
 arms for face-5 and face-6 merges, a whole-screen flash when sixes disappear,
-a centered XOR merge-star flash, outcome-specific merge callouts, merge tones,
-invalid-placement sound, instructions, title music, game-over presentation, and
-the persistent ten-entry high-score table with three-initial entry. It does not
-yet include the
+a centered XOR merge-star flash, the multiplied `+points` award below the
+permanent score, an outward-moving `2X`/`3X` chain badge, outcome-specific merge
+callouts, a `CHAIN REACTION!` panel below the next-piece dice that remains for
+one additional non-blocking second, merge tones, invalid-placement sound,
+instructions, title music,
+game-over presentation, and the persistent ten-entry high-score table with
+three-initial entry. It does not yet include the
 full C64/Apple shake and three-particle falling fireworks. Those are
 presentation additions; the playable
 generation, placement, merge, chain, and scoring core above is present.

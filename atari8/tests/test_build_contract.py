@@ -14,8 +14,8 @@ class BuildContractTests(unittest.TestCase):
 
     def test_apple_rule_tables_and_bonus_are_explicit(self):
         rules = (ATARI / "src" / "rules.s").read_text()
-        self.assertIn("pair_first:         .byte 1,1,2,2,3,3", rules)
-        self.assertIn("pair_second:        .byte 2,3,3,4,3,4", rules)
+        self.assertIn("pair_first:         .byte 1,1,2,3,3,3,3,4", rules)
+        self.assertIn("pair_second:        .byte 2,3,3,1,2,3,4,5", rules)
         self.assertRegex(rules, r"cmp #6\s+bne @add\s+clc\s+lda score_delta_lo\s+adc #50")
         self.assertIn("jsr resolve_at", rules)
 
@@ -85,7 +85,7 @@ class BuildContractTests(unittest.TestCase):
         self.assertIn("lda STICK1", main)
         self.assertIn("lda STRIG1", main)
         self.assertRegex(main, r"@title_ready:\s+jsr arm_input")
-        self.assertRegex(main, r"arm_input:\s+lda #CH_NONE\s+sta CH\s+lda #1\s+sta input_latch")
+        self.assertRegex(main, r"arm_input:[\s\S]*?lda #CH_NONE\s+sta CH\s+lda #1\s+sta input_latch")
         launcher = (ATARI / "scripts" / "run-emulator.sh").read_text()
         self.assertIn("-no-kbdjoy0", launcher)
         self.assertIn("-kbdjoy1", launcher)
@@ -178,7 +178,8 @@ class BuildContractTests(unittest.TestCase):
         self.assertIn('.asciiz "PRESS SPACE OR FIRE"', credits)
         self.assertNotIn("FIRE STARTS  C RETURNS TITLE", credits)
         self.assertIn("lda #120", credits)
-        self.assertIn("jsr wait_frames", credits)
+        self.assertNotIn("jsr wait_frames", credits)
+        self.assertIn("jsr reveal_music_credit", credits)
         self.assertIn("jsr draw_credits_logo", credits)
         self.assertIn("jsr arm_credits_video", credits)
         self.assertIn("lda #12", credits)
@@ -195,7 +196,7 @@ class BuildContractTests(unittest.TestCase):
             re.compile(
                 r"wait_for_title:.*?lda #5.*?jsr wait_attract_seconds"
                 r".*?jsr show_high_scores.*?lda #5.*?jsr wait_attract_seconds"
-                r".*?jsr show_credits.*?lda #9.*?jsr wait_attract_seconds"
+                r".*?jsr show_credits.*?lda #11.*?jsr wait_attract_seconds"
                 r".*?jsr show_title.*?jmp @title",
                 re.DOTALL,
             ),
@@ -377,46 +378,24 @@ class BuildContractTests(unittest.TestCase):
             ),
         )
 
-    def test_title_uses_full_screen_gtia10_art(self):
+    def test_title_uses_monochrome_hires_art_and_native_text(self):
         graphics = (ATARI / "src" / "graphics.s").read_text()
         title = graphics.split("show_title:", 1)[1].split("show_presents:", 1)[0]
-        self.assertNotIn('.asciiz "PRESS FIRE TO START"', graphics)
+        self.assertIn('.asciiz "PRESS FIRE TO START"', graphics)
         self.assertNotIn('.asciiz "FIRE SPACE START   C CREDITS"', graphics)
-        self.assertNotIn("jsr draw_text", title)
+        self.assertIn("jsr draw_text", title)
+        self.assertRegex(title, r"lda #160\s+ldx #10\s+jsr draw_text")
+        self.assertRegex(title, r"@machine:\s+lda #181\s+ldx #1\s+jsr draw_text")
         self.assertIn("jmp arm_title_video", title)
+        self.assertNotIn("title_mode_e_display_list", graphics)
         title_video = graphics.split("arm_title_video:", 1)[1].split(
-            "draw_game_footer:", 1
+            '.segment "AUXCODE"', 1
         )[0]
-        self.assertIn("sta PCOLR0,x", title_video)
-        self.assertIn("sta COLPM0,x", title_video)
-        self.assertIn("lda #$80", title_video)
-        self.assertIn("sta GPRIOR", title_video)
-        self.assertIn("#<title_display_list", title_video)
-        self.assertIn("#<title_mode_dli", title_video)
-        self.assertRegex(title_video, r"lda #\$80\s+sta NMIEN")
-        self.assertRegex(
-            title_video,
-            r"lda #\$0F\s+sta title_footer_dli\s+lda #\$8F"
-            r"\s+sta title_frame_end_dli",
-        )
         self.assertRegex(
             title_video,
             re.compile(
                 r"@wait_vblank:.*?lda VCOUNT.*?cmp #\$7C.*?bcc @wait_vblank"
-                r".*?sta SDMCTL.*?sta DMACTL",
-                re.DOTALL,
-            ),
-        )
-        title_dli = graphics.split("title_mode_dli:", 1)[1].split(
-            "arm_title_video:", 1
-        )[0]
-        self.assertRegex(
-            title_dli,
-            re.compile(
-                r"lda VCOUNT.*?cmp #106.*?lda title_gtia10_colors,x"
-                r".*?sta COLPM0,x.*?lda #\$80.*?sta PRIOR"
-                r".*?inc RTCLOK\+2.*?rti.*?@footer:"
-                r".*?sta COLBK.*?sta COLPF1.*?rti",
+                r".*?jmp video_update_end",
                 re.DOTALL,
             ),
         )
@@ -426,19 +405,29 @@ class BuildContractTests(unittest.TestCase):
         rules = (ATARI / "src" / "rules.s").read_text()
         graphics = (ATARI / "src" / "graphics.s").read_text()
         resolve = rules.split("resolve_at:", 1)[1].split("find_group:", 1)[0]
+        self.assertIn("jsr present_merge", resolve)
+        resolve = (ATARI / "src" / "effects.s").read_text()
         self.assertNotIn("jsr render_game", resolve)
         self.assertIn("jsr redraw_group_cells", resolve)
         self.assertIn("jsr redraw_score_digits", resolve)
         self.assertIn("jsr run_merge_grid_ripple", resolve)
         self.assertIn("jsr flash_six_clear", resolve)
+        self.assertIn("jsr show_merge_score", resolve)
+        self.assertIn("jsr show_chain_reaction_sidebar", resolve)
+        self.assertIn("jsr shoot_chain_multiplier", resolve)
+        self.assertIn("jmp arm_chain_reaction_sidebar", resolve)
         self.assertEqual(resolve.count("jsr show_merge_star"), 4)
         self.assertEqual(resolve.count("jsr show_callout"), 1)
-        self.assertEqual(resolve.count("jsr hide_callout"), 1)
+        self.assertEqual(resolve.count("jsr hide_callout"), 2)
         self.assertIn("CALLOUT_FRAMES = 30", rules)
         self.assertIn("lda #CALLOUT_FRAMES", resolve)
         place = main.split("place_piece:", 1)[1].split("toggle_audio:", 1)[0]
         self.assertIn("jsr refresh_turn_display", place)
         self.assertNotIn("jsr render_game", place)
+        rotate = main.split("rotate_with_step:", 1)[1].split("place_piece:", 1)[0]
+        self.assertIn("jsr redraw_piece_sidebar", rotate)
+        wait_action = main.split("wait_action:", 1)[1].split("poll_action:", 1)[0]
+        self.assertIn("jsr update_chain_reaction_sidebar", wait_action)
         callout = graphics.split("show_callout:", 1)[1].split("show_merge_star:", 1)[0]
         self.assertIn("jsr save_callout_underlay", callout)
         self.assertIn("jsr clear_bitmap_rect", callout)
@@ -451,6 +440,16 @@ class BuildContractTests(unittest.TestCase):
         self.assertIn("lda #20", callout)
         self.assertIn("CALLOUT_UNDERLAY = $9E60", graphics)
         self.assertIn("restore_callout_underlay:", graphics)
+        save = graphics.split("save_callout_underlay:", 1)[1].split(
+            "restore_callout_underlay:", 1
+        )[0]
+        restore = graphics.split("restore_callout_underlay:", 1)[1].split(
+            "run_merge_grid_ripple:", 1
+        )[0]
+        self.assertIn("lda blit_width", save)
+        self.assertIn("cmp blit_height", save)
+        self.assertIn("lda blit_width", restore)
+        self.assertIn("cmp blit_height", restore)
 
     def test_new_game_flashes_clockwise_spiral_into_center(self):
         main = (ATARI / "src" / "main.s").read_text()
@@ -462,7 +461,12 @@ class BuildContractTests(unittest.TestCase):
 
         self.assertRegex(
             begin_game,
-            r"jsr new_game\s+jsr render_game\s+jsr run_game_start_spiral",
+            re.compile(
+                r"jsr new_game.*?lda #0\s+sta piece_visible\s+jsr render_game\s+"
+                r"jsr run_game_start_spiral\s+lda #1\s+sta piece_visible\s+"
+                r"jsr draw_piece_preview",
+                re.DOTALL,
+            ),
         )
         self.assertIn(
             "game_start_spiral:  .byte 20,15,10,5,0, 1,2,3,4,9, 14,19,24,23,22",
@@ -472,12 +476,11 @@ class BuildContractTests(unittest.TestCase):
         self.assertEqual(spiral.count("jsr invert_ripple_cell"), 2)
         self.assertIn("lda #2\n    jsr wait_frames", spiral)
         self.assertIn("cmp #25", spiral)
-        self.assertIn("lda sound_enabled", spiral)
+        self.assertIn("jsr play_spiral_sound", spiral)
         self.assertIn("lda #$98", spiral)
         self.assertEqual(spiral.count("sbc text_index"), 3)
-        self.assertIn("sta AUDF1", spiral)
-        self.assertIn("lda #$A6\n    sta AUDC1", spiral)
-        self.assertIn("lda #0\n    sta AUDC1", spiral)
+        self.assertNotIn("sta AUDF1", spiral)
+        self.assertNotIn("sta AUDC1", spiral)
 
     def test_merge_grid_boxes_ripple_inward_and_restore(self):
         graphics = (ATARI / "src" / "graphics.s").read_text()
@@ -495,7 +498,7 @@ class BuildContractTests(unittest.TestCase):
     def test_special_merge_feedback_matches_apple_outcomes(self):
         rules = (ATARI / "src" / "rules.s").read_text()
         graphics = (ATARI / "src" / "graphics.s").read_text()
-        resolve = rules.split("resolve_at:", 1)[1].split("find_group:", 1)[0]
+        resolve = (ATARI / "src" / "effects.s").read_text()
 
         self.assertNotIn("merged_count", rules)
         self.assertIn("first_merge_callouts: .byte 1,2,4,6,7,8,9", rules)
