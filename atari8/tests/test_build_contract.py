@@ -29,7 +29,7 @@ class BuildContractTests(unittest.TestCase):
         main = (ATARI / "src" / "main.s").read_text()
         self.assertIn(".byte $4F, <SCREEN, >SCREEN", graphics)
         self.assertIn("sta PORTB", main)
-        self.assertIn("cache_title_128", main)
+        self.assertIn("detect_memory", main)
         self.assertIn("jsr show_presents", main)
         self.assertIn("game_over_asset", graphics)
         self.assertIn("game_grid_asset", graphics)
@@ -37,7 +37,7 @@ class BuildContractTests(unittest.TestCase):
             graphics,
             r"render_game:\s+jsr video_update_begin\s+lda #<game_grid_asset[\s\S]*?jsr unpack_screen_rle",
         )
-        self.assertEqual(re.findall(r"cmp #128", main).count("cmp #128"), 2)
+        self.assertRegex(main, r"lda #128\s+sta zp_detected_kb")
 
     def test_banking_code_and_saved_state_stay_outside_the_bank_window(self):
         labels = (ATARI / "build" / "sixies.lbl").read_text().splitlines()
@@ -49,10 +49,6 @@ class BuildContractTests(unittest.TestCase):
 
         for name in (
             "detect_memory",
-            "cache_title_128",
-            "restore_title_128",
-            "copy_screen_to_bank",
-            "copy_bank_to_screen",
             "video_update_begin",
             "video_update_end",
         ):
@@ -212,8 +208,8 @@ class BuildContractTests(unittest.TestCase):
         )[0]
         self.assertIn("jsr arm_high_score_video", credit_video)
         self.assertIn("#<credits_color_dli", credit_video)
-        self.assertIn("sta title_footer_dli", credit_video)
-        self.assertIn("sta title_frame_end_dli", credit_video)
+        self.assertIn("jsr arm_high_score_video", credit_video)
+        self.assertIn("display_frame_end_dli:", graphics)
         credit_dli = graphics.split("credits_color_dli:", 1)[1].split(
             "arm_credits_video:", 1
         )[0]
@@ -247,16 +243,16 @@ class BuildContractTests(unittest.TestCase):
         gameplay_list = graphics.split("display_list:", 1)[1].split(
             '.segment "RODATA"', 1
         )[0]
-        self.assertEqual(gameplay_list.count(".byte $8F"), 2)
+        self.assertEqual(gameplay_list.count(".byte $8F"), 3)
         title_list = graphics.split("title_display_list:", 1)[1].split(
             '.segment "AUXCODE"', 1
         )[0]
-        self.assertEqual(title_list.count(".byte $8F"), 2)
+        self.assertNotIn(".byte $8E", title_list)
         self.assertRegex(
             title_list,
-            r"title_top_dli:\s+\.byte \$70\s+\.byte \$70,\$70",
+            r"\.byte \$70\s+\.byte \$70,\$70",
         )
-        self.assertIn(".byte $4F, <SCREEN, >SCREEN", title_list)
+        self.assertIn(".byte $4E, <SCREEN, >SCREEN", title_list)
         render = graphics.split("render_game:", 1)[1].split("show_title:", 1)[0]
         self.assertIn("lda #GAME_GOLD_HUE", render)
         self.assertIn("sta COLOR2", render)
@@ -364,11 +360,10 @@ class BuildContractTests(unittest.TestCase):
         )[0]
 
         self.assertIn("HIGH_SCORE_BLUE_HUE = $80", graphics)
-        self.assertIn("title_high_score_split:", graphics)
+        self.assertIn("display_frame_end_dli:", graphics)
         self.assertIn("jmp arm_high_score_video", high_score_page)
         self.assertIn("lda #HIGH_SCORE_BLUE_HUE", high_score_video)
-        self.assertIn("lda #$F0", high_score_video)
-        self.assertIn("sta title_high_score_split", high_score_video)
+        self.assertIn("#<display_list", high_score_video)
         self.assertIn("#<high_score_color_dli", high_score_video)
         self.assertIn("sta COLPF2", high_score_video)
         high_score_dli = graphics.split("high_score_color_dli:", 1)[1].split(
@@ -377,22 +372,23 @@ class BuildContractTests(unittest.TestCase):
         self.assertRegex(
             high_score_dli,
             re.compile(
-                r"lda VCOUNT.*?cmp #20.*?lda #HIGH_SCORE_BLUE_HUE"
-                r".*?sta COLPF2.*?@body:.*?lda #0.*?sta WSYNC.*?sta COLPF2",
+                r"lda VCOUNT.*?cmp #106.*?cmp #20.*?@blue:"
+                r".*?lda #HIGH_SCORE_BLUE_HUE.*?sta COLPF2"
+                r".*?@body:.*?lda #0.*?sta WSYNC.*?sta COLPF2",
                 re.DOTALL,
             ),
         )
 
-    def test_title_uses_monochrome_hires_art_and_native_text(self):
+    def test_title_uses_rasta_antic_e_art_and_a_fixed_palette(self):
         graphics = (ATARI / "src" / "graphics.s").read_text()
         title = graphics.split("show_title:", 1)[1].split("show_presents:", 1)[0]
-        self.assertIn('.asciiz "PRESS FIRE TO START"', graphics)
-        self.assertNotIn('.asciiz "FIRE SPACE START   C CREDITS"', graphics)
-        self.assertIn("jsr draw_text", title)
-        self.assertRegex(title, r"lda #160\s+ldx #10\s+jsr draw_text")
-        self.assertRegex(title, r"@machine:\s+lda #181\s+ldx #1\s+jsr draw_text")
+        self.assertIn('.incbin "build/assets/title_palette.bin"', graphics)
+        self.assertNotIn("jsr draw_text", title)
+        self.assertNotIn("rasta_title_color_dli:", graphics)
+        self.assertIn("sta COLPF0", graphics)
+        self.assertIn("sta COLPF1", graphics)
+        self.assertIn("sta COLPF2", graphics)
         self.assertIn("jmp arm_title_video", title)
-        self.assertNotIn("title_mode_e_display_list", graphics)
         title_video = graphics.split("arm_title_video:", 1)[1].split(
             '.segment "AUXCODE"', 1
         )[0]
@@ -400,7 +396,7 @@ class BuildContractTests(unittest.TestCase):
             title_video,
             re.compile(
                 r"@wait_vblank:.*?lda VCOUNT.*?cmp #\$7C.*?bcc @wait_vblank"
-                r".*?jmp video_update_end",
+                r".*?lda #\$40.*?sta NMIEN.*?rts",
                 re.DOTALL,
             ),
         )

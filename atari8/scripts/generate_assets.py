@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert shared Sixies source masters to Atari ANTIC-F 1bpp assets."""
+"""Convert shared Sixies masters to native Atari bitmap assets."""
 
 from __future__ import annotations
 
@@ -183,6 +183,13 @@ def physical_screen(image: Image.Image) -> bytes:
     # ANTIC restarts at $9000 after row 99. Fill both that 96-byte boundary
     # gap and the 160 bytes after row 191, matching clear_screen's 31 pages.
     return logical[:4000] + bytes(96) + logical[4000:] + bytes(160)
+
+
+def physical_antic_e(data: bytes) -> bytes:
+    """Map a 160x192 two-bit ANTIC-E bitmap into Sixies' screen pages."""
+    if len(data) != 40 * 192:
+        raise ValueError(f"ANTIC-E title must contain 7680 bytes, got {len(data)}")
+    return data[:4000] + bytes(96) + data[4000:] + bytes(160)
 
 
 def save_rle_screen(image: Image.Image, binary: Path, preview: Path) -> None:
@@ -703,8 +710,17 @@ def build(output: Path, previews: Path) -> None:
     output.mkdir(parents=True, exist_ok=True)
     previews.mkdir(parents=True, exist_ok=True)
 
-    title = make_art_screen(make_atari_title(), (62, 0))
-    save_rle_screen(title, output / "title_logo.rle", previews / "title_logo.png")
+    title_mic = (ATARI / "assets" / "title_rasta.mic").read_bytes()
+    title_palette = (ATARI / "assets" / "title_rasta.pal").read_bytes()
+    if len(title_palette) != 3:
+        raise ValueError("Rasta title palette must contain three fixed colors")
+    title_packed = pack_rle(physical_antic_e(title_mic))
+    if unpack_rle(title_packed) != physical_antic_e(title_mic):
+        raise ValueError("Rasta title RLE verification failed")
+    (output / "title_logo.rle").write_bytes(title_packed)
+    (output / "title_palette.bin").write_bytes(title_palette)
+    with Image.open(ATARI / "assets" / "title_rasta_native.png") as title_preview:
+        title_preview.convert("RGB").save(previews / "title_logo.png")
 
     credits_logo = make_credits_logo()
     credits_logo_data = pack_1bpp(credits_logo)
@@ -846,7 +862,8 @@ def build(output: Path, previews: Path) -> None:
     (output / "font.bin").write_bytes(font)
 
     manifest = (
-        f"title_logo.rle {len(pack_rle(physical_screen(title)))} bytes, 320x192 PackBits RLE\n"
+        f"title_logo.rle {len(title_packed)} bytes, 160x192 ANTIC-E PackBits RLE\n"
+        "title_palette.bin 3 fixed title colors (plus black background)\n"
         f"credits_logo.bin {len(credits_logo_data)} bytes, 96x24 1bpp\n"
         f"presents.rle {len(pack_rle(physical_screen(presents)))} bytes, 320x192 PackBits RLE\n"
         f"instructions.rle {len(pack_rle(physical_screen(instructions)))} bytes, 320x192 PackBits RLE\n"

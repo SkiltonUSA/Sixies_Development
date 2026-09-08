@@ -23,7 +23,6 @@ zp_detected_kb:     .res 1
 ram_kb:             .res 1
 input_latch:        .res 1
 last_action:        .res 1
-title_cached:       .res 1
 gameplay_input:     .res 1
 joy_fire_state:     .res 1 ; 0=idle, 1=pending placement, 2=rotation consumed fire
 queued_action:      .res 1 ; latest movement during an animation; never placement
@@ -41,7 +40,6 @@ start:
     sta CH
     lda #0
     sta input_latch
-    sta title_cached
     sta gameplay_input
     sta joy_fire_state
     sta queued_action
@@ -68,16 +66,7 @@ start:
     jsr wait_frames
 
 title_loop:
-    lda ram_kb
-    cmp #128
-    bne @draw_title
-    lda title_cached
-    beq @draw_title
-    jsr restore_title_128
-    jmp @title_ready
-@draw_title:
     jsr show_title
-    jsr cache_title_128
 @title_ready:
     jsr arm_input
     jsr sound_start_music
@@ -651,86 +640,6 @@ detect_memory:
     sta $4001
     lda zp_detected_kb
     sta ram_kb
-    rts
-
-; The 128K enhancement stores the 7.5K title page in extended bank 2.
-cache_title_128:
-    lda ram_kb
-    cmp #128
-    bne @done
-    jsr video_update_begin
-    sei
-    lda PORTB
-    sta zp_saved_portb
-    and #$E3
-    ora #$08
-    sta PORTB
-    jsr copy_screen_to_bank
-    lda zp_saved_portb
-    sta PORTB
-    cli
-    lda #1
-    sta title_cached
-    jsr arm_title_video
-@done:
-    rts
-
-restore_title_128:
-    jsr video_update_begin
-    sei
-    lda PORTB
-    sta zp_saved_portb
-    and #$E3
-    ora #$08
-    sta PORTB
-    jsr copy_bank_to_screen
-    lda zp_saved_portb
-    sta PORTB
-    cli
-    jmp arm_title_video
-
-copy_screen_to_bank:
-    lda #<SCREEN
-    sta zp_screen
-    lda #>SCREEN
-    sta zp_screen+1
-    lda #<$4000
-    sta zp_asset
-    lda #>$4000
-    sta zp_asset+1
-    ldx #SCREEN_PHYSICAL_PAGES
-    ldy #0
-@copy:
-    lda (zp_screen),y
-    sta (zp_asset),y
-    iny
-    bne @copy
-    inc zp_screen+1
-    inc zp_asset+1
-    dex
-    bne @copy
-    rts
-
-copy_bank_to_screen:
-    lda #<$4000
-    sta zp_asset
-    lda #>$4000
-    sta zp_asset+1
-    lda #<SCREEN
-    sta zp_screen
-    lda #>SCREEN
-    sta zp_screen+1
-    ldx #SCREEN_PHYSICAL_PAGES
-    ldy #0
-@copy:
-    lda (zp_asset),y
-    sta (zp_screen),y
-    iny
-    bne @copy
-    inc zp_asset+1
-    inc zp_screen+1
-    dex
-    bne @copy
     rts
 
 .include "src/rules.s"

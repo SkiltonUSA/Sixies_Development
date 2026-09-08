@@ -8,8 +8,8 @@ the machine meant by the 64K/128K targets in this port.
 The game is a playable first native port: piece generation, placement,
 orthogonal merging, chains, scoring, game over, keyboard/joystick input,
 instructions, converted artwork, POKEY cues, XEX packaging, and a bootable ATR
-are implemented. The 130XE build detects extended RAM at runtime and caches the
-7.75K title framebuffer in an extended bank. Both targets use one XEX.
+are implemented. The 130XE build detects extended RAM at runtime; both memory
+profiles use the same XEX and the same compact color title renderer.
 Cursor movement, rotation, placement, and merge animation use dirty-region
 updates, so the ornate gameplay grid is not decompressed or blanked during
 normal play.
@@ -149,7 +149,7 @@ the right-sidebar next-piece preview remains available throughout the intro.
 
 ## Graphics and assets
 
-The selected playfield is ANTIC mode F (OS GRAPHICS 8): 320x192, one bit per
+The game playfield is ANTIC mode F (OS GRAPHICS 8): 320x192, one bit per
 pixel. It gives Sixies the same sharp high-resolution silhouette as the C64
 board and Apple II DHGR art, works consistently on NTSC and PAL displays, and
 leaves 80-pixel sidebars around the 160-pixel board. The gameplay header uses
@@ -159,13 +159,16 @@ rule and boxed controls. Presentation, instruction, high-score, and credit pages
 otherwise use white on black, with a blue high-score header and blue credits
 header/yellow credits footer. Instructions use gold for their top header and
 bottom continuation box. The display list restarts screen DMA at
-`$9000`, because an ANTIC mode-F line may not cross a 4K boundary.
+`$9000`, because an ANTIC bitmap line may not cross a 4K boundary. The title
+switches the same framebuffer to 160x192 ANTIC E with three fixed colors plus
+black. This reduced palette retains the RastaConverter composition without its
+memory-heavy raster kernel or scanline color flicker.
 
 `scripts/generate_assets.py` converts the shared source masters at build time:
 
 - the supplied 256x240 flat Sixies title with its logo, mascot, dice, and stars,
-  reduced to a detailed monochrome ANTIC-F composition while preserving space
-  for the start prompt and detected-machine label;
+  converted by RastaConverter and adapted to a stable single-frame ANTIC-E
+  composition, with native-color start and machine labels below the artwork;
 - the supplied 1983x793 pixel-art Sixies logo, proportionally reduced and
   centered in the 24-pixel strip directly above the gameplay grid, replacing
   the earlier small sidebar logo;
@@ -208,14 +211,18 @@ bottom continuation box. The display list restarts screen DMA at
   identifies the occupied cell beneath a hovering piece;
 - ASCII-indexed 8x8 glyph data for the bitmap text renderer.
 
-The generated binaries and PNG inspection atlases are kept in `build/` rather
-than committed. Full-screen title, presentation, instructions, Game Over, and
+Most generated binaries and PNG inspection atlases are kept in `build/` rather
+than committed. The Rasta title's source, converter preview, compact `.mic` and
+palette are committed so ordinary builds do not depend on the third-party
+optimizer. Full-screen title, presentation, instructions, Game Over, and
 gameplay-grid art use a lossless PackBits/backreference decoder, reducing their
 in-memory footprint while writing directly to the 31-page ANTIC framebuffer.
 SID and Apple speaker byte streams are hardware-specific. Gameplay cues use
 native POKEY pitch envelopes in `src/sound.s`; title music is converted with
 `sid2sapr`, LZSS-compressed, and played with timer-driven POKEY softbass. See
 [`docs/sid-music.md`](docs/sid-music.md) for the reproducible pipeline.
+The title conversion recipe and its 64K integration tradeoffs are documented in
+[`docs/rastaconverter-title.md`](docs/rastaconverter-title.md).
 
 See [docs/architecture.md](docs/architecture.md) for the graphics alternatives,
 memory map, boot strategy, reference projects, and prioritized assembly
@@ -232,6 +239,10 @@ without downloading a ROM or installing an emulator. Repository-level
 Conductor scripts provide Build Atari, Test Atari, Run Atari 64K, and Run Atari
 128K actions. Shared Conductor settings become available to all workspaces once
 they are merged into the repository's default branch.
+
+`make release` creates the versioned GitHub release files in `build/release/`:
+`Sixies-Atari-v1.1.0.atr`, `Sixies-Atari-v1.1.0.xex`, the compressed XEX, and
+their SHA-256 checksum manifest.
 
 ## Tool and format references
 

@@ -12,6 +12,17 @@ import generate_assets  # noqa: E402
 
 
 class AssetPipelineTests(unittest.TestCase):
+    def test_rasta_title_assets_have_native_geometry_and_palette_bands(self):
+        mic = (ATARI / "assets" / "title_rasta.mic").read_bytes()
+        palette = (ATARI / "assets" / "title_rasta.pal").read_bytes()
+        with Image.open(ATARI / "assets" / "title_rasta_native.png") as preview:
+            self.assertEqual(preview.size, (320, 192))
+            self.assertIsNotNone(preview.convert("RGB").getbbox())
+        self.assertEqual(len(mic), 40 * 192)
+        self.assertEqual(len(palette), 3)
+        self.assertTrue(any(mic[151 * 40:165 * 40]), "title prompt overlay is empty")
+        self.assertTrue(any(mic[174 * 40:188 * 40]), "machine label overlay is empty")
+
     def test_title_masters_and_atari_geometry(self):
         decoded = generate_assets.decode_a2fm_title()
         self.assertEqual(decoded.size, (560, 192))

@@ -66,9 +66,11 @@ display_list:
     .endrepeat
     ; Switch the horizontal rule and boxed controls back to gold at row 167.
     .byte $8F
-    .repeat 25
+    .repeat 24
         .byte $0F
     .endrepeat
+display_frame_end_dli:
+    .byte $8F
     .byte $41, <display_list, >display_list
 
 .segment "RODATA"
@@ -121,9 +123,6 @@ score_div_hi:       .byte >10000,>1000,>100,>10,>1
 text_score:         .asciiz "SCORE"
 text_new_game:      .asciiz "[N]EW GAME"
 text_instructions:  .asciiz "[I]NSTRUCTIONS"
-text_title_prompt:  .asciiz "PRESS FIRE TO START"
-text_64k:           .asciiz "ATARI 800XL 64K"
-text_128k:          .asciiz "ATARI 130XE 128K ENHANCED"
 text_restart:       .asciiz "PRESS TO VIEW HIGH SCORES"
 text_new_confirm:   .asciiz "Y/FIRE: NEW GAME"
 text_new_cancel:    .asciiz "N/LEFT: CANCEL"
@@ -147,32 +146,22 @@ callout_asset:      .incbin "build/assets/callouts.bin"
 ; the complete 64K build still leaves safe room below the framebuffer.
 font_asset:         .incbin "build/assets/font.bin"
 
-; Shared color-banded ANTIC-F list for the high-score and credits pages.
+; Dedicated ANTIC-E title list. Its single fixed palette avoids contention
+; between scanline interrupts and the title music's high-rate POKEY IRQ.
 title_display_list:
-title_top_dli:
     .byte $70
     .byte $70,$70
-    .byte $4F, <SCREEN, >SCREEN
-    .repeat 28
-        .byte $0F
+    .byte $4E, <SCREEN, >SCREEN
+    .repeat 99
+        .byte $0E
     .endrepeat
-title_high_score_split:
-    .byte $0F
-    .repeat SCREEN_SPLIT-30
-        .byte $0F
+    .byte $4E, <SCREEN_SECOND, >SCREEN_SECOND
+    .repeat 91
+        .byte $0E
     .endrepeat
-    .byte $4F, <SCREEN_SECOND, >SCREEN_SECOND
-    .repeat 57
-        .byte $0F
-    .endrepeat
-title_footer_dli:
-    .byte $8F
-    .repeat 32
-        .byte $0F
-    .endrepeat
-title_frame_end_dli:
-    .byte $8F
     .byte $41, <title_display_list, >title_display_list
+
+title_palette_asset: .incbin "build/assets/title_palette.bin"
 
 .segment "AUXCODE"
 
@@ -240,15 +229,16 @@ arm_color_band_dli:
     sta NMIEN
     rts
 
-; High scores reuse the title display-list allocation with different DLI marks:
-; the first interrupt explicitly selects blue before the visible bitmap, and a
-; second keeps the title and divider blue through row 29 before selecting white
-; for the table. Driving both transitions here avoids OS-VBI color timing jitter.
+; High scores use the gameplay mode-F list's header and frame-end marks. The
+; final interrupt restores blue before the next frame without OS-VBI jitter.
 high_score_color_dli:
     pha
     lda VCOUNT
+    cmp #106
+    bcs @blue
     cmp #20
     bcs @body
+@blue:
     lda #0
     sta WSYNC
     lda #HIRES_WHITE
@@ -265,13 +255,6 @@ high_score_color_dli:
     rti
 
 arm_high_score_video:
-    lda #$F0
-    sta title_top_dli
-    lda #$8F
-    sta title_high_score_split
-    lda #$0F
-    sta title_footer_dli
-    sta title_frame_end_dli
     lda #HIGH_SCORE_BLUE_HUE
     sta COLOR2
     sta COLPF2
@@ -281,10 +264,10 @@ arm_high_score_video:
     lda #0
     sta GPRIOR
     sta PRIOR
-    lda #<title_display_list
+    lda #<display_list
     sta SDLSTL
     sta DLISTL
-    lda #>title_display_list
+    lda #>display_list
     sta SDLSTL+1
     sta DLISTH
     lda #<high_score_color_dli
@@ -302,14 +285,39 @@ arm_high_score_video:
     sta NMIEN
     rts
 
-; Reveal a completed monochrome ANTIC-F title only during vertical blank.
-; Both direct rendering and the 128K cached-screen path enter here.
 arm_title_video:
+    lda #0
+    sta COLBK
+    sta PRIOR
+    sta GPRIOR
+    ldx #0
+    lda title_palette_asset,x
+    sta COLOR0
+    sta COLPF0
+    inx
+    lda title_palette_asset,x
+    sta COLOR1
+    sta COLPF1
+    inx
+    lda title_palette_asset,x
+    sta COLOR2
+    sta COLPF2
+    lda #<title_display_list
+    sta SDLSTL
+    sta DLISTL
+    lda #>title_display_list
+    sta SDLSTL+1
+    sta DLISTH
 @wait_vblank:
     lda VCOUNT
     cmp #$7C
     bcc @wait_vblank
-    jmp video_update_end
+    lda #$22
+    sta SDMCTL
+    sta DMACTL
+    lda #$40
+    sta NMIEN
+    rts
 
 .segment "LOGIC"
 
@@ -1130,30 +1138,6 @@ show_title:
     lda #>title_logo_asset
     sta zp_asset+1
     jsr unpack_screen_rle
-    lda #<text_title_prompt
-    sta zp_text
-    lda #>text_title_prompt
-    sta zp_text+1
-    lda #160
-    ldx #10
-    jsr draw_text
-    lda ram_kb
-    cmp #128
-    bne @64
-    lda #<text_128k
-    sta zp_text
-    lda #>text_128k
-    sta zp_text+1
-    bne @machine
-@64:
-    lda #<text_64k
-    sta zp_text
-    lda #>text_64k
-    sta zp_text+1
-@machine:
-    lda #181
-    ldx #1
-    jsr draw_text
     jmp arm_title_video
 
 .segment "CODE"
@@ -1380,13 +1364,9 @@ credits_color_dli:
     rti
 
 arm_credits_video:
-    ; The high-score setup already installs this display list and reveals it
-    ; during vertical blank. Replace its handler and enable the two remaining
-    ; DLI marks before ANTIC reaches the next visible frame.
+    ; High scores already install the shared mode-F list. Replace its handler;
+    ; its header/footer/frame-end marks supply the three required transitions.
     jsr arm_high_score_video
-    lda #$8F
-    sta title_footer_dli
-    sta title_frame_end_dli
     lda #<credits_color_dli
     sta VDSLST
     lda #>credits_color_dli

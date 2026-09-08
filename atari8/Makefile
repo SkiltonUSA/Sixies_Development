@@ -17,6 +17,13 @@ OBJECT := $(BUILD_DIR)/sixies.o
 TARGET := $(BUILD_DIR)/sixies.xex
 CRUNCHED := $(BUILD_DIR)/sixies-crunched.xex
 DISK := $(BUILD_DIR)/sixies.atr
+RELEASE_VERSION := 1.1.0
+RELEASE_DIR := $(BUILD_DIR)/release
+RELEASE_PREFIX := Sixies-Atari-v$(RELEASE_VERSION)
+RELEASE_XEX := $(RELEASE_DIR)/$(RELEASE_PREFIX).xex
+RELEASE_CRUNCHED := $(RELEASE_DIR)/$(RELEASE_PREFIX)-crunched.xex
+RELEASE_ATR := $(RELEASE_DIR)/$(RELEASE_PREFIX).atr
+RELEASE_CHECKSUMS := $(RELEASE_DIR)/$(RELEASE_PREFIX)-SHA256.txt
 MAP := $(BUILD_DIR)/sixies.map
 LABELS := $(BUILD_DIR)/sixies.lbl
 LISTING := $(BUILD_DIR)/sixies.lst
@@ -26,6 +33,11 @@ ASSET_SOURCES := \
 	$(ROOT)/apple2/assets/title_dhgr_mono_master.a2fm \
 	$(ROOT)/apple2/assets/title_dhgr_mono_reference.png \
 	$(ATARI_DIR)/assets/title_master.png \
+	$(ATARI_DIR)/assets/title_rasta_source.png \
+	$(ATARI_DIR)/assets/title_rasta_converted.png \
+	$(ATARI_DIR)/assets/title_rasta_native.png \
+	$(ATARI_DIR)/assets/title_rasta.mic \
+	$(ATARI_DIR)/assets/title_rasta.pal \
 	$(ATARI_DIR)/assets/credits_logo_master.png \
 	$(ATARI_DIR)/assets/game_logo_master.png \
 	$(ROOT)/apple2/assets/grid_master.png \
@@ -60,11 +72,19 @@ DEMO_MUSIC_XEX := $(BUILD_DIR)/demo_music.xex
 DEMO_HIGH_SCORES_OBJ := $(BUILD_DIR)/demo_high_scores.o
 DEMO_HIGH_SCORES_XEX := $(BUILD_DIR)/demo_high_scores.xex
 DEMO_HIGH_SCORES_DISK := $(BUILD_DIR)/demo_high_scores.atr
+RASTA_DIR := $(ROOT)/.tools/rastaconverter
+RASTA_BUILD_DIR := $(RASTA_DIR)/build/sixies-headless
+RASTA := $(RASTA_BUILD_DIR)/Release-NO_GUI/RastaConverter-NO_GUI
+RASTA_PALETTE := $(RASTA_DIR)/Palettes/ntsc.act
+RASTA_SOURCE := $(ATARI_DIR)/assets/title_rasta_source.png
+RASTA_OUTPUT := $(ATARI_DIR)/assets/title_rasta_converted.png
+RASTA_WORK := $(BUILD_DIR)/rasta-title/title.png
 
-.PHONY: all setup-tools assets test crunch disk run run64 run128 doctor clean \
+.PHONY: all setup-tools assets test crunch disk release run run64 run128 doctor clean \
 	music music-sapr demo-music run-demo-music
 
 .PHONY: demo-high-scores demo-high-scores-disk run-demo-high-scores
+.PHONY: title-rasta
 
 all: $(TARGET)
 
@@ -74,12 +94,28 @@ setup-tools:
 $(BUILD_DIR) $(ASSET_DIR) $(PREVIEW_DIR):
 	mkdir -p "$@"
 
-$(ASSET_STAMP): scripts/generate_assets.py $(ASSET_SOURCES) | $(ASSET_DIR) $(PREVIEW_DIR)
+$(ASSET_STAMP): scripts/generate_assets.py scripts/prepare_rasta_title.py $(ASSET_SOURCES) | $(ASSET_DIR) $(PREVIEW_DIR)
 	@if [ ! -x "$(VENV_PYTHON)" ]; then ./scripts/setup-tools.sh; fi
 	"$(VENV_PYTHON)" scripts/generate_assets.py --output "$(ASSET_DIR)" --previews "$(PREVIEW_DIR)"
 	touch "$@"
 
 assets: $(ASSET_STAMP)
+
+# Optional offline regeneration of the committed color title. The normal game
+# build consumes the generated .mic/.pal files and does not require RastaConverter.
+title-rasta:
+	@if [ ! -x "$(RASTA)" ]; then \
+		echo "RastaConverter is missing. See docs/rastaconverter-title.md." >&2; exit 1; fi
+	mkdir -p "$(dir $(RASTA_WORK))"
+	"$(RASTA)" "$(RASTA_SOURCE)" \
+		/o="$(RASTA_WORK)" /subfolder=off /graphics_mode=e /playfield=normal \
+		/h=192 /objective=source /pal="$(RASTA_PALETTE)" /filter=box \
+		/dither=none /threads=1 /seed=313 /max_evals=500000 /save=0 /quiet
+	cp "$(RASTA_WORK)" "$(RASTA_OUTPUT)"
+	@if [ ! -x "$(VENV_PYTHON)" ]; then ./scripts/setup-tools.sh; fi
+	"$(VENV_PYTHON)" scripts/prepare_rasta_title.py \
+		"$(RASTA_OUTPUT)" "$(RASTA_PALETTE)" "$(ATARI_DIR)/assets"
+	@echo "Regenerated Rasta ANTIC-E title assets."
 
 $(OBJECT): $(SOURCE) $(INCLUDES) $(CONFIG) $(ASSET_STAMP) | $(BUILD_DIR)
 	ca65 -g -I . -l "$(LISTING)" -o "$@" "$<"
@@ -97,6 +133,17 @@ $(DISK): $(CRUNCHED) scripts/package_disk.sh scripts/preserve_high_scores.py
 	./scripts/package_disk.sh "$(DIR2ATR)" "$(CRUNCHED)" "$@"
 
 disk: $(DISK)
+
+release: $(DISK) $(TARGET) $(CRUNCHED)
+	mkdir -p "$(RELEASE_DIR)"
+	cp "$(TARGET)" "$(RELEASE_XEX)"
+	cp "$(CRUNCHED)" "$(RELEASE_CRUNCHED)"
+	cp "$(DISK)" "$(RELEASE_ATR)"
+	cd "$(RELEASE_DIR)" && shasum -a 256 \
+		"$(notdir $(RELEASE_XEX))" \
+		"$(notdir $(RELEASE_CRUNCHED))" \
+		"$(notdir $(RELEASE_ATR))" > "$(notdir $(RELEASE_CHECKSUMS))"
+	@echo "Versioned release files: $(RELEASE_DIR)"
 
 test: $(DISK)
 	@if [ ! -x "$(VENV_PYTHON)" ]; then ./scripts/setup-tools.sh; fi
