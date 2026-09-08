@@ -111,3 +111,16 @@ make -C atari8 doctor
 make -C atari8 run64
 make -C atari8 run128
 ```
+
+## Game Boy port
+
+A native Game Boy and Game Boy Color compatible port is being developed in
+[`gameboy/`](gameboy/README.md). Its reproducible toolchain includes GBDK-2020,
+RGBDS, SameBoy, mGBA, Tiled, hUGETracker, ROM validation, Conductor commands,
+and a GitHub Actions build.
+
+```sh
+make -C gameboy setup
+make -C gameboy test
+make -C gameboy run
+```

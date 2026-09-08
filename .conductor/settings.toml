@@ -1,8 +1,31 @@
 "$schema" = "https://conductor.build/schemas/settings.repo.schema.json"
 
 [scripts]
-setup = "./atari8/scripts/setup-tools.sh"
+setup = "./atari8/scripts/setup-tools.sh && ./gameboy/scripts/setup-tools.sh"
 run_mode = "concurrent"
+
+[scripts.run.build-gameboy]
+command = "make -C gameboy"
+icon = "hammer"
+
+[scripts.run.test-gameboy]
+command = "make -C gameboy test"
+icon = "test-tube"
+
+[scripts.run.doctor-gameboy]
+command = "make -C gameboy doctor-desktop"
+available_in = [ "local" ]
+icon = "stethoscope"
+
+[scripts.run.run-gameboy]
+command = "make -C gameboy run"
+available_in = [ "local" ]
+icon = "play"
+
+[scripts.run.run-gameboy-mgba]
+command = "make -C gameboy run-mgba"
+available_in = [ "local" ]
+icon = "play"
 
 [scripts.run.build-atari]
 command = "make -C atari8"
