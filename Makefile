@@ -35,13 +35,16 @@ ASM_SOURCES := \
 	src/assets/settings_screen.asm \
 	src/assets/settings_art.asm \
 	src/assets/main_mascot.asm \
+	src/assets/shadow_sprite_workspace.asm \
+	src/assets/preview_dice_effects.asm \
 	src/assets/game_over_prompt.asm \
 	src/assets/merge_shake.asm \
 	src/assets/merge_firework_helpers.asm \
+	src/assets/gameplay_logo.asm \
 	src/assets/game_over_screen.asm \
 	src/assets/game_over_koala_tables.asm \
 	src/assets/merge_firework_paths.asm \
-	src/assets/marching_ants.asm \
+	src/assets/chain_reaction_sprite.asm \
 	src/assets/merge_grid_sweep.asm \
 	src/assets/merge_firework_sprite.asm \
 	src/assets/die_one.asm \
@@ -53,6 +56,7 @@ ASM_SOURCES := \
 	src/assets/new_game.asm \
 	src/assets/settings.asm \
 	src/assets/bottom_labels.asm \
+	src/assets/bottom_icon_control.asm \
 	src/assets/large_digits.asm \
 	src/assets/game_over.asm
 KOALA_SOURCE := src/assets/game_over_koala.kla
@@ -80,6 +84,11 @@ CREDITS_MASCOT_SCREEN := src/assets/credits_mascot_screen.bin
 CREDITS_LOGO_MASTER := src/assets/credits_logo_master.jpg
 CREDITS_LOGO_BITMAP := src/assets/credits_logo_bitmap.bin
 CREDITS_LOGO_SCREEN := src/assets/credits_logo_screen.bin
+GAMEPLAY_LOGO_BITMAP := src/assets/gameplay_logo_bitmap.bin
+GAMEPLAY_LOGO_PREVIEW := src/assets/gameplay_logo_preview.png
+CHAIN_REACTION_MASTER := src/assets/chain_reaction_master.png
+CHAIN_REACTION_SPRITE := src/assets/chain_reaction_sprite.bin
+CHAIN_REACTION_PREVIEW := src/assets/chain_reaction_preview.png
 PRESENTS_MASTER := src/assets/Studio313.kla
 PRESENTS_BITMAP_PACKED := src/assets/presents_bitmap_packed.bin
 PRESENTS_SCREEN_PACKED := src/assets/presents_screen_packed.bin
@@ -123,6 +132,8 @@ BINARY_ASSETS := \
 	$(CREDITS_MASCOT_SCREEN) \
 	$(CREDITS_LOGO_BITMAP) \
 	$(CREDITS_LOGO_SCREEN) \
+	$(GAMEPLAY_LOGO_BITMAP) \
+	$(CHAIN_REACTION_SPRITE) \
 	$(PRESENTS_BITMAP_PACKED) \
 	$(PRESENTS_SCREEN_PACKED) \
 	$(PRESENTS_COLOR_PACKED) \
@@ -131,7 +142,7 @@ BINARY_ASSETS := \
 	$(FONT_CHARSET16) \
 	$(MERGE_CALLOUT_PACKED)
 
-.PHONY: all crunch release music test-porting setup-porting setup-acme setup-sidkit sidkit run clean FORCE
+.PHONY: all crunch release music probability-table test-porting setup-porting setup-acme setup-sidkit sidkit run clean FORCE
 
 all: $(TARGET)
 
@@ -139,8 +150,12 @@ crunch release: $(CRUNCHED_TARGET)
 
 music: $(SIXIES_MUSIC_SID)
 
+probability-table:
+	python3 scripts/generate-probability-table.py --output docs/piece-probabilities.md
+
 test-porting:
 	python3 tests/porting/validate_vectors.py
+	python3 scripts/generate-probability-table.py --check docs/piece-probabilities.md
 
 setup-porting:
 	./scripts/setup-porting-workspace.sh
@@ -180,7 +195,7 @@ $(TITLE_PACKED) $(TITLE_TABLES): $(TITLE_KLA) scripts/pack-koala.py
 	./scripts/pack-koala.py "$(TITLE_KLA)" src/assets title_koala
 
 $(MASCOT_BITMAP): $(MASCOT_MASTER) scripts/convert-main-mascot.py
-	./scripts/convert-main-mascot.py "$(MASCOT_MASTER)" src/assets main_mascot 80 80
+	./scripts/convert-main-mascot.py "$(MASCOT_MASTER)" src/assets main_mascot 64 80
 	ffmpeg -v error -y -i src/assets/main_mascot_preview.ppm src/assets/main_mascot_preview.png
 
 $(MASCOT_SCREEN): $(MASCOT_BITMAP)
@@ -205,6 +220,20 @@ $(CREDITS_LOGO_BITMAP): $(CREDITS_LOGO_MASTER) scripts/convert-main-mascot.py
 	ffmpeg -v error -y -i src/assets/credits_logo_preview.ppm src/assets/credits_logo_preview.png
 
 $(CREDITS_LOGO_SCREEN): $(CREDITS_LOGO_BITMAP)
+	@test -f "$@"
+
+$(GAMEPLAY_LOGO_BITMAP): $(CREDITS_LOGO_BITMAP) scripts/build-gameplay-logo.py
+	./scripts/build-gameplay-logo.py "$(CREDITS_LOGO_BITMAP)" src/assets
+	ffmpeg -v error -y -i src/assets/gameplay_logo_preview.ppm "$(GAMEPLAY_LOGO_PREVIEW)"
+
+$(GAMEPLAY_LOGO_PREVIEW): $(GAMEPLAY_LOGO_BITMAP)
+	@test -f "$@"
+
+$(CHAIN_REACTION_SPRITE): $(CHAIN_REACTION_MASTER) scripts/build-chain-reaction-sprite.py
+	python3 scripts/build-chain-reaction-sprite.py "$(CHAIN_REACTION_MASTER)" src/assets
+	ffmpeg -v error -y -i src/assets/chain_reaction_preview.ppm "$(CHAIN_REACTION_PREVIEW)"
+
+$(CHAIN_REACTION_PREVIEW): $(CHAIN_REACTION_SPRITE)
 	@test -f "$@"
 
 $(PRESENTS_BITMAP_PACKED): $(PRESENTS_MASTER) $(FONT_CHARSET) scripts/convert-presents.py

@@ -2,8 +2,8 @@
 * = $3000
 MergeCalloutPackedData:
 !bin "src/assets/merge_callouts_packed.bin"
-MergeCalloutOffsetLo: !byte $00,$38,$d9,$60,$8f,$f2,$aa,$ff,$b1,$37
-MergeCalloutOffsetHi: !byte $00,$01,$02,$04,$05,$06,$08,$09,$0b,$0d
+MergeCalloutOffsetLo: !byte $00,$0f,$6b,$ab,$b4,$e2,$54,$6b,$d6,$13
+MergeCalloutOffsetHi: !byte $00,$01,$02,$03,$04,$05,$07,$08,$09,$0b
 MergeCalloutGeneralCount = 8
 MergeCalloutFivesIndex = 8
 MergeCalloutSixiesIndex = 9

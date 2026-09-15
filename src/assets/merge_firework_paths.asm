@@ -1,5 +1,5 @@
 ; Signed Y offsets form upward jumps followed by gravity-driven falls.
-; Packed into the gap before the marching-ant animation.
+; Packed into the gap below the gameplay bitmap helpers.
 * = $59e3
 FireworkSideX:
 !byte 0,2,4,6,8,10,12,14,16

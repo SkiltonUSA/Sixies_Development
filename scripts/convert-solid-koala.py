@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import collections
+import colorsys
 import pathlib
 import subprocess
 import sys
@@ -22,8 +23,7 @@ PALETTE = [
 def decode_and_fit(path, stretch_logo=False):
     if stretch_logo:
         video_filter = (
-            "scale=300:250:flags=neighbor,"
-            "crop=300:200:0:18,"
+            "scale=288:192:flags=neighbor,"
             f"pad={WIDTH}:{HEIGHT}:(ow-iw)/2:(oh-ih)/2:black"
         )
     else:
@@ -77,7 +77,32 @@ def flat_color(red, green, blue):
     )
 
 
-def classify(rgb):
+def game_over_color(red, green, blue):
+    hue, saturation, value = colorsys.rgb_to_hsv(
+        red / 255.0, green / 255.0, blue / 255.0
+    )
+    if value < 0.28:
+        return 0
+    if saturation < 0.18:
+        return 1 if value >= 0.68 else 0
+
+    hue *= 360
+    if hue < 18 or hue >= 345:
+        return 10
+    if hue < 45:
+        return 8
+    if hue < 75:
+        return 7
+    if hue < 170:
+        return 13
+    if hue < 205:
+        return 3
+    if hue < 250:
+        return 14
+    return 4
+
+
+def classify(rgb, solid_game_over=False):
     logical = []
     for y in range(HEIGHT):
         row = []
@@ -85,9 +110,10 @@ def classify(rgb):
             offset = (y * WIDTH + x) * 3
             pair = rgb[offset:offset + 6]
             average = tuple((pair[channel] + pair[channel + 3]) // 2 for channel in range(3))
-            color = flat_color(*average)
-            if color == 6 and 42 <= x // 2 < 68 and 35 <= y < 160:
-                color = 4
+            color = (
+                game_over_color(*average)
+                if solid_game_over else flat_color(*average)
+            )
             row.append(color)
         logical.append(row)
     return logical
@@ -140,8 +166,10 @@ def main():
     output = pathlib.Path(sys.argv[2])
     basename = sys.argv[3]
     output.mkdir(parents=True, exist_ok=True)
+    is_game_over = basename == "game_over_koala"
     bitmap, screen, color_ram, preview = encode(classify(
-        decode_and_fit(source, stretch_logo=basename == "game_over_koala")
+        decode_and_fit(source, stretch_logo=is_game_over),
+        solid_game_over=is_game_over,
     ))
     koala = bytes((0x00, 0x60)) + bitmap + screen + color_ram + bytes((0,))
     (output / f"{basename}.kla").write_bytes(koala)

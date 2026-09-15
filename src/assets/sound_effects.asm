@@ -17,8 +17,6 @@ ResetSoundEffects:
     sta SID_V1_PW_HI
     sta SID_V1_AD
     sta SID_V1_SR
-    lda #$0f
-    sta SID_MODE_VOLUME
     lda #$a5
     sta sfxRandomSeed
     rts
@@ -244,12 +242,15 @@ UpdateSoundEffects_Invalid:
     jsr UpdateInvalidPlacementPitch
 UpdateSoundEffects_Tick:
     dec sfxFrames
-    bne UpdateSoundEffects_Done
-    lda sfxGateOffControl
-    sta SID_V1_CONTROL
+    bne UpdateSoundEffects_Apply
     lda #0
     sta sfxPriority
     sta sfxMode
+    ; UpdateTitleMusic has already restored the tune's complete SID state for
+    ; this frame. Do not cover it with the ending effect's gate-off state.
+    rts
+UpdateSoundEffects_Apply:
+    jmp ApplySoundEffectVoice
 UpdateSoundEffects_Done:
     rts
 

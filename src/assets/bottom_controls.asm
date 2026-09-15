@@ -16,6 +16,7 @@ FocusSettingsIcon_Set:
     lda #1
     sta settingsFocused
     sta ghostSuppressed
+    jsr UpdateBottomButtonColors
     jsr MarkDisplayDirty
     jsr PlayBounce
 FocusSettingsIcon_Done:
@@ -41,6 +42,7 @@ HandleBottomControlAction:
     bne HandleBottomControlAction_None
     lda #0
     sta newGameFocused
+    jsr UpdateBottomButtonColors
     jsr FocusSettingsIcon
 HandleBottomControlAction_None:
     lda #ACTION_NONE
@@ -62,6 +64,7 @@ HandleBottomControlAction_Settings:
     bne HandleBottomControlAction_None
     lda #0
     sta settingsFocused
+    jsr UpdateBottomButtonColors
     jsr FocusNewGameIcon
     lda #ACTION_NONE
     rts
@@ -87,6 +90,7 @@ FocusNewGameIcon_Set:
     lda #1
     sta newGameFocused
     sta ghostSuppressed
+    jsr UpdateBottomButtonColors
     jsr MarkDisplayDirty
     jsr PlayBounce
 FocusNewGameIcon_Done:
@@ -102,6 +106,7 @@ UnfocusNewGameIcon:
     sta newGameFocused
 UnfocusBottomIcon:
     sta ghostSuppressed
+    jsr UpdateBottomButtonColors
     jsr UpdatePlacement
     jsr BuildDisplayBoard
     jsr UpdateCursorHighlight
@@ -112,50 +117,56 @@ UnfocusBottomIcon:
 ; adding checks to every gameplay call site.
 PlayBounce:
     lda audioMode
-    cmp #AUDIO_MUSIC_ONLY
-    beq AudioDisabledReturn
-    jmp PlayBounceImpl
+    and #1
+    bne AudioDisabledReturn
+    jsr PlayBounceImpl
+    jmp ApplySoundEffectVoice
 
 PlayPortalPing:
     lda audioMode
-    cmp #AUDIO_MUSIC_ONLY
-    beq AudioDisabledReturn
-    jmp PlayPortalPingImpl
+    and #1
+    bne AudioDisabledReturn
+    jsr PlayPortalPingImpl
+    jmp ApplySoundEffectVoice
 
 PlayGridSetup:
     lda audioMode
-    cmp #AUDIO_MUSIC_ONLY
-    beq AudioDisabledReturn
-    jmp PlayGridSetupImpl
+    and #1
+    bne AudioDisabledReturn
+    jsr PlayGridSetupImpl
+    jmp ApplySoundEffectVoice
 
 PlayInvalidPlacement:
     lda audioMode
-    cmp #AUDIO_MUSIC_ONLY
-    beq AudioDisabledReturn
-    jmp PlayInvalidPlacementImpl
+    and #1
+    bne AudioDisabledReturn
+    jsr PlayInvalidPlacementImpl
+    jmp ApplySoundEffectVoice
 
 PlayFirstMerge:
     lda audioMode
-    cmp #AUDIO_MUSIC_ONLY
-    beq AudioDisabledReturn
+    and #1
+    bne AudioDisabledReturn
     jmp PlayFirstMergeImpl
 
 PlaySecondMerge:
     lda audioMode
-    cmp #AUDIO_MUSIC_ONLY
-    beq AudioDisabledReturn
+    and #1
+    bne AudioDisabledReturn
     jmp PlaySecondMergeImpl
 
 InitTitleMusic:
     lda audioMode
-    cmp #AUDIO_SFX_ONLY
-    bne InitTitleMusic_Enabled
+    and #2
+    beq InitTitleMusic_Enabled
     jsr ResetSoundEffects
     lda #0
     sta titleMusicActive
 AudioDisabledReturn:
     rts
 InitTitleMusic_Enabled:
+    lda titleMusicActive
+    bne AudioDisabledReturn
     jmp InitTitleMusicImpl
 
 DrawSettingsArtwork:
@@ -222,7 +233,8 @@ DrawSettingsArtwork_ScreenSourceReady:
     bne DrawSettingsArtwork_ScreenRow
     rts
 
-audioMode: !byte AUDIO_BOTH
+; Start with effects enabled and music muted. Music is opt-in from Options.
+audioMode: !byte AUDIO_SFX_ONLY
 
 WaitForSettingsClose:
     jsr SettingsReleaseInput
@@ -365,7 +377,8 @@ SettingsSelect:
     lda settingsPage
     beq SettingsOpenMenuChoice
     cmp #3
-    beq SettingsApplyAudio
+    bne SettingsReturnMenu
+    jmp SettingsApplyAudio
 SettingsReturnMenu:
     lda #0
     sta settingsPage
@@ -376,18 +389,6 @@ SettingsOpenMenuChoice:
     adc #1
     sta settingsPage
     bne SettingsRedraw
-
-SettingsApplyAudio:
-    lda settingsOptionSelection
-    clc
-    adc #AUDIO_MUSIC_ONLY
-    sta audioMode
-    cmp #AUDIO_MUSIC_ONLY
-    beq SettingsApplyAudio_Music
-    jsr StopTitleMusic
-    jmp SettingsRedraw
-SettingsApplyAudio_Music:
-    jsr ResetSoundEffects
 
 SettingsRedraw:
     sei

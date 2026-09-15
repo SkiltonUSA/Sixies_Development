@@ -21,10 +21,10 @@ ReadAction_ReadKey:
     beq ReadAction_Up
     cmp #'S'
     beq ReadAction_Down
-    cmp #'R'
+    cmp #'E'
     beq ReadAction_Rotate
     cmp #'Q'
-    beq ReadAction_Rotate
+    beq ReadAction_RotateLeft
     cmp #' '
     beq ReadAction_Place
     cmp #13
@@ -83,6 +83,9 @@ ReadAction_Down:
 ReadAction_Rotate:
     lda #ACTION_ROTATE
     bne ReadAction_Store
+ReadAction_RotateLeft:
+    lda #ACTION_ROTATE_LEFT
+    bne ReadAction_Store
 ReadAction_Place:
     lda #ACTION_PLACE
     bne ReadAction_Store
@@ -129,11 +132,6 @@ ShowSettingsScreen_HideBoard:
     sta VIC_MODE
     lda #0
     sta settingsPage
-    lda audioMode
-    beq ShowSettingsScreen_DefaultAudioSelection
-    sec
-    sbc #AUDIO_MUSIC_ONLY
-ShowSettingsScreen_DefaultAudioSelection:
     sta settingsOptionSelection
     jsr DrawSettingsText
     cli
@@ -158,6 +156,7 @@ ShowSettingsScreen_DefaultAudioSelection:
 
 DrawSettingsText:
     jsr DrawSettingsArtwork
+    jsr SelectAudioOptionText
     ldx settingsPage
     lda SettingsPageStarts,x
     sta settingsLineIndex
@@ -239,8 +238,8 @@ SettingsLineLo:
     !byte <SettingsTextHow, <SettingsTextPlace, <SettingsTextMatch
     !byte <SettingsTextNextValue, <SettingsTextFives, <SettingsTextSixes
     !byte <SettingsTextChain, <SettingsTextMenuReturn
-    !byte <SettingsTextOptions, <SettingsTextMusicOnly, <SettingsTextSfxOnly
-    !byte <SettingsTextOptionHelp, <SettingsTextOptionClose
+    !byte <SettingsTextOptions, <SettingsTextMusicOn, <SettingsTextSoundFxOn
+    !byte <SettingsTextOptionClose
 SettingsLineHi:
     !byte >SettingsTextTitle, >SettingsTextMenuControls, >SettingsTextMenuHow
     !byte >SettingsTextMenuOptions, >SettingsTextMenuHelp, >SettingsTextTabClose
@@ -250,26 +249,26 @@ SettingsLineHi:
     !byte >SettingsTextHow, >SettingsTextPlace, >SettingsTextMatch
     !byte >SettingsTextNextValue, >SettingsTextFives, >SettingsTextSixes
     !byte >SettingsTextChain, >SettingsTextMenuReturn
-    !byte >SettingsTextOptions, >SettingsTextMusicOnly, >SettingsTextSfxOnly
-    !byte >SettingsTextOptionHelp, >SettingsTextOptionClose
+    !byte >SettingsTextOptions, >SettingsTextMusicOn, >SettingsTextSoundFxOn
+    !byte >SettingsTextOptionClose
 SettingsLineLength:
     !byte 8,11,14,10,20,8
-    !byte 8,21,18,20,15,17,18,17
+    !byte 8,21,15,20,15,17,18,17
     !byte 11,21,21,20,16,17,23,17
-    !byte 7,13,16,19,16
+    !byte 7,13,16,16
 SettingsLineRow:
     !byte 1,9,12,15,20,22
     !byte 1,9,11,13,15,17,19,22
     !byte 1,9,11,13,15,17,19,22
-    !byte 1,9,12,20,22
+    !byte 1,9,12,22
 SettingsLineColumn:
     !byte 11,12,12,12,10,16
-    !byte 11,9,11,10,12,11,10,11
+    !byte 11,9,12,10,12,11,10,11
     !byte 9,9,9,10,12,11,8,11
-    !byte 11,13,12,10,11
+    !byte 11,13,12,11
 
 SettingsPageStarts: !byte 0,6,14,22
-SettingsPageCounts: !byte 6,8,8,5
+SettingsPageCounts: !byte 6,8,8,4
 
 SettingsTextTitle:         !text "SETTINGS"
 SettingsTextMenuControls:  !text "1. CONTROLS"
@@ -279,7 +278,7 @@ SettingsTextMenuHelp:      !text "W/S SELECT FIRE OPEN"
 SettingsTextTabClose:      !text "X CLOSES"
 SettingsTextControls:      !text "CONTROLS"
 SettingsTextMove:          !text "WASD OR JOYSTICK MOVE"
-SettingsTextRotate:        !text "R/Q; HOLD FIRE+L/R"
+SettingsTextRotate:        !text "Q LEFT  E RIGHT"
 SettingsTextPlaceKey:      !text "SPACE OR FIRE PLACES"
 SettingsTextBottom:        !text "DOWN OPENS MENU"
 SettingsTextNewGame:       !text "N STARTS NEW GAME"
@@ -293,9 +292,6 @@ SettingsTextFives:         !text "FIVES MAKE SIXES"
 SettingsTextSixes:         !text "THREE SIXES CLEAR"
 SettingsTextChain:         !text "CHAIN MERGES SCORE MORE"
 SettingsTextOptions:       !text "OPTIONS"
-SettingsTextMusicOnly:     !text "1. MUSIC ONLY"
-SettingsTextSfxOnly:       !text "2. SOUND FX ONLY"
-SettingsTextOptionHelp:    !text "W/S SELECT FIRE SET"
 SettingsTextOptionClose:   !text "M MENU  X CLOSES"
 
 settingsFocused: !byte 0
@@ -336,7 +332,6 @@ RunTitleAttractMode_Start:
     lda #0
     sta creditsScreenActive
     sta titleScreenActive
-    jsr StopTitleMusic
     lda VIC_MODE
     and #%11101111
     sta VIC_MODE
@@ -372,6 +367,8 @@ PollTitleStartInput:
     jsr SCNKEY
     jsr GETIN
     cmp #' '
+    beq PollTitleStartInput_Pressed
+    cmp #'N'
     beq PollTitleStartInput_Pressed
     cmp #13
     beq PollTitleStartInput_Pressed

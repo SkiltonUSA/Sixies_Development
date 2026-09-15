@@ -1,8 +1,16 @@
-; Supplied hi-res comic bursts, decoded directly into the 80x80 sidebar.
-; This avoids the merge-time sprite contention of the previous implementation.
+; Supplied hi-res comic bursts, decoded into the right sidebar below the
+; upcoming-piece preview. Keeping the panel outside the board preserves every
+; grid line while the merge animation runs.
+MERGE_CALLOUT_COLUMN = GRID_LEFT + GRID_SPAN + 1
+MERGE_CALLOUT_ROW = 12
+MERGE_CALLOUT_WIDTH_BYTES = 72
+MERGE_CALLOUT_WIDTH_CHARS = 9
+MERGE_CALLOUT_HEIGHT_ROWS = 8
+
 * = $8a00
 
 BeginMascotMergeCallout:
+    jsr SetMergeCalloutPosition
     sei
     lda #COLOR_DKGRAY
     jsr SetMascotPanelColor
@@ -36,8 +44,6 @@ BeginMascotMergeCallout:
     jmp ApplyMascotCalloutMergeColors
 
 EndMascotMergeCallout:
-    lda #0
-    sta calloutRippleActive
     sei
     lda #COLOR_DKGRAY
     jsr SetMascotPanelColor
@@ -47,9 +53,10 @@ EndMascotMergeCallout:
     sei
     lda #COLOR_BLACK
     jsr SetMascotPanelColor
-    ; Callout and mascot both own the full ten-column sidebar.
     jsr ClearMascotPanel
-    jsr DrawMainMascot
+    lda #COLOR_DKGRAY
+    jsr SetMascotPanelColor
+    jsr DrawGrid
     cli
     rts
 
@@ -83,7 +90,7 @@ SelectMascotMergeCallout_IndexReady:
     rts
 
 DecodeMascotMergeCallout:
-    lda #4
+    lda calloutPanelRow
     sta workRow
     jsr SetMascotCalloutBitmapRow
 DecodeMascotMergeCallout_Packet:
@@ -131,11 +138,11 @@ StoreMascotCalloutByte:
     sta (PTR_LO),y
     inc calloutDestinationOffset
     lda calloutDestinationOffset
-    cmp #80
+    cmp #MERGE_CALLOUT_WIDTH_BYTES
     bne StoreMascotCalloutByte_Next
     inc workRow
     lda workRow
-    cmp #14
+    cmp calloutPanelEndRow
     beq StoreMascotCalloutByte_Done
     jsr SetMascotCalloutBitmapRow
 StoreMascotCalloutByte_Next:
@@ -146,11 +153,7 @@ StoreMascotCalloutByte_Done:
     rts
 
 SetMascotCalloutBitmapRow:
-    lda workRow
-    jsr SetBitmapRowPointer
-    lda #0
-    sta calloutDestinationOffset
-    rts
+    jmp SetMascotCalloutBitmapRowInGap
 
 SetMascotPanelColor:
     asl
@@ -158,218 +161,92 @@ SetMascotPanelColor:
     asl
     asl
     sta mascotPanelColor
-    lda #4
+    lda calloutPanelRow
     sta workRow
 SetMascotPanelColor_Row:
-    lda workRow
-    jsr SetScreenRowPointer
+    jsr SetMascotCalloutScreenRow
     ldy #0
 SetMascotPanelColor_Cell:
     lda mascotPanelColor
     sta (PTR_LO),y
     iny
-    cpy #10
+    cpy #MERGE_CALLOUT_WIDTH_CHARS
     bne SetMascotPanelColor_Cell
     inc workRow
     lda workRow
-    cmp #14
+    cmp calloutPanelEndRow
     bne SetMascotPanelColor_Row
     rts
 
 ClearMascotPanel:
-    lda #4
+    lda calloutPanelRow
     sta workRow
 ClearMascotPanel_Row:
     lda workRow
     jsr SetBitmapRowPointer
+    lda calloutPanelColumn
+    jsr AddColumnOffset
     ldy #0
 ClearMascotPanel_Byte:
     lda #0
     sta (PTR_LO),y
     iny
-    cpy #80
+    cpy #MERGE_CALLOUT_WIDTH_BYTES
     bne ClearMascotPanel_Byte
     inc workRow
     lda workRow
-    cmp #14
+    cmp calloutPanelEndRow
     bne ClearMascotPanel_Row
     rts
 
 UpdateMascotCalloutRipple:
-    lda calloutRippleActive
-    beq UpdateMascotCalloutRipple_Done
-    inc calloutRippleTimer
-    lda calloutRippleTimer
-    cmp #3
-    bcc UpdateMascotCalloutRipple_Done
-    lda #0
-    sta calloutRippleTimer
-    inc calloutRipplePhase
-    lda calloutRippleActive
-    cmp #2
-    beq UpdateMascotCalloutRipple_BandPhase
-    lda calloutRipplePhase
-    and #7
-    sta calloutRipplePhase
-    jsr RenderMascotCalloutRipple
-    rts
-UpdateMascotCalloutRipple_BandPhase:
-    lda calloutRipplePhase
-    cmp #11
-    bcc UpdateMascotCalloutRipple_PhaseReady
-    lda #0
-UpdateMascotCalloutRipple_PhaseReady:
-    sta calloutRipplePhase
-    jsr RenderMascotCalloutBands
-UpdateMascotCalloutRipple_Done:
     rts
 
 ApplyMascotCalloutMergeColors:
-    lda #0
-    sta calloutRippleActive
-    sta calloutRipplePhase
-    sta calloutRippleTimer
-    lda groupValue
-    cmp #4
-    bcs ApplyMascotCalloutMergeColors_Ripple
-    cmp #3
-    beq ApplyMascotCalloutMergeColors_Three
-    cmp #2
-    beq ApplyMascotCalloutMergeColors_Two
-
-    ; Merging 1s keeps the word still and bright without a color pattern.
     sei
     lda #COLOR_WHITE
     jsr SetMascotPanelColor
     cli
     rts
-ApplyMascotCalloutMergeColors_Two:
-    lda #COLOR_LTBLUE
-    sta calloutBandColors
-    lda #COLOR_LTGRAY
-    sta calloutBandColors + 1
-    jmp ApplyMascotCalloutMergeColors_Bands
-ApplyMascotCalloutMergeColors_Three:
-    lda #COLOR_GREEN
-    sta calloutBandColors
-    lda #COLOR_WHITE
-    sta calloutBandColors + 1
-ApplyMascotCalloutMergeColors_Bands:
-    lda #2
-    sta calloutRippleActive
-    jmp RenderMascotCalloutBands
-ApplyMascotCalloutMergeColors_Ripple:
-    lda #1
-    sta calloutRippleActive
-    jmp RenderMascotCalloutRipple
 
-RenderMascotCalloutBands:
-    sei
-    lda #0
-    sta calloutRippleCell
-    lda #4
-    sta workRow
-RenderMascotCalloutBands_Row:
-    lda workRow
-    jsr SetScreenRowPointer
-    lda #0
-    sta workColumn
-RenderMascotCalloutBands_Cell:
-    lda groupValue
-    cmp #2
-    beq RenderMascotCalloutBands_BlueToGray
-    ldx #1
-    lda workColumn
-    cmp calloutRipplePhase
-    bne RenderMascotCalloutBands_ColorReady
-    ldx #0
-    jmp RenderMascotCalloutBands_ColorReady
-RenderMascotCalloutBands_BlueToGray:
-    ldx #0
-    lda workColumn
-    cmp calloutRipplePhase
-    bcs RenderMascotCalloutBands_ColorReady
-    ldx #1
-RenderMascotCalloutBands_ColorReady:
-    lda calloutBandColors,x
-    asl
-    asl
-    asl
-    asl
-    ldy workColumn
-    sta (PTR_LO),y
-    inc calloutRippleCell
-    inc workColumn
-    lda workColumn
-    cmp #10
-    bne RenderMascotCalloutBands_Cell
-    inc workRow
-    lda workRow
-    cmp #14
-    bne RenderMascotCalloutBands_Row
-    cli
-    rts
+; The removed gameplay-sidebar logo leaves this fixed helper gap available.
+* = $4b84
 
-RenderMascotCalloutRipple:
-    sei
-    lda #0
-    sta calloutRippleCell
-    lda #4
-    sta workRow
-RenderMascotCalloutRipple_Row:
-    lda workRow
-    jsr SetScreenRowPointer
-    lda #0
-    sta workColumn
-RenderMascotCalloutRipple_Cell:
-    ldy calloutRippleCell
-    lda CalloutRippleDistance,y
+SetMergeCalloutPosition:
+    lda #MERGE_CALLOUT_COLUMN
+    sta calloutPanelColumn
+    lda #MERGE_CALLOUT_ROW
+    sta calloutPanelRow
     clc
-    adc calloutRipplePhase
-    and #7
-    tax
-    lda CalloutRippleColors,x
-    asl
-    asl
-    asl
-    asl
-    ldy workColumn
-    sta (PTR_LO),y
-    inc calloutRippleCell
-    inc workColumn
-    lda workColumn
-    cmp #10
-    bne RenderMascotCalloutRipple_Cell
-    inc workRow
-    lda workRow
-    cmp #14
-    bne RenderMascotCalloutRipple_Row
-    cli
+    adc #MERGE_CALLOUT_HEIGHT_ROWS
+    sta calloutPanelEndRow
     rts
 
-; Concentric square distance from the center of the 10x10 sidebar. Values 4-6
-; use this table; values 2-3 instead sweep one colored column left-to-right.
-CalloutRippleDistance:
-    !byte 4,4,4,4,4,4,4,4,4,4
-    !byte 4,3,3,3,3,3,3,3,3,4
-    !byte 4,3,2,2,2,2,2,2,3,4
-    !byte 4,3,2,1,1,1,1,2,3,4
-    !byte 4,3,2,1,0,0,1,2,3,4
-    !byte 4,3,2,1,0,0,1,2,3,4
-    !byte 4,3,2,1,1,1,1,2,3,4
-    !byte 4,3,2,2,2,2,2,2,3,4
-    !byte 4,3,3,3,3,3,3,3,3,4
-    !byte 4,4,4,4,4,4,4,4,4,4
+SetMascotCalloutScreenRow:
+    lda workRow
+    jsr SetScreenRowPointer
+    lda PTR_LO
+    clc
+    adc calloutPanelColumn
+    sta PTR_LO
+    bcc SetMascotCalloutScreenRow_Done
+    inc PTR_HI
+SetMascotCalloutScreenRow_Done:
+    rts
 
-; Red, light red, orange, yellow, light green, cyan, light blue, purple.
-CalloutRippleColors: !byte 2,10,8,7,13,3,14,4
+SetMascotCalloutBitmapRowInGap:
+    lda workRow
+    jsr SetBitmapRowPointer
+    lda calloutPanelColumn
+    jsr AddColumnOffset
+    lda #0
+    sta calloutDestinationOffset
+    rts
 
 calloutDestinationOffset: !byte 0
 mascotPanelColor: !byte 0
-calloutRippleActive: !byte 0
-calloutRipplePhase:  !byte 0
-calloutRippleTimer:  !byte 0
-calloutRippleCell:   !byte 0
-calloutBandColors:   !byte COLOR_WHITE,COLOR_WHITE
+calloutPanelColumn:  !byte MERGE_CALLOUT_COLUMN
+calloutPanelRow:     !byte MERGE_CALLOUT_ROW
+calloutPanelEndRow:  !byte MERGE_CALLOUT_ROW + MERGE_CALLOUT_HEIGHT_ROWS
 
 !source "src/assets/merge_callout_data.asm"

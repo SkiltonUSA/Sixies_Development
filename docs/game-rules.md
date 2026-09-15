@@ -40,8 +40,9 @@ state = next
 The state is never intentionally seeded with zero. RNG call order is
 observable and is therefore part of this specification:
 
-1. Generate a byte and use bit 0 plus one as the nominal piece count: one or
-   two dice with equal probability over the generator cycle.
+1. Generate a byte and use bit 0 plus one as the nominal piece count. Across
+   all 255 non-zero LFSR states this produces 127 singles and 128 doubles; the
+   timing-derived odd states available to a new game produce 64 of each.
 2. Generate a byte for die 0; `(byte & 3) + 1` gives a value from 1 through 4.
 3. Generate a byte for die 1 the same way, even when the nominal piece is a
    single.
@@ -66,10 +67,15 @@ an independent probability source. Only one generated value 5 can occur in a
 piece. Values 5 and 6 otherwise enter play through merging. The new cursor
 starts at `(2,2)` facing right.
 
+Because successive LFSR bits are correlated, the presented values are not
+independent 1-in-4 rolls. The exact opening, normal, five-eligible, and
+singles-only distributions are generated in `docs/piece-probabilities.md`.
+
 ## Movement and placement
 
-The cursor is clamped to the 5 by 5 board; it does not wrap. Keyboard rotation
-moves a double clockwise through right, down, left, and up. On joystick port 2,
+The cursor is clamped to the 5 by 5 board; it does not wrap. `Q` rotates a
+double counterclockwise and `E` rotates it clockwise through right, down, left,
+and up. On joystick port 2,
 holding fire and pressing left rotates counterclockwise while fire+right rotates
 clockwise. Returning the stick to center while retaining fire rearms another
 rotation; releasing fire after a rotation does not place. Fire without a
@@ -92,9 +98,14 @@ A group is the complete orthogonally connected component of cells with the
 same value as the active cell. Left, right, up, and down count; diagonals do
 not. A group containing fewer than three cells does nothing.
 
+A chain multiplier starts at 1 for each placed piece and increases by one for
+every merge event caused by that placement. For doubles, the multiplier carries
+from the origin's complete resolution into resolution of the second cell.
+
 A group containing three or more cells merges as follows:
 
-1. Award `number of cells * current die value` points.
+1. Award `number of cells * current die value * chain multiplier` points, then
+   increase the multiplier for a possible subsequent merge.
 2. Clear every cell in the connected component.
 3. If the consumed value is 1 through 5, place one die with value plus one at
    the active index. A group of four or more still makes exactly one die.
@@ -108,8 +119,12 @@ Examples:
 - Three connected 1s become one 2 and score 3.
 - Four connected 2s become one 3 and score 8.
 - Three 1s that create a 2 adjacent to two existing 2s immediately become one
-  3 and score 9 total: 3 for the first group and 6 for the second.
-- Three or more connected 6s disappear and score 6 points per removed die.
+  3 and score 15 total: 3 for the first group and 12 for the second
+  (`3 cells * value 2 * multiplier 2`).
+- Four successive three-die merges of values 1, 2, 3, and 4 score 90 total:
+  `3 + 12 + 27 + 48`.
+- Three or more connected 6s disappear and score 6 points per removed die,
+  multiplied by their position in the placement's merge chain.
 
 Animation delays, colors, callout words, shaking, fireworks, and sounds do not
 alter board or score results. Ports may change their timing while preserving

@@ -14,6 +14,7 @@ make                 # build build/dice_merge.prg with ACME
 make run             # build and launch in VICE
 make crunch          # build build/dice_merge-crunched.prg with Exomizer 3.1.2
 make music           # package the standalone Sixies SID tune
+make probability-table # regenerate exact piece-generation probabilities
 make test-porting    # validate the portable gameplay conformance vectors
 make setup-porting   # verify and index a fresh branch/workspace
 make setup-acme      # install the local ACME assembler
@@ -37,6 +38,9 @@ paths; never commit workspace-specific absolute paths.
   loop.
 - `src/assets/*.asm` owns UI pages, effects, scoring, high scores, sound,
   music integration, and generated data tables.
+- `src/assets/new_game.asm`, `settings.asm`, and `bottom_labels.asm` contain
+  the original side-control icons and compact labels. `bottom_icon_control.asm`
+  raster-multiplexes the two icon sprites beside the lowered board.
 - `src/assets/*_master.*`, `src/assets/font/`, and
   `src/assets/exclamations/` contain source artwork. Binary, Koala, table, and
   preview outputs are generated from them by `scripts/` and `Makefile` rules.
@@ -53,12 +57,24 @@ Hardware I/O and KERNAL remain visible with processor port value `$36`. The
 current fixed regions are documented in `README.md`; individual modules also
 declare fixed `* =` origins. Do not move one region without checking every
 origin and rebuilding with strict segments. The assembled image currently
-reaches `$cff8`, with late settings art beginning at `$ce00`.
+reaches `$cff8`, with late settings art beginning at `$ce00`. The region
+`$4c00-$4d7f` is reserved for runtime preview/title/effect sprites and must
+never contain persistent code or asset data. Gameplay uses `$30/$31` for
+inverse previews, `$32/$33` for invalid dithered previews, and `$34` for the
+animated merge score.
+Only the visible bitmap bytes `$6000-$7f3f` may be cleared. The unused tail
+`$7f40-$7fff` contains preview-sprite utility code and must survive screen
+transitions.
 
 Gameplay display is raster split into five board-row phases and one UI phase.
 `board` is authoritative rules state. `renderBoard` is the IRQ-safe snapshot,
 and `displayValues` is the board plus cursor preview. `boardUpdateInProgress`,
 `boardDirty`, and `displayDirty` prevent an IRQ from observing partial state.
+Only a valid, uncommitted cursor preview alternates between filled and inverse
+sprite silhouettes; committed board dice never blink.
+The gameplay board begins at bitmap character row 3, leaving two character
+rows plus a spacer for the centered light-green credits-style bitmap logo. New Game and
+Settings are side-panel controls and must not be moved back under the board.
 
 ## Gameplay invariants
 
@@ -73,10 +89,13 @@ and `displayValues` is the board plus cursor preview. `boardUpdateInProgress`,
 - Chain reactions repeatedly resolve at the same active cell. For a double,
   the origin is fully resolved before the second cell is considered. If the
   second cell was cleared by the first resolution, it is skipped.
-- A merge awards `group size * consumed die value`. Score arithmetic saturates
-  at 9999.
+- A merge awards `group size * consumed die value * chain number`. The chain
+  number starts at 1 per placement and continues across origin-first and
+  second-cell resolution for doubles. Score arithmetic saturates at 9999.
 - Spawn generation and its RNG-call order are part of game behavior. Do not
   reorder calls, the value-5 eligibility check, or the double-4 reroll.
+- `docs/piece-probabilities.md` is generated from the portable spawn oracle;
+  run `make probability-table` after an intentional generator change.
 - Once no orthogonally adjacent pair of empty cells remains, `singlesOnlyMode`
   becomes permanent for that game. Game over occurs when the resulting piece
   has no legal placement; in singles-only mode this means the board is full.
@@ -91,16 +110,22 @@ When implementation and prose disagree, first compare both with
 
 ## Controls
 
-Gameplay keyboard controls are `W/A/S/D` to move, `R` or `Q` to rotate a
-double, Space or Return to place, `N` for a new game, and the C64 key matrix
+Gameplay keyboard controls are `W/A/S/D` to move, `Q` to rotate a double
+counterclockwise, `E` to rotate it clockwise, Space or Return to place, `N`
+for a new game, and the C64 key matrix
 code `$3d` (shown as Tab by the host mapping) for Settings. Joystick port 2
 uses directions and fire; hold fire and press left or right to rotate a double
 counterclockwise or clockwise. Fire alone places when released. The `.` key
 randomly fills the board and is a development-only endgame shortcut.
 
+On attract-mode and post-game high-score pages, `Space` or `N` starts a new
+game. A qualifying score must finish its three-letter initials entry before
+these keys regain their start-game behavior.
+
 Moving down from the bottom board row focuses New Game for columns 0-2 or
-Settings for columns 3-4. Left and right switch those controls, up returns to
-the board, and place/fire activates the focused control. Settings uses
+Instructions for columns 3-4. Left and right switch those controls, up returns
+to the board, and place/fire activates the focused control. Instructions opens
+the Settings pages, which use
 `W`/`S`, Space/Return, numbered menu shortcuts, `M` for its menu, and `X` to
 close.
 

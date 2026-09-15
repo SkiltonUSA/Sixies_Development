@@ -38,7 +38,7 @@ InitTitleMusicImpl:
     sta titleMusicNtscDivider
     tax
     tay
-    jsr TITLE_MUSIC_INIT
+    jsr RunTitleMusicInitShadowed
     lda #1
     sta titleMusicActive
     rts
@@ -57,7 +57,7 @@ UpdateTitleMusic:
     sta titleMusicNtscDivider
     rts
 UpdateTitleMusic_Play:
-    jsr TITLE_MUSIC_PLAY
+    jsr RunTitleMusicPlayShadowed
 UpdateTitleMusic_Done:
     rts
 

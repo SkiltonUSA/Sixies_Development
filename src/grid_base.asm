@@ -24,13 +24,16 @@ SPRITE_MULTICOLOR = $d01c
 SPRITE_X_EXPAND = $d01d
 SPRITE0_COLOR   = $d027
 SPRITE0_PTR     = SCREEN + $03f8
-SID_V1_FREQ_LO  = $d400
-SID_V1_FREQ_HI  = $d401
-SID_V1_PW_LO    = $d402
-SID_V1_PW_HI    = $d403
-SID_V1_CONTROL  = $d404
-SID_V1_AD       = $d405
-SID_V1_SR       = $d406
+SID_HW_V1_FREQ_LO = $d400
+; Gameplay effects write a software voice-1 shadow. The combined audio update
+; overlays it after the music player has advanced all three physical voices.
+SID_V1_FREQ_LO  = sfxVoice1Shadow
+SID_V1_FREQ_HI  = sfxVoice1Shadow + 1
+SID_V1_PW_LO    = sfxVoice1Shadow + 2
+SID_V1_PW_HI    = sfxVoice1Shadow + 3
+SID_V1_CONTROL  = sfxVoice1Shadow + 4
+SID_V1_AD       = sfxVoice1Shadow + 5
+SID_V1_SR       = sfxVoice1Shadow + 6
 SID_MODE_VOLUME = $d418
 TITLE_MUSIC_INIT = $a000
 TITLE_MUSIC_PLAY = $a003
@@ -57,18 +60,31 @@ COLOR_PURPLE    = 4
 COLOR_GREEN     = 5
 COLOR_YELLOW    = 7
 COLOR_DKGRAY    = 11
+COLOR_LTGREEN   = 13
 COLOR_LTBLUE    = 14
 COLOR_LTGRAY    = 15
 
+; Audio modes are disable-bit flags: bit 0 disables effects and bit 1 disables
+; music. This keeps the original three modes and adds a fully silent state.
 AUDIO_BOTH       = 0
 AUDIO_MUSIC_ONLY = 1
 AUDIO_SFX_ONLY   = 2
+AUDIO_NONE       = 3
 
 GRID_LEFT       = 10
-GRID_TOP        = 1
+GRID_TOP        = 3
 GRID_SPAN       = 20
 GRID_LINES      = 6
 BOARD_CELLS     = 25
+MASCOT_ROW_START = 6
+MASCOT_ROW_END   = 16
+PIECE_PREVIEW_Y  = 100
+GAMEPLAY_LOGO_ROW = 0
+GAMEPLAY_LOGO_COL = 14
+SIDE_CONTROL_ICON_Y = 218
+SIDE_CONTROL_LABEL_ROW = 24
+NEW_GAME_LABEL_COL = 3
+SETTINGS_LABEL_COL = 34
 SCORE_ROW       = 1
 SCORE_COL_FOUR  = 0
 SCORE_COL_THREE = 2
@@ -90,10 +106,10 @@ ACTION_DEBUG_FILL = 8
 ACTION_SETTINGS = 9
 ACTION_ROTATE_LEFT = 10
 
-; Sprite coordinates include the VIC-II's 24-pixel left border. These values
-; center each 24-pixel icon over its 64-pixel label.
-NEW_GAME_ICON_X = 92
-SETTINGS_ICON_X = 28
+; Sprite coordinates include the VIC-II's 24-pixel left border. The controls
+; sit at the bottom of the side panels beside the lowered board.
+NEW_GAME_ICON_X = 52
+SETTINGS_ICON_X = 44
 
 * = $0801
 !word BasicEnd
@@ -121,6 +137,7 @@ Start:
     jsr StopTitleRasterIRQ
     jsr ClearBitmap
     jsr InitScreenColors
+    jsr DrawGameplayLogo
     jsr DrawGrid
     jsr DrawMainMascot
     jsr DrawBottomLabels
@@ -134,7 +151,7 @@ MainLoop:
     jsr WaitFrame
     lda endAttractNewGame
     bne MainLoop_NewGame
-    jsr UpdateHighlightFlash
+    jsr UpdatePreviewBlink
     jsr ReadAction
     lda action
     beq MainLoop
@@ -179,7 +196,6 @@ MainLoop_NoGridAction:
     jmp MainLoop
 
 MainLoop_NewGame:
-    jsr StopTitleMusic
     lda #0
     sta endAttractNewGame
     lda gameOverBlindActive
@@ -431,7 +447,7 @@ InitRasterIRQ:
     sta IRQ_VECTOR
     lda #>RasterIRQ
     sta IRQ_VECTOR + 1
-    lda #48
+    lda #64
     sta RASTER_LINE
     lda #1
     sta VIC_IRQ_STATUS
@@ -458,17 +474,21 @@ RasterIRQ:
     bne RasterIRQ_Board
     jsr SetupPiecePreview
 RasterIRQ_Board:
+    ; Board sprites have the tighter DMA deadline. Render them before spending
+    ; cycles retargeting preview sprites 6-7 to the lower side controls.
+RasterIRQ_BoardRenderer:
     jsr RenderBoardRow
+    ldx renderRow
+    cpx #3
+    bne RasterIRQ_Schedule
+    jsr SetupBottomSprites
     jmp RasterIRQ_Schedule
 
 RasterIRQ_UI:
-    lda titleMusicActive
-    beq RasterIRQ_UI_SoundEffects
     jsr UpdateTitleMusic
-    jmp RasterIRQ_UI_AudioDone
-RasterIRQ_UI_SoundEffects:
     jsr UpdateSoundEffects
 RasterIRQ_UI_AudioDone:
+RasterIRQ_UISpriteSetup:
     jsr SetupBottomSprites
     jsr SyncRenderBoard
     jsr BuildDisplayBoard
@@ -522,6 +542,7 @@ ResetGame_ClearBoard:
     sta ghostSuppressed
     sta BORDER
     sta mergeCalloutIndex
+    jsr UpdateBottomButtonColors
     lda #1
     sta displayDirty
     lda RASTER_LINE
@@ -624,6 +645,7 @@ SpawnPiece_CountReady:
     sta cursorY
     lda #0
     sta orientation
+    jsr BuildShadowDiceSprites
     jsr UpdatePlacement
     jsr CheckAnyPlacement
     lda gameOver
@@ -949,26 +971,59 @@ BuildDisplayBoard_LoadBoard:
     beq BuildDisplayBoard_ValueReady
     cpx originIndex
     bne BuildDisplayBoard_CheckSecond
+BuildDisplayBoard_GhostOrigin:
     lda pieceValue0
-    bne BuildDisplayBoard_ValueReady
+    ldy #$30
+    bne BuildDisplayBoard_GhostReady
 BuildDisplayBoard_CheckSecond:
     lda pieceCount
     cmp #2
     bne BuildDisplayBoard_Empty
     cpx secondIndex
     bne BuildDisplayBoard_Empty
+BuildDisplayBoard_GhostSecond:
     lda pieceValue1
-    bne BuildDisplayBoard_ValueReady
+    ldy #$31
+BuildDisplayBoard_GhostReady:
+    sta displayValues,x
+    pha
+    lda highlightPhase
+    and #2
+    beq BuildDisplayBoard_GhostNormal
+    tya
+    sta displaySpritePointers,x
+    pla
+    tay
+    lda DiceColors,y
+    sta displayColors,x
+    jmp BuildDisplayBoard_Next
+BuildDisplayBoard_GhostNormal:
+    pla
+    jmp BuildDisplayBoard_ValueReady
 
 BuildDisplayBoard_ShadowOrigin:
+    ; Flash an occupied target between the invalid dither and the die below.
+    lda renderBoard,x
+    beq BuildDisplayBoard_ShadowOriginVisible
+    lda highlightPhase
+    and #2
+    bne BuildDisplayBoard_LoadBoard
+BuildDisplayBoard_ShadowOriginVisible:
     lda pieceValue0
+    ldy #$32
     bne BuildDisplayBoard_ShadowReady
 BuildDisplayBoard_ShadowSecond:
+    lda renderBoard,x
+    beq BuildDisplayBoard_ShadowSecondVisible
+    lda highlightPhase
+    and #2
+    bne BuildDisplayBoard_LoadBoard
+BuildDisplayBoard_ShadowSecondVisible:
     lda pieceValue1
+    ldy #$33
 BuildDisplayBoard_ShadowReady:
     sta displayValues,x
-    tay
-    lda ShadowDiceSpritePointers,y
+    tya
     sta displaySpritePointers,x
     lda #COLOR_LTGRAY
     sta displayColors,x
@@ -1041,8 +1096,10 @@ ResolveAtActiveIndex_Done:
 
 PauseBetweenChainMerges:
     jsr PublishBoardForAnimation
+    jsr ShowChainReactionSprite
     lda #CHAIN_MERGE_PAUSE_FRAMES
-    jmp WaitAnimationFrames
+    jsr WaitAnimationFrames
+    jmp HideChainReactionSprite
 
 AnimateMergeGroup:
     jsr RunMergeLevelEffects
@@ -1171,6 +1228,8 @@ AnimateNewGame:
     sta highlightedSecondIndex
 AnimateNewGame_TargetCleared:
     jsr ClearGameOverBlinds
+    ; Repaint the side-control labels after restoring the grid bitmap.
+    jsr DrawBottomLabels
     ; Let the lower-border phase publish the empty board without a ghost.
     jsr WaitFrame
     jsr PlayGridSetup
@@ -1260,7 +1319,8 @@ AnimateGameOverBlinds_Row:
     lda blindRow
     cmp #5
     bne AnimateGameOverBlinds_Row
-    jsr DrawGameOver
+    jsr DrawGameOverScore
+    jsr DrawGameOverPrompt
     jmp RunHighScorePage
 
 PrepareGameOverKoala:
@@ -1289,6 +1349,7 @@ RestoreGameScreen:
     sta BACKGROUND
     jsr ClearBitmap
     jsr InitScreenColors
+    jsr DrawGameplayLogo
     jsr DrawGrid
     jsr DrawMainMascot
     jsr DrawBottomLabels
@@ -1560,6 +1621,8 @@ TryGroupNeighbor_Done:
     rts
 
 AddGroupScore:
+    ldx mergeChainDepth
+AddGroupScore_Multiplier:
     lda groupCount
     sta scoreAddCount
 AddGroupScore_Die:
@@ -1571,6 +1634,8 @@ AddGroupScore_Value:
     bne AddGroupScore_Value
     dec scoreAddCount
     bne AddGroupScore_Die
+    dex
+    bne AddGroupScore_Multiplier
     rts
 
 IncrementScore:
@@ -1683,56 +1748,22 @@ InitSpriteHardware:
     sta SPRITE_X_EXPAND
     sta SPRITE_Y_EXPAND
     sta SPRITE_PRIORITY
+    ldx #0
+InitSpriteHardware_BoardX:
+    txa
+    asl
+    tay
+    lda BoardSpriteX,x
+    sta SPRITE0_X,y
+    inx
+    cpx #5
+    bne InitSpriteHardware_BoardX
     jsr BuildShadowDiceSprites
     jsr SetupBottomSprites
     rts
 
 BuildShadowDiceSprites:
-    lda #<DieOneSprite
-    sta SOURCE_LO
-    lda #>DieOneSprite
-    sta SOURCE_HI
-    lda #<SHADOW_SPRITES
-    sta PTR_LO
-    lda #>SHADOW_SPRITES
-    sta PTR_HI
-    ldx #6
-BuildShadowDiceSprites_Sprite:
-    ldy #0
-BuildShadowDiceSprites_Byte:
-    lda (SOURCE_LO),y
-    sta shadowSourceByte
-    tya
-    and #1
-    beq BuildShadowDiceSprites_Even
-    lda shadowSourceByte
-    and #$55
-    jmp BuildShadowDiceSprites_Store
-BuildShadowDiceSprites_Even:
-    lda shadowSourceByte
-    and #$aa
-BuildShadowDiceSprites_Store:
-    sta (PTR_LO),y
-    iny
-    cpy #64
-    bne BuildShadowDiceSprites_Byte
-    lda SOURCE_LO
-    clc
-    adc #64
-    sta SOURCE_LO
-    bcc BuildShadowDiceSprites_SourceReady
-    inc SOURCE_HI
-BuildShadowDiceSprites_SourceReady:
-    lda PTR_LO
-    clc
-    adc #64
-    sta PTR_LO
-    bcc BuildShadowDiceSprites_TargetReady
-    inc PTR_HI
-BuildShadowDiceSprites_TargetReady:
-    dex
-    bne BuildShadowDiceSprites_Sprite
-    rts
+    jmp BuildPreviewDiceSprites
 
 RenderBoardRow:
     lda titleScreenActive
@@ -1754,18 +1785,15 @@ RenderBoardRow_Visible:
     sta renderIndex
     lda BoardSpriteY,x
     sta renderSpriteY
+    sta SPRITE0_Y
+    sta SPRITE0_Y + 2
+    sta SPRITE0_Y + 4
+    sta SPRITE0_Y + 6
+    sta SPRITE0_Y + 8
     lda #0
     sta spriteEnableMask
     ldx #0
 RenderBoardRow_Column:
-    txa
-    asl
-    tay
-    lda BoardSpriteX,x
-    sta SPRITE0_X,y
-    lda renderSpriteY
-    sta SPRITE0_Y,y
-
     txa
     clc
     adc renderIndex
@@ -1802,10 +1830,14 @@ SetupPiecePreview:
     beq SetupPiecePreview_GameScreen
     rts
 SetupPiecePreview_GameScreen:
+    lda chainReactionActive
+    beq SetupPiecePreview_CheckEffect
+    ; The chain banner owns sprites 2-7 during the existing inter-merge pause.
+    rts
+SetupPiecePreview_CheckEffect:
     lda fireworkActive
     beq SetupPiecePreview_CheckScreen
-    lda #%11100000
-    sta uiEnableMask
+    ; Merge effects own sprites 5-7 and their enable mask until completion.
     rts
 SetupPiecePreview_CheckScreen:
     lda gameOverBlindActive
@@ -1817,11 +1849,9 @@ SetupPiecePreview_CheckScreen:
 SetupPiecePreview_Visible:
     lda gameOver
     beq SetupPiecePreview_Active
-    lda #%11000000
+    lda #0
     sta uiEnableMask
-    lda #%10000000
     sta SPRITE_X_MSB
-    jsr ConfigureNewGameSprite
     rts
 
 SetupPiecePreview_Active:
@@ -1830,12 +1860,6 @@ SetupPiecePreview_Active:
     sta SPRITE0_PTR + 5
     lda DiceColors,y
     sta SPRITE0_COLOR + 5
-    lda #27
-    sta SPRITE0_X + 10
-    lda #158
-    sta SPRITE0_Y + 10
-    lda #%11100000
-    sta uiEnableMask
 
     lda pieceCount
     cmp #2
@@ -1845,22 +1869,43 @@ SetupPiecePreview_Active:
     sta SPRITE0_PTR + 6
     lda DiceColors,y
     sta SPRITE0_COLOR + 6
-    lda #51
+    ldx orientation
+    lda PiecePreviewX0,x
+    sta SPRITE0_X + 10
+    lda PiecePreviewY0,x
+    sta SPRITE0_Y + 10
+    lda PiecePreviewX1,x
     sta SPRITE0_X + 12
-    lda #158
+    lda PiecePreviewY1,x
     sta SPRITE0_Y + 12
-    lda #%11100000
+    lda #%01100000
+    sta uiEnableMask
     sta SPRITE_X_MSB
     rts
 
 SetupPiecePreview_Single:
-    jsr ConfigureNewGameSprite
-    lda #%10100000
+    lda #27
+    sta SPRITE0_X + 10
+    lda #PIECE_PREVIEW_Y
+    sta SPRITE0_Y + 10
+    lda #%00100000
+    sta uiEnableMask
     sta SPRITE_X_MSB
     rts
 
 SetupBottomSprites:
+    lda chainReactionActive
+    bne SetupBottomSprites_Return
     jmp SetupBottomSpritesImpl
+SetupBottomSprites_Return:
+    rts
+
+EnableBottomSprites:
+    ; Row 4 may already be visible when the side controls are retargeted.
+    ; Preserve sprites 0-4 instead of replacing the complete enable mask.
+    ora SPRITE_ENABLE
+    sta SPRITE_ENABLE
+    rts
 
 ConfigureNewGameSprite:
     lda #$76
@@ -1875,8 +1920,12 @@ ConfigureNewGameSprite_ColorReady:
     sta SPRITE0_COLOR + 6
     lda #NEW_GAME_ICON_X
     sta SPRITE0_X + 12
-    lda #222
+    lda #SIDE_CONTROL_ICON_Y
     sta SPRITE0_Y + 12
+    rts
+
+; Focus colors are refreshed by the UI raster phase on the next frame.
+UpdateBottomButtonColors:
     rts
 
 ClearBitmap:
@@ -1884,7 +1933,8 @@ ClearBitmap:
     sta PTR_LO
     lda #>BITMAP
     sta PTR_HI
-    ldx #32
+    ; Clear only the 8,000 visible bytes; $7f40-$7fff holds utility code.
+    ldx #31
     lda #0
 ClearBitmap_Page:
     ldy #0
@@ -1895,6 +1945,12 @@ ClearBitmap_Byte:
     inc PTR_HI
     dex
     bne ClearBitmap_Page
+    ldy #0
+ClearBitmap_FinalVisibleBytes:
+    sta (PTR_LO),y
+    iny
+    cpy #64
+    bne ClearBitmap_FinalVisibleBytes
     rts
 
 InitScreenColors:
@@ -1916,12 +1972,6 @@ InitScreenColors_Byte:
     rts
 
 UpdateCursorHighlight:
-    lda highlightedIndex
-    cmp #$ff
-    beq UpdateCursorHighlight_Draw
-    jsr ClearCursorHighlights
-
-UpdateCursorHighlight_Draw:
     ldx cursorY
     lda RowIndexBase,x
     clc
@@ -1931,68 +1981,32 @@ UpdateCursorHighlight_Draw:
     sta highlightedSecondIndex
     lda pieceCount
     cmp #2
-    bne UpdateCursorHighlight_Show
+    bne UpdateCursorHighlight_Done
     lda secondIndex
     sta highlightedSecondIndex
-UpdateCursorHighlight_Show:
-    jmp ShowCursorHighlights
+UpdateCursorHighlight_Done:
+    rts
 
-UpdateHighlightFlash:
+UpdatePreviewBlink:
     lda highlightedIndex
     cmp #$ff
-    beq UpdateHighlightFlash_Done
+    beq UpdatePreviewBlink_Done
     lda frameCounter
     lsr
     lsr
+    ; Hold each normal/inverse preview phase for 16 video frames.
+    lsr
     and #3
     cmp highlightPhase
-    beq UpdateHighlightFlash_Done
+    beq UpdatePreviewBlink_Done
     sta highlightPhase
-    jmp ShowCursorHighlights
-UpdateHighlightFlash_Done:
+    jmp MarkDisplayDirty
+UpdatePreviewBlink_Done:
     rts
-
-ShowCursorHighlights:
-    lda highlightedIndex
-    sta highlightCellIndex
-    jsr ShowHighlightCell
-    lda highlightedSecondIndex
-    cmp #$ff
-    beq ShowCursorHighlights_Done
-    sta highlightCellIndex
-    jsr ShowHighlightCell
-ShowCursorHighlights_Done:
-    rts
-
-ShowHighlightCell:
-    jmp DrawMarchingHighlightCell
-
-DimCursorHighlights:
-    lda highlightedIndex
-    sta highlightCellIndex
-    jsr DimHighlightCell
-    lda highlightedSecondIndex
-    cmp #$ff
-    beq DimCursorHighlights_Done
-    sta highlightCellIndex
-    jsr DimHighlightCell
-DimCursorHighlights_Done:
-    rts
-
-DimHighlightCell:
-    lda #(COLOR_DKGRAY << 4) | COLOR_DKGRAY
-    jmp ColorHighlightedCell
 
 ClearCursorHighlights:
-    lda highlightedIndex
-    sta highlightCellIndex
-    jsr ClearHighlightCell
-    lda highlightedSecondIndex
-    cmp #$ff
-    beq ClearCursorHighlights_Done
-    sta highlightCellIndex
-    jsr ClearHighlightCell
-ClearCursorHighlights_Done:
+    ; Cursor selection is represented by its blinking preview dice only.
+    ; Never erase bitmap edges here: those pixels belong to the shared grid.
     rts
 
 ClearHighlightCell:
@@ -2002,8 +2016,7 @@ ClearHighlightCell:
     jsr EraseHighlightRight
     jsr SetHighlightBitmapPointer
     jsr AddHighlightBottomOffset
-    jsr EraseHighlightBottom
-    jmp RestoreMarchingHighlightCell
+    jmp EraseHighlightBottom
 
 ColorHighlightedCell:
     sta cellBorderColor
@@ -2164,6 +2177,9 @@ DrawGrid_Horizontal:
     bne DrawGrid_Horizontal
     rts
 
+DrawGameplayLogo:
+    jmp DrawGameplayBitmapLogo
+
 DrawGameOver:
     lda #<GameOverLabel
     sta SOURCE_LO
@@ -2312,14 +2328,14 @@ DrawBottomLabels:
     sta SOURCE_LO
     lda #>NewGameLabel
     sta SOURCE_HI
-    lda #8
+    lda #NEW_GAME_LABEL_COL
     sta labelColumn
     jsr DrawLabel32
     lda #<SettingsLabel
     sta SOURCE_LO
     lda #>SettingsLabel
     sta SOURCE_HI
-    lda #32
+    lda #SETTINGS_LABEL_COL
     sta labelColumn
     jsr DrawLabel32
     rts
@@ -2329,7 +2345,7 @@ DrawMainMascot:
     sta SOURCE_LO
     lda #>MainMascotBitmapData
     sta SOURCE_HI
-    lda #4
+    lda #MASCOT_ROW_START
     sta workRow
 DrawMainMascot_BitmapRow:
     lda workRow
@@ -2352,14 +2368,14 @@ DrawMainMascot_BitmapByte:
 DrawMainMascot_BitmapSourceReady:
     inc workRow
     lda workRow
-    cmp #14
+    cmp #MASCOT_ROW_END
     bne DrawMainMascot_BitmapRow
 
     lda #<MainMascotScreenData
     sta SOURCE_LO
     lda #>MainMascotScreenData
     sta SOURCE_HI
-    lda #4
+    lda #MASCOT_ROW_START
     sta workRow
 DrawMainMascot_ScreenRow:
     lda workRow
@@ -2384,12 +2400,12 @@ DrawMainMascot_ScreenByte:
 DrawMainMascot_ScreenSourceReady:
     inc workRow
     lda workRow
-    cmp #14
+    cmp #MASCOT_ROW_END
     bne DrawMainMascot_ScreenRow
     rts
 
 DrawLabel32:
-    lda #24
+    lda #SIDE_CONTROL_LABEL_ROW
     jsr SetBitmapRowPointer
     lda labelColumn
     jsr AddColumnOffset
@@ -2400,9 +2416,9 @@ DrawLabel32_Copy:
     iny
     cpy #32
     bne DrawLabel32_Copy
-    lda #<(SCREEN + (24 * 40))
+    lda #<(SCREEN + (SIDE_CONTROL_LABEL_ROW * 40))
     sta PTR_LO
-    lda #>(SCREEN + (24 * 40))
+    lda #>(SCREEN + (SIDE_CONTROL_LABEL_ROW * 40))
     sta PTR_HI
     ldy labelColumn
     lda #(COLOR_LTBLUE << 4) | COLOR_BLACK
@@ -2444,29 +2460,29 @@ AddColumnOffset:
 RowIndexBase:
 !byte 0, 5, 10, 15, 20
 CellScreenLo:
-!byte <(SCREEN+50),<(SCREEN+54),<(SCREEN+58),<(SCREEN+62),<(SCREEN+66)
-!byte <(SCREEN+210),<(SCREEN+214),<(SCREEN+218),<(SCREEN+222),<(SCREEN+226)
-!byte <(SCREEN+370),<(SCREEN+374),<(SCREEN+378),<(SCREEN+382),<(SCREEN+386)
-!byte <(SCREEN+530),<(SCREEN+534),<(SCREEN+538),<(SCREEN+542),<(SCREEN+546)
-!byte <(SCREEN+690),<(SCREEN+694),<(SCREEN+698),<(SCREEN+702),<(SCREEN+706)
+!byte <(SCREEN+130),<(SCREEN+134),<(SCREEN+138),<(SCREEN+142),<(SCREEN+146)
+!byte <(SCREEN+290),<(SCREEN+294),<(SCREEN+298),<(SCREEN+302),<(SCREEN+306)
+!byte <(SCREEN+450),<(SCREEN+454),<(SCREEN+458),<(SCREEN+462),<(SCREEN+466)
+!byte <(SCREEN+610),<(SCREEN+614),<(SCREEN+618),<(SCREEN+622),<(SCREEN+626)
+!byte <(SCREEN+770),<(SCREEN+774),<(SCREEN+778),<(SCREEN+782),<(SCREEN+786)
 CellScreenHi:
-!byte >(SCREEN+50),>(SCREEN+54),>(SCREEN+58),>(SCREEN+62),>(SCREEN+66)
-!byte >(SCREEN+210),>(SCREEN+214),>(SCREEN+218),>(SCREEN+222),>(SCREEN+226)
-!byte >(SCREEN+370),>(SCREEN+374),>(SCREEN+378),>(SCREEN+382),>(SCREEN+386)
-!byte >(SCREEN+530),>(SCREEN+534),>(SCREEN+538),>(SCREEN+542),>(SCREEN+546)
-!byte >(SCREEN+690),>(SCREEN+694),>(SCREEN+698),>(SCREEN+702),>(SCREEN+706)
+!byte >(SCREEN+130),>(SCREEN+134),>(SCREEN+138),>(SCREEN+142),>(SCREEN+146)
+!byte >(SCREEN+290),>(SCREEN+294),>(SCREEN+298),>(SCREEN+302),>(SCREEN+306)
+!byte >(SCREEN+450),>(SCREEN+454),>(SCREEN+458),>(SCREEN+462),>(SCREEN+466)
+!byte >(SCREEN+610),>(SCREEN+614),>(SCREEN+618),>(SCREEN+622),>(SCREEN+626)
+!byte >(SCREEN+770),>(SCREEN+774),>(SCREEN+778),>(SCREEN+782),>(SCREEN+786)
 CellBitmapLo:
-!byte <$6190,<$61b0,<$61d0,<$61f0,<$6210
-!byte <$6690,<$66b0,<$66d0,<$66f0,<$6710
-!byte <$6b90,<$6bb0,<$6bd0,<$6bf0,<$6c10
-!byte <$7090,<$70b0,<$70d0,<$70f0,<$7110
-!byte <$7590,<$75b0,<$75d0,<$75f0,<$7610
+!byte <$6410,<$6430,<$6450,<$6470,<$6490
+!byte <$6910,<$6930,<$6950,<$6970,<$6990
+!byte <$6e10,<$6e30,<$6e50,<$6e70,<$6e90
+!byte <$7310,<$7330,<$7350,<$7370,<$7390
+!byte <$7810,<$7830,<$7850,<$7870,<$7890
 CellBitmapHi:
-!byte >$6190,>$61b0,>$61d0,>$61f0,>$6210
-!byte >$6690,>$66b0,>$66d0,>$66f0,>$6710
-!byte >$6b90,>$6bb0,>$6bd0,>$6bf0,>$6c10
-!byte >$7090,>$70b0,>$70d0,>$70f0,>$7110
-!byte >$7590,>$75b0,>$75d0,>$75f0,>$7610
+!byte >$6410,>$6430,>$6450,>$6470,>$6490
+!byte >$6910,>$6930,>$6950,>$6970,>$6990
+!byte >$6e10,>$6e30,>$6e50,>$6e70,>$6e90
+!byte >$7310,>$7330,>$7350,>$7370,>$7390
+!byte >$7810,>$7830,>$7850,>$7870,>$7890
 HighlightRightStart:
 !byte 26,24,24,24
 RippleCellOrder:
@@ -2474,7 +2490,7 @@ RippleCellOrder:
 GridColumns:
 !byte 10, 14, 18, 22, 26, 30
 GridRows:
-!byte 1, 5, 9, 13, 17, 21
+!byte 3, 7, 11, 15, 19, 23
 
 LeftNeighbor:
 !byte $ff,0,1,2,3, $ff,5,6,7,8, $ff,10,11,12,13, $ff,15,16,17,18, $ff,20,21,22,23
@@ -2488,17 +2504,25 @@ DownNeighbor:
 BoardSpriteX:
 !byte 108,140,172,204,236
 BoardSpriteY:
-!byte 65,97,129,161,193
+!byte 81,113,145,177,209
+PiecePreviewX0:
+!byte 27,39,51,39
+PiecePreviewY0:
+!byte PIECE_PREVIEW_Y,PIECE_PREVIEW_Y,PIECE_PREVIEW_Y,PIECE_PREVIEW_Y + 24
+PiecePreviewX1:
+!byte 51,39,27,39
+PiecePreviewY1:
+!byte PIECE_PREVIEW_Y,PIECE_PREVIEW_Y + 24,PIECE_PREVIEW_Y,PIECE_PREVIEW_Y
 SpriteBitMasks:
 !byte 1,2,4,8,16
 DiceSpritePointers:
 !byte 0,$70,$71,$72,$73,$74,$75
-ShadowDiceSpritePointers:
-!byte 0,$30,$31,$32,$33,$34,$35
 DiceColors:
 !byte COLOR_BLACK,COLOR_LTGRAY,COLOR_LTBLUE,COLOR_GREEN,COLOR_PURPLE,COLOR_YELLOW,COLOR_CYAN
 NextRasterLines:
-!byte 86,118,150,182,214,48
+; The optimized row setup fits before the next Y trigger while leaving a full
+; idle raster line after the previous 21-line sprite has finished.
+!byte 104,136,168,200,232,64
 
 ColumnOffsetLo:
 !for column, 0, 39 { !byte <(column * 8) }
@@ -2613,7 +2637,9 @@ rippleStep:        !byte 0
 blindRow:          !byte 0
 gameOverBlindActive: !byte 0
 blindFillColor:    !byte 0
+; 0=inactive, 1=single-sprite score flight, 2=three-sprite particle burst.
 fireworkActive:    !byte 0
+chainReactionActive: !byte 0
 blindCharacterRow: !byte 0
 fireworkBaseX:     !byte 0
 fireworkBaseY:     !byte 0
@@ -2643,12 +2669,15 @@ packedValue:       !byte 0
 !source "src/assets/settings_screen.asm"
 !source "src/assets/settings_art.asm"
 !source "src/assets/main_mascot.asm"
+!source "src/assets/shadow_sprite_workspace.asm"
+!source "src/assets/preview_dice_effects.asm"
 !source "src/assets/game_over_prompt.asm"
 !source "src/assets/merge_shake.asm"
 !source "src/assets/merge_firework_helpers.asm"
+!source "src/assets/gameplay_logo.asm"
 !source "src/assets/game_over_screen.asm"
 !source "src/assets/merge_firework_paths.asm"
-!source "src/assets/marching_ants.asm"
+!source "src/assets/chain_reaction_sprite.asm"
 !source "src/assets/merge_grid_sweep.asm"
 !source "src/assets/merge_firework_sprite.asm"
 !source "src/assets/die_one.asm"
@@ -2660,5 +2689,6 @@ packedValue:       !byte 0
 !source "src/assets/new_game.asm"
 !source "src/assets/settings.asm"
 !source "src/assets/bottom_labels.asm"
+!source "src/assets/bottom_icon_control.asm"
 !source "src/assets/large_digits.asm"
 !source "src/assets/game_over.asm"

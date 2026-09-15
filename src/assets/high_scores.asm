@@ -118,6 +118,8 @@ WaitEndAttractSeconds_Frame:
     jsr WaitFrame
     jsr SCNKEY
     jsr GETIN
+    cmp #' '
+    beq WaitEndAttractSeconds_NewGame
     cmp #'N'
     beq WaitEndAttractSeconds_NewGame
     dec attractFrames
@@ -135,13 +137,7 @@ ShowEndHighScorePage:
     jmp DrawHighScorePage
 
 WaitHighScoreRevealDelay:
-    lda TV_STANDARD
-    beq WaitHighScoreRevealDelay_NTSC
-    lda #100
-    bne WaitHighScoreRevealDelay_Wait
-WaitHighScoreRevealDelay_NTSC:
-    lda #120
-WaitHighScoreRevealDelay_Wait:
+    lda #250
     jmp WaitAnimationFrames
 
 ClearHighScorePanel:
@@ -302,7 +298,7 @@ DrawHighScorePage_Entry:
     bne DrawHighScorePage_Entry
 
     lda highScoreEntering
-    beq DrawHighScorePage_Done
+    beq DrawHighScorePage_StartPrompt
     lda #<EnterInitialsText
     ldx #>EnterInitialsText
     jsr SetHighScoreTextSource
@@ -319,17 +315,25 @@ DrawHighScorePage_Entry:
 DrawHighScorePage_Done:
     rts
 
+DrawHighScorePage_StartPrompt:
+    lda #<AttractPromptText
+    ldx #>AttractPromptText
+    jsr SetHighScoreTextSource
+    lda #16
+    sta highTextLength
+    lda #20
+    sta highTextRow
+    lda #4
+    sta highTextColumn
+    lda #COLOR_WHITE
+    sta highTextColor
+    jmp DrawSixiesFont16Text
+
 BuildFinalScoreLine:
     lda scoreThousands
-    beq BuildFinalScoreLine_NoThousands
     clc
     adc #$30
     sta FinalScoreLine + 6
-    bne BuildFinalScoreLine_Hundreds
-BuildFinalScoreLine_NoThousands:
-    lda #' '
-    sta FinalScoreLine + 6
-BuildFinalScoreLine_Hundreds:
     lda scoreHundreds
     clc
     adc #$30
@@ -343,6 +347,21 @@ BuildFinalScoreLine_Hundreds:
     adc #$30
     sta FinalScoreLine + 9
     rts
+
+DrawGameOverScore:
+    jsr BuildFinalScoreLine
+    lda #<FinalScoreLine
+    ldx #>FinalScoreLine
+    jsr SetHighScoreTextSource
+    lda #10
+    sta highTextLength
+    lda #22
+    sta highTextRow
+    lda #10
+    sta highTextColumn
+    lda #COLOR_YELLOW
+    sta highTextColor
+    jmp DrawSixiesMulticolorText
 
 BuildHighScoreEntryLine:
     lda highEntryIndex
@@ -638,7 +657,7 @@ HighScoreColors:
 HighScoreDotGlyph:
 !byte $00,$00,$00,$00,$00,$00,$18,$18
 AttractPromptText:
-!byte 'P','R','E','S','S',' ','F','I','R','E',' ','S','T','A','R','T'
+!byte 'S','P','A','C','E',' ','O','R',' ','N',' ','S','T','A','R','T'
 
 highScoreEntering:   !byte 0
 highInitialPosition: !byte 0

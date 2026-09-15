@@ -1,43 +1,6 @@
 ; Three star particles burst from the merged die and fall in separate arcs.
 ; A five-to-six merge follows the burst with a full-height star shower.
-; The effect sprites are multiplexed with the bottom New Game and Settings UI.
 * = $8e00
-
-RestoreBottomIconsDuringEffect:
-    jsr ConfigureNewGameSprite
-    lda #$77
-    sta SPRITE0_PTR + 7
-    lda settingsFocused
-    beq RestoreBottomIconsDuringEffect_SettingsIdle
-    lda #COLOR_YELLOW
-    bne RestoreBottomIconsDuringEffect_SettingsColor
-RestoreBottomIconsDuringEffect_SettingsIdle:
-    lda #COLOR_LTBLUE
-RestoreBottomIconsDuringEffect_SettingsColor:
-    sta SPRITE0_COLOR + 7
-    lda #SETTINGS_ICON_X
-    sta SPRITE0_X + 14
-    lda #222
-    sta SPRITE0_Y + 14
-
-    ; Preserve sprite 5's effect state; slots 6-7 become normal-size UI icons.
-    lda SPRITE_X_MSB
-    and #%00111111
-    ora #%10000000
-    sta SPRITE_X_MSB
-    lda SPRITE_X_EXPAND
-    and #%00111111
-    sta SPRITE_X_EXPAND
-    lda SPRITE_Y_EXPAND
-    and #%00111111
-    sta SPRITE_Y_EXPAND
-    lda #%11000000
-    sta uiEnableMask
-    lda SPRITE_ENABLE
-    and #%00011111
-    ora #%11000000
-    sta SPRITE_ENABLE
-    rts
 
 ConfigureMergeFireworkFrame:
     jsr ConfigureMergeFirework
@@ -73,7 +36,10 @@ fireworkRainY2: !byte 0
 * = $8000
 
 RunMergeFirework:
-    inc fireworkActive
+    ; Distinguish this three-sprite effect from the single-sprite score flight.
+    ; The UI raster must not retarget sprites 6-7 as controls during the burst.
+    lda #2
+    sta fireworkActive
     ldx searchX
     lda BoardSpriteX,x
     sta fireworkBaseX
@@ -137,7 +103,12 @@ RunMergeFirework_Frame:
     cmp #5
     beq RunSixStarRain
 RunMergeFirework_Done:
-    dec fireworkActive
+    lda SPRITE_ENABLE
+    and #%00011111
+    sta SPRITE_ENABLE
+    lda #0
+    sta uiEnableMask
+    sta fireworkActive
     rts
 
 RunSixStarRain:
@@ -186,43 +157,3 @@ RunSixStarRain_Frame:
     dec rippleStep
     bne RunSixStarRain_Frame
     jmp RunMergeFirework_Done
-
-SetupBottomSpritesImpl:
-    lda titleScreenActive
-    beq SetupBottomSpritesImpl_GameScreen
-    rts
-SetupBottomSpritesImpl_GameScreen:
-    lda fireworkActive
-    beq SetupBottomSpritesImpl_CheckScreen
-    jmp RestoreBottomIconsDuringEffect
-SetupBottomSpritesImpl_CheckScreen:
-    lda gameOverBlindActive
-    beq SetupBottomSpritesImpl_Visible
-    lda #0
-    sta uiEnableMask
-    sta SPRITE_ENABLE
-    rts
-SetupBottomSpritesImpl_Visible:
-    jsr ConfigureNewGameSprite
-    lda #$77
-    sta SPRITE0_PTR + 7
-    lda settingsFocused
-    beq SetupBottomSpritesImpl_SettingsIdle
-    lda #COLOR_YELLOW
-    bne SetupBottomSpritesImpl_SettingsColor
-SetupBottomSpritesImpl_SettingsIdle:
-    lda #COLOR_LTBLUE
-SetupBottomSpritesImpl_SettingsColor:
-    sta SPRITE0_COLOR + 7
-    lda #SETTINGS_ICON_X
-    sta SPRITE0_X + 14
-    lda #222
-    sta SPRITE0_Y + 14
-    lda #%10000000
-    sta SPRITE_X_MSB
-    ; Preserve row-5 sprites until row 0 safely reassigns them next frame.
-    lda SPRITE_ENABLE
-    and #%00011111
-    ora #%11000000
-    sta SPRITE_ENABLE
-    rts

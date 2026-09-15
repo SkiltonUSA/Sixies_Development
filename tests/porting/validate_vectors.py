@@ -23,6 +23,10 @@ JOYSTICK_STATES = {
     "fire_left": 0x0B,
     "fire_right": 0x07,
 }
+KEYBOARD_ACTIONS = {
+    "Q": "rotate_left",
+    "E": "rotate_right",
+}
 
 
 def flatten(rows):
@@ -85,14 +89,15 @@ def find_group(board, active):
     return group
 
 
-def resolve(board, active, score):
+def resolve(board, active, score, chain_depth=0):
     events = []
     while board[active] != 0:
         group = find_group(board, active)
         if len(group) < 3:
             break
         value = board[active]
-        delta = len(group) * value
+        chain_depth += 1
+        delta = len(group) * value * chain_depth
         score = min(9999, score + delta)
         events.append({"value": value, "count": len(group), "score_delta": delta, "active": active})
         for cell in group:
@@ -113,7 +118,7 @@ def place_piece(board, values, origin, orientation, score):
         board[second] = values[1]
     score, events = resolve(board, first, score)
     if count == 2 and board[second] != 0:
-        score, second_events = resolve(board, second, score)
+        score, second_events = resolve(board, second, score, len(events))
         events.extend(second_events)
     return True, score, events
 
@@ -232,6 +237,10 @@ def joystick_sequence(states, piece_count):
     return {"actions": actions, "latch": latch, "fire_state": fire_state}
 
 
+def keyboard_sequence(keys):
+    return {"actions": [KEYBOARD_ACTIONS.get(key, "none") for key in keys]}
+
+
 def check_equal(vector_id, field, actual, expected, failures):
     if actual != expected:
         failures.append(f"{vector_id}: {field}: expected {expected!r}, got {actual!r}")
@@ -245,7 +254,7 @@ def validate(data):
         vector_id = vector["id"]
         operation = vector["operation"]
         expected = vector["expected"]
-        board = None if operation == "joystick_sequence" else flatten(vector["board"])
+        board = None if operation in ("joystick_sequence", "keyboard_sequence") else flatten(vector["board"])
 
         if operation == "placement":
             piece = vector["piece"]
@@ -280,6 +289,9 @@ def validate(data):
         elif operation == "joystick_sequence":
             result = joystick_sequence(vector["states"], vector["piece_count"])
             check_equal(vector_id, "joystick_sequence", result, expected, failures)
+        elif operation == "keyboard_sequence":
+            result = keyboard_sequence(vector["keys"])
+            check_equal(vector_id, "keyboard_sequence", result, expected, failures)
         else:
             failures.append(f"{vector_id}: unknown operation {operation!r}")
     return count, failures

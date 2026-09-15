@@ -3,14 +3,10 @@
 
 RunMergeLevelEffects:
     lda audioMode
-    cmp #AUDIO_MUSIC_ONLY
-    beq RunMergeLevelEffects_Shake
+    and #1
+    bne RunMergeLevelEffects_Done
     jsr PlayMergeValueSound
-RunMergeLevelEffects_Shake:
-    lda mergeChainDepth
-    cmp #2
-    bcc RunMergeLevelEffects_Done
-    jmp RunMergeGridShake
+    jmp ApplySoundEffectVoice
 RunMergeLevelEffects_Done:
     rts
 
@@ -241,38 +237,42 @@ AnimateMergeScoreSprite_YReady:
 
 * = $9380
 PrepareMergeScoreGain:
+    ; Accumulate groupCount * groupValue * mergeChainDepth as three BCD
+    ; digits. Interrupts stay masked while decimal mode is active.
+    php
+    sei
+    sed
     lda #0
-    ldx groupCount
+    sta scoreAddCount
+    sta scoreAddValue
+    ldx mergeChainDepth
+PrepareMergeScoreGain_Multiplier:
+    ldy groupCount
 PrepareMergeScoreGain_Add:
+    lda scoreAddCount
     clc
     adc groupValue
-    dex
+    sta scoreAddCount
+    bcc PrepareMergeScoreGain_NoHundredsCarry
+    inc scoreAddValue
+PrepareMergeScoreGain_NoHundredsCarry:
+    dey
     bne PrepareMergeScoreGain_Add
-    sta mergeScoreRemainder
+    dex
+    bne PrepareMergeScoreGain_Multiplier
+    plp
 
-    lda #0
+    lda scoreAddValue
     sta mergeScoreDigits
-    sta mergeScoreDigits + 1
-PrepareMergeScoreGain_Hundreds:
-    lda mergeScoreRemainder
-    cmp #100
-    bcc PrepareMergeScoreGain_Tens
-    sec
-    sbc #100
-    sta mergeScoreRemainder
-    inc mergeScoreDigits
-    bne PrepareMergeScoreGain_Hundreds
-PrepareMergeScoreGain_Tens:
-    lda mergeScoreRemainder
-    cmp #10
-    bcc PrepareMergeScoreGain_Ones
-    sec
-    sbc #10
-    sta mergeScoreRemainder
-    inc mergeScoreDigits + 1
-    bne PrepareMergeScoreGain_Tens
-PrepareMergeScoreGain_Ones:
+    lda scoreAddCount
+    and #$0f
     sta mergeScoreDigits + 2
+    lda scoreAddCount
+    lsr
+    lsr
+    lsr
+    lsr
+    sta mergeScoreDigits + 1
     lda mergeScoreDigits
     bne PrepareMergeScoreGain_ThreeDigits
     lda mergeScoreDigits + 1
@@ -298,9 +298,7 @@ BuildMergeScoreSprite:
     lda #0
     ldy #0
 BuildMergeScoreSprite_Clear:
-    sta SHADOW_SPRITES,y
-    sta SHADOW_SPRITES + 64,y
-    sta SHADOW_SPRITES + 128,y
+    sta SHADOW_SPRITES + 256,y
     iny
     cpy #64
     bne BuildMergeScoreSprite_Clear
@@ -321,7 +319,7 @@ BuildMergeScoreSprite_Digit:
 
     lda mergeScoreDigitIndex
     sta PTR_LO
-    lda #>SHADOW_SPRITES
+    lda #>(SHADOW_SPRITES + 256)
     sta PTR_HI
     ldy #0
 BuildMergeScoreSprite_Row:
@@ -351,12 +349,10 @@ BuildMergeScoreSprite_NextRow:
     rts
 
 ConfigureMergeScoreSprite:
-    lda #$30
+    ; Slot $34 is isolated from inverse previews ($30/$31) and invalid
+    ; placement shadows ($32/$33), which remain live during merge effects.
+    lda #$34
     sta SPRITE0_PTR + 5
-    lda #$31
-    sta SPRITE0_PTR + 6
-    lda #$32
-    sta SPRITE0_PTR + 7
     lda #COLOR_YELLOW
     sta SPRITE0_COLOR + 5
     ldx mergeScoreDigitCount
@@ -386,18 +382,17 @@ ConfigureMergeScoreSprite:
     and #%00011111
     ora #%00100000
     sta SPRITE_Y_EXPAND
-    lda #%11100000
+    lda #%00100000
     sta uiEnableMask
     lda SPRITE_ENABLE
     and #%00011111
-    ora #%11100000
+    ora #%00100000
     sta SPRITE_ENABLE
     rts
 
 MergeScoreTargetX:      !byte 56,48,40
 MergeScoreCenterOffset: !byte 4,$fc,$f4
 mergeScoreDigits: !byte 0,0,0
-mergeScoreRemainder: !byte 0
 mergeScoreDigitCount: !byte 1
 mergeScoreDigitIndex: !byte 0
 mergeScoreGlyphByte: !byte 0
