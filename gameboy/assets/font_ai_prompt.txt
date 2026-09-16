@@ -1,0 +1,15 @@
+Use case: logo-brand
+Asset type: production sprite-sheet master for an original Game Boy game's 8x8 UI font
+Primary request: Regenerate the Sixies small bitmap font so it is much easier to read at native 8x8 pixels while retaining a lightly playful Game Boy character.
+Input images: the current unreadable small font and the broader Sixies font/style template.
+Scene/backdrop: perfectly flat solid darkest Game Boy green background.
+Style/medium: strict pixel art, high contrast, no antialiasing, no texture, no gradients, no 3D extrusion.
+Composition/framing: exactly an 8-column by 5-row sprite sheet. Each cell is identical and visibly separated by empty background. Exactly one centered 8x8-pixel glyph per cell. Render the 8x8 pixels as large crisp square blocks so they can be sampled back to native resolution.
+Text and order (verbatim):
+Row 1: [BLANK] A B C D E F G
+Row 2: H I J K L M N O
+Row 3: P Q R S T U V W
+Row 4: X Y Z 0 1 2 3 4
+Row 5: 5 6 7 8 9 + ! :
+Constraints: every listed glyph appears exactly once and in the exact cell order; blank first cell; uppercase only; distinguish I/1, O/0, S/5, B/8, G/6; use a readable 5x7 or 6x7 core inside each 8x8 cell; one-pixel pale face with optional single-pixel mid-tone shadow only where it does not close counters; generous internal holes; no outline around the whole character; all glyphs fit fully inside cells.
+Avoid: headings, labels, examples, borders, grid lines, extra symbols, missing characters, repeated characters, lowercase, proportional spacing, rounded blob letters, tiny counters, decorative noise, watermark.

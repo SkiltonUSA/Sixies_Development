@@ -19,7 +19,8 @@ missing=()
 for tool_path in \
     "$GBDK_DIR/bin/lcc" \
     "$GBDK_DIR/bin/png2asset" \
-    "$GBDK_DIR/bin/romusage"; do
+    "$GBDK_DIR/bin/romusage" \
+    "$ROOT_DIR/.tools/gameboy/rgbds-driver/rgbasm"; do
     [[ -x "$tool_path" ]] || missing+=("$tool_path")
 done
 
@@ -52,6 +53,7 @@ echo "Game Boy development environment is ready."
 echo "  GBDK:    $($GBDK_DIR/bin/lcc -v 2>&1 | head -n 1)"
 echo "  assets:  $GBDK_DIR/bin/png2asset"
 echo "  usage:   $GBDK_DIR/bin/romusage"
+echo "  driver:  $($ROOT_DIR/.tools/gameboy/rgbds-driver/rgbasm --version | head -n 1)"
 
 if [[ "$CORE_ONLY" -eq 0 && "$(uname -s)" == "Darwin" ]]; then
     echo "  RGBDS:   $(rgbasm --version | head -n 1)"
@@ -59,4 +61,12 @@ if [[ "$CORE_ONLY" -eq 0 && "$(uname -s)" == "Darwin" ]]; then
     echo "  second:  /Applications/mGBA.app"
     echo "  maps:    /Applications/Tiled.app"
     echo "  music:   $ROOT_DIR/.tools/gameboy/hUGETracker/hUGETracker.app"
+    if [[ -e "/Applications/GB Studio.app" ]]; then
+        gb_studio_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+            "/Applications/GB Studio.app/Contents/Info.plist" 2>/dev/null || echo unknown)"
+        echo "  visual:  /Applications/GB Studio.app ($gb_studio_version, optional)"
+    fi
+    if [[ -e "/Applications/Piskel.app" ]]; then
+        echo "  sprites: /Applications/Piskel.app (web, optional)"
+    fi
 fi

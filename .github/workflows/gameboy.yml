@@ -4,10 +4,16 @@ on:
   push:
     paths:
       - "gameboy/**"
+      - "atari8/assets/**"
+      - "apple2/assets/**"
+      - "src/assets/merge_firework_sprite.asm"
       - ".github/workflows/gameboy.yml"
   pull_request:
     paths:
       - "gameboy/**"
+      - "atari8/assets/**"
+      - "apple2/assets/**"
+      - "src/assets/merge_firework_sprite.asm"
       - ".github/workflows/gameboy.yml"
   workflow_dispatch:
 
@@ -21,8 +27,16 @@ jobs:
       - uses: actions/checkout@v6
       - name: Install the pinned Game Boy toolchain
         run: GAMEBOY_SKIP_DESKTOP=1 ./gameboy/scripts/setup-tools.sh
+      - name: Install asset conversion and emulator dependencies
+        run: make -C gameboy setup-assets
+      - name: Verify generated art matches its masters
+        run: |
+          make -C gameboy assets
+          git diff --exit-code -- gameboy/include/generated_art.h gameboy/src/generated_art.c gameboy/src/generated_screens.c
       - name: Build and verify the ROM
         run: make -C gameboy ci
+      - name: Exercise DMG and Game Boy Color gameplay and saves
+        run: make -C gameboy test-emulator
       - uses: actions/upload-artifact@v7
         with:
           name: sixies-gameboy
@@ -32,3 +46,4 @@ jobs:
             gameboy/build/sixies.map
             gameboy/build/sixies.noi
             gameboy/build/sixies.sym
+            gameboy/build/screenshots/*.png

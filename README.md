@@ -114,10 +114,17 @@ make -C atari8 run128
 
 ## Game Boy port
 
-A native Game Boy and Game Boy Color compatible port is being developed in
-[`gameboy/`](gameboy/README.md). Its reproducible toolchain includes GBDK-2020,
-RGBDS, SameBoy, mGBA, Tiled, hUGETracker, ROM validation, Conductor commands,
-and a GitHub Actions build.
+A native Game Boy and Game Boy Color port is available in
+[`gameboy/`](gameboy/README.md). It ports the Atari 800XL rules, probability
+table, unlocks, scoring, chain reactions, effects, and converted Sixies art,
+with title/credits attract screens, adapted C64 title music, instructions,
+pause settings, and a battery-backed top ten with initials.
+Its reproducible toolchain includes GBDK-2020, RGBDS, SameBoy, mGBA, Tiled,
+hUGETracker, host and emulator tests, ROM validation, and GitHub Actions.
+Optional companion apps include GIMP for raster editing and
+[Retro Palette Studio 3.6](https://nowintime.itch.io/retro-palette-studio) for
+palette authoring.
+See the [port comparison](gameboy/PORT_REVIEW.md) for source mapping and hardware adaptations.
 
 ```sh
 make -C gameboy setup

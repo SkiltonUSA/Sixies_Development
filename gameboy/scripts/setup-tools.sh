@@ -11,6 +11,7 @@ DOWNLOAD_DIR="$TOOLS_DIR/downloads"
 GBDK_VERSION="4.5.0"
 HUGETRACKER_VERSION="1.0.11"
 HUGETRACKER_SHA256="259a694fd93ae5f6c430e13ca7fcca0c86c83b7b2bfd50c38394cbdbd5f8a5d0"
+DRIVER_RGBDS_VERSION="0.6.1"
 
 host_os="$(uname -s)"
 host_arch="$(uname -m)"
@@ -34,6 +35,23 @@ case "$host_os:$host_arch" in
         ;;
     *)
         echo "Unsupported GBDK host: $host_os $host_arch" >&2
+        exit 1
+        ;;
+esac
+
+case "$host_os:$host_arch" in
+    Darwin:arm64|Darwin:x86_64)
+        driver_rgbds_archive="rgbds-0.6.1-macos-x86-64.zip"
+        driver_rgbds_sha256="65929a5483c89b20955df0d78ceb87744d8ad0cf7c80919f6ee9ef90fc55c08d"
+        driver_rgbds_format="zip"
+        ;;
+    Linux:x86_64)
+        driver_rgbds_archive="rgbds-0.6.1-linux-x86_64.tar.xz"
+        driver_rgbds_sha256="cfaff18e0db0006863de921d6f5a10eb5fb04dba453f967955a8b0f30bc7ba5b"
+        driver_rgbds_format="tar"
+        ;;
+    *)
+        echo "hUGEDriver's pinned RGBDS converter is unavailable for $host_os $host_arch." >&2
         exit 1
         ;;
 esac
@@ -89,6 +107,36 @@ install_gbdk() {
     ln -sfn "$(basename "$install_dir")" "$TOOLS_DIR/gbdk"
 }
 
+install_driver_rgbds() {
+    local install_dir="$TOOLS_DIR/rgbds-driver-$DRIVER_RGBDS_VERSION-$host_os-$host_arch"
+    local archive_path="$DOWNLOAD_DIR/$driver_rgbds_archive"
+    local staging_dir
+
+    if [[ ! -x "$install_dir/rgbasm" ]]; then
+        if [[ -e "$install_dir" ]]; then
+            echo "Incomplete RGBDS driver converter found at $install_dir" >&2
+            exit 1
+        fi
+
+        if [[ ! -f "$archive_path" ]]; then
+            curl --fail --location --retry 3 --show-error \
+                "https://github.com/gbdev/rgbds/releases/download/v$DRIVER_RGBDS_VERSION/$driver_rgbds_archive" \
+                --output "$archive_path"
+        fi
+        verify_download "$archive_path" "$driver_rgbds_sha256"
+
+        staging_dir="$(mktemp -d "$TOOLS_DIR/rgbds-stage.XXXXXX")"
+        if [[ "$driver_rgbds_format" == "zip" ]]; then
+            unzip -q "$archive_path" -d "$staging_dir"
+        else
+            tar -xJf "$archive_path" -C "$staging_dir"
+        fi
+        mv "$staging_dir" "$install_dir"
+    fi
+
+    ln -sfn "$(basename "$install_dir")" "$TOOLS_DIR/rgbds-driver"
+}
+
 install_brew_formula() {
     local formula="$1"
     if ! brew list --versions "$formula" >/dev/null 2>&1; then
@@ -132,6 +180,7 @@ install_hugetracker() {
 
 mkdir -p "$TOOLS_DIR" "$DOWNLOAD_DIR"
 install_gbdk
+install_driver_rgbds
 
 if [[ "$host_os" == "Darwin" && "${GAMEBOY_SKIP_DESKTOP:-0}" != "1" ]]; then
     if ! command -v brew >/dev/null 2>&1; then

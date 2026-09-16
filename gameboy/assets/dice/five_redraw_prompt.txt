@@ -1,0 +1,11 @@
+Historical reference: generated with the built-in image generation tool.
+The current rebuild no longer uses this master. scripts/rebuild-five-die.py
+copies the approved four-face frame at native 18x18 coordinates instead, so
+the five-face die does not acquire an extra padding ring or a different bevel.
+Reference images: supplied 19x18 five-face artwork and approved four_18x18.png.
+The original converter reduced this master to a padded 18x18 asset after
+removing its gray backdrop. That silhouette conversion has been superseded.
+The converter normalizes the five pips to solid 3x3 blocks at (3,3), (12,3),
+(7,7), (3,12), (12,12), keeping at least a one-pixel gap even diagonally.
+
+Use case: precise-object-edit. Asset: Sixies Game Boy five-pip die sprite. Image 1 is the rejected 19x18 five-face die: replace its cluttered pips. Image 2 is the approved four-face die and is the style/shape reference. Redraw ONE front-facing five-pip die in the same green Game Boy pixel-art style as image 2. Exactly five very clear, solid dark square pips in the standard quincunx: four corners and one center; no holes or highlights inside pips. Body flat medium light olive green, thin dark rounded-square perimeter, restrained one-pixel bevel. Genuine transparent background, no shadow outside sprite. The final game sprite is 18x18 logical pixels: design on an exact 18x18 pixel grid, border within coordinates 1..16, and five identical 3x3 dark pips starting at logical coordinates (4,4),(11,4),(7,7),(4,11),(11,11). Keep visible gaps between pips. If the output must be larger, render a clean integer nearest-neighbor enlargement of that 18x18 design, filling the entire square canvas with no additional margins, no grid lines, no antialiasing, no blur. Only four colors: #E5F0B7 highlight, #8BAC0F body, #306230 bevel, #0D3800 pips and outline, plus transparency. No words, digits, labels, checkerboard, extra dice, perspective, texture, gradients, pip outlines or decorative dots. Prioritize legibility at actual 18x18 screen size.
