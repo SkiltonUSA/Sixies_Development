@@ -432,7 +432,7 @@ def check_hover_flash(emulator):
             assert bytes(emulator.memory[board:board + 37]) == before, "hover animation changed game mechanics"
             check_next_pixels(emulator)
             check_screen_boundary(emulator)
-        press(emulator, "select")
+        emulator.memory[reduced] = 1
         emulator.tick(25)
         assert emulator.memory[reduced] == 1
         seen.clear()
@@ -699,7 +699,6 @@ def check_atari_effects(emulator):
     emulator.save_state(snapshot)
     board = SYMBOLS["_game_state"]
     cache = static_address("ui", "cell_cache")
-    board_pixels = static_address("board_art", "board_pixels")
     reduced_flash = static_address("ui", "reduced_flash")
     star_tile = int(re.search(r"#define ART_STAR_TILE (\d+)u", ART_HEADER).group(1))
     trace = []
@@ -709,7 +708,9 @@ def check_atari_effects(emulator):
 
     def capture_frame():
         nonlocal shake_map
-        canonical = bytes(emulator.memory[board_pixels:board_pixels + BOARD_TILES * 16])
+        emulator.memory[0x0000] = 0x0A
+        canonical = bytes(emulator.memory[0xA300:0xA300 + BOARD_TILES * 16])
+        emulator.memory[0x0000] = 0x00
         actual = bytes(emulator.memory[0x9000 + (tile if tile < 128 else tile - 256) * 16 + byte] for tile in range(BOARD_BASE, BOARD_BASE + BOARD_TILES) for byte in range(16))
         if len(trace) < shake_frames:
             shifted = (len(trace) & 1) == 0
@@ -1695,11 +1696,11 @@ def run(cgb):
         assert emulator.memory[board + 35] | (emulator.memory[board + 36] << 8) == 1924
         assert not any(emulator.memory[board:board + 25])
         check_screen_boundary(emulator)
-        press(emulator, "select")
-        emulator.tick(12)
         press(emulator, "start")
         wait_screen(emulator, 5)
         press(emulator, "down")
+        press(emulator, "down")
+        press(emulator, "a")
         press(emulator, "down")
         press(emulator, "a")
         press(emulator, "b")

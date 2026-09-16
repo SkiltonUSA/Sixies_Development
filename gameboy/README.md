@@ -45,10 +45,10 @@ regeneration and emulator automation need the local Python environment.
 | A | Place the single die or ordered pair |
 | B | Rotate a pair clockwise through four orientations |
 | Start | Pause: resume, instructions, sound, flash setting, new game |
-| Select | Toggle and save reduced-flashing mode |
 
 Development cheat: during gameplay enter Up, Up, Down, Down, Left, Right,
-Left, Right, B, A to jump directly to Game Over.
+Left, Right, B, A to jump directly to Game Over. It is compiled only by
+`make run`, `make run-mgba`, or `make DEBUG_CHEATS=1`; release builds exclude it.
 
 During the opening spiral and blocking merge effects, the latest D-pad move or
 B rotation is buffered and applied when play resumes. Placement is never buffered:
@@ -429,9 +429,11 @@ make -C gameboy music           # Open hUGETracker
 make -C gameboy clean           # Remove binaries/symbols, preserve saves
 ```
 
-`assets/title_music.uge` is the editable user-provided MIDI conversion for the title loop;
-`src/generated_title_music.c` is its committed bank-3 export. hUGEDriver is
-vendored in `vendor/hUGEDriver/` under its public-domain dedication. The build
+`assets/title_music.uge` is an unverified user-provided MIDI conversion and
+`src/generated_title_music.c` is its bank-3 export. Release builds exclude both
+from the ROM until a licensed replacement is approved. Developer runs and emulator
+tests include it with `TITLE_MUSIC=1`. hUGEDriver is vendored in
+`vendor/hUGEDriver/` under its public-domain dedication. The build
 installs its own pinned RGBDS 0.6.1 converter because hUGEDriver's SDCC bridge
 uses that object format; desktop RGBDS remains available separately for general
 assembly work.
@@ -442,14 +444,16 @@ emulator tests write actual 160x144 screens to `build/screenshots/`.
 
 ## Verification and GitHub
 
-`make test` runs host rules and save-format tests, validates cartridge/header
-checksums, and reports ROM/RAM bank use. `make test-emulator` exercises both DMG
+`make test` runs host rules and save-format tests, validates the exact 128 KiB
+cartridge/header size code and checksums, and reports ROM/RAM bank use.
+`make test-emulator` exercises both DMG
 and CGB through attract screens, instructions, gameplay, chain reactions,
 six-clear, pause/settings, initials, persistence, and damaged-save recovery.
 
-`.github/workflows/gameboy.yml` regenerates and checks art, runs the host and
-emulator tests, and uploads the ROM, `.map`, `.noi`, `.sym`, and screenshots.
-Shared art changes also trigger the workflow.
+`.github/workflows/gameboy.yml` regenerates and checks every generated C asset
+and the generated header, runs the host and emulator tests, and uploads the ROM,
+`.map`, `.noi`, `.sym`, and screenshots. Shared art changes also trigger the
+workflow.
 
 Local emulator checks pass; physical DMG/GBC and flash-cartridge validation
 remain a release gate. Use SameBoy Developer Mode with `build/sixies.sym`, and

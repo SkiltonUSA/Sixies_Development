@@ -14,8 +14,9 @@
 uint8_t screen_state;
 static uint16_t seed;
 static uint8_t previous;
-static uint8_t cheat_index;
 static uint8_t queued_action;
+#if defined(SIXIES_ENABLE_CHEAT)
+static uint8_t cheat_index;
 
 static uint8_t cheat_step(uint8_t pressed) {
     static const uint8_t code[] = {
@@ -35,6 +36,7 @@ static uint8_t cheat_step(uint8_t pressed) {
     }
     return 0u;
 }
+#endif
 
 static uint8_t read_pressed(void) {
     uint8_t keys;
@@ -178,8 +180,8 @@ static void settings_menu(void) {
                     score_table.sound = audio_enabled;
                     changed = 1u;
                 }
-            } else if (ui_reduced_flash() == enabled) {
-                ui_toggle_reduced_flash();
+            } else if (ui_reduced_flash() != (uint8_t)!enabled) {
+                ui_set_reduced_flash((uint8_t)!enabled);
                 changed = 1u;
             }
             if (changed) storage_save();
@@ -324,7 +326,9 @@ static uint8_t finish_game(void) {
 static uint8_t play_game(void) {
     uint8_t pressed;
     game_new(seed ^ DIV_REG);
+#if defined(SIXIES_ENABLE_CHEAT)
     cheat_index = 0u;
+#endif
     queued_action = 0u;
     screen_state = 4u;
     ui_show_game_start();
@@ -336,7 +340,9 @@ static uint8_t play_game(void) {
             queued_action = 0u;
         } else pressed = read_pressed();
         ui_tick();
+#if defined(SIXIES_ENABLE_CHEAT)
         if (cheat_step(pressed)) return finish_game();
+#endif
         if (pressed & J_START) {
             if (pause_game()) return 1u;
             screen_state = 4u;
@@ -355,11 +361,6 @@ static uint8_t play_game(void) {
         if (pressed & J_B) {
             game_rotate_piece();
             ui_play_rotate();
-            ui_refresh_game();
-        }
-        if (pressed & J_SELECT) {
-            ui_toggle_reduced_flash();
-            storage_save();
             ui_refresh_game();
         }
         if (pressed & J_A) {

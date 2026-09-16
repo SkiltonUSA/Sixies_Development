@@ -9,6 +9,8 @@ NINTENDO_LOGO = bytes.fromhex(
     "0008111F8889000E DCCC6EE6DDDDD999"
     "BBBB67636E0EECCC DDDC999FBBB9333E".replace(" ", "")
 )
+EXPECTED_ROM_SIZE = 128 * 1024
+EXPECTED_ROM_SIZE_CODE = 0x02
 
 
 def parse_args() -> argparse.Namespace:
@@ -33,7 +35,7 @@ def main() -> None:
     data = args.rom.read_bytes()
     errors = []
 
-    if len(data) < 0x150 or len(data) % 0x4000 != 0:
+    if len(data) != EXPECTED_ROM_SIZE:
         errors.append(f"unexpected ROM size: {len(data)} bytes")
     if data[0x104:0x134] != NINTENDO_LOGO:
         errors.append("Nintendo logo is invalid")
@@ -45,6 +47,8 @@ def main() -> None:
         errors.append(f"expected DMG/GBC compatibility flag 0x80, got 0x{data[0x143]:02X}")
     if data[0x147] != 0x1B:
         errors.append(f"expected MBC5+RAM+BATTERY type 0x1B, got 0x{data[0x147]:02X}")
+    if data[0x148] != EXPECTED_ROM_SIZE_CODE:
+        errors.append(f"expected 128 KiB ROM size code 0x02, got 0x{data[0x148]:02X}")
     if data[0x149] != 0x02:
         errors.append(f"expected 8 KiB SRAM code 0x02, got 0x{data[0x149]:02X}")
     if data[0x14A] != 0x01:

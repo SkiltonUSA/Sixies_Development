@@ -41,6 +41,7 @@ void ui_draw_score(void);
 void ui_start_spiral(void);
 void ui_tick(void);
 void service_animation_input(void);
+void ui_set_reduced_flash(uint8_t enabled);
 void ui_toggle_reduced_flash(void);
 uint8_t ui_reduced_flash(void);
 void ui_play_move(void);

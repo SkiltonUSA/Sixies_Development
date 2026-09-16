@@ -127,10 +127,11 @@ game rules; only presentation of the already-calculated total waits for landing.
   three OAM stars replace XOR framebuffer particles. Ripples and high-face
   timing are native adaptations, not cycle-identical computer effects.
 - Music: the title/attract loop is a compact hUGETracker conversion of the
-  user-provided `We are the Reason` MIDI. Its rights holder is unverified, so it
-  must only be distributed where music rights are cleared. The public-domain
-  hUGEDriver is built into ROM0 and reads the bank-3 song during VBlank; it
-  stops before menus and gameplay so native sound effects retain the hardware
+  user-provided `We are the Reason` MIDI. Its rights holder is unverified, so
+  release ROMs exclude it until a licensed replacement is approved. Developer
+  and emulator builds opt in with `TITLE_MUSIC=1`. The public-domain hUGEDriver
+  remains in ROM0 and title music, when enabled, reads from bank 3 during VBlank;
+  it stops before menus and gameplay so native sound effects retain the hardware
   channels.
 - Persistence uses cartridge SRAM rather than computer disk I/O. Saved settings
   are additional accessibility/convenience features; in-progress games are not
@@ -138,17 +139,23 @@ game rules; only presentation of the already-calculated total waits for landing.
 
 ## Memory and reproducibility
 
-The 128 KiB MBC5 ROM places fixed game/UI code in bank 0, tile data in bank 1,
-full-screen art in bank 2, available space in bank 3, and presentation code in
-bank 4. Gameplay uses 175 resident background tiles: the 253-tile source atlas keeps
+The 128 KiB MBC5 ROM uses eight 16 KiB banks: fixed game/UI code in bank 0,
+tile data in bank 1, full-screen art in bank 2, and bank 3 reserved for an
+approved title track,
+presentation code in bank 4, high-score and credits art in bank 5, results and
+callout art in bank 6, and gameplay composition data in bank 7. Gameplay uses 175 resident background tiles: the 253-tile source atlas keeps
 all callouts in ROM, loading only the current one into its 12-tile VRAM slot.
 Full-screen conversion asserts the DMG tile-count limit and emits CGB attribute
 maps. Generated files are checked in for compiler-only builds.
+The 2,704-byte gameplay board shadow uses unused cartridge SRAM at
+`0xA300–0xAD8F`, separate from the two save-journal slots at `0xA100–0xA1FF`;
+this leaves more than 3 KiB of internal WRAM for composition and stack use.
 
 Run `make assets` inside `gameboy` after installing `setup-assets`. Pillow is
-pinned. GitHub checks regenerated output against the checked-in files before
-building, so changing a shared art master cannot silently leave the cartridge
-artwork stale.
+pinned. GitHub checks all generated C output and the generated header against
+the checked-in files before building, so changing a shared art master cannot
+silently leave the cartridge artwork stale. ROM verification asserts the exact
+128 KiB size and header size code as well as cartridge checksums.
 
 ## Validation performed and remaining release gates
 

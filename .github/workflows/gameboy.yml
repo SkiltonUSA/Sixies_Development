@@ -32,11 +32,11 @@ jobs:
       - name: Verify generated art matches its masters
         run: |
           make -C gameboy assets
-          git diff --exit-code -- gameboy/include/generated_art.h gameboy/src/generated_art.c gameboy/src/generated_screens.c
+          git diff --exit-code -- gameboy/include/generated_art.h gameboy/src/generated_*.c
       - name: Build and verify the ROM
         run: make -C gameboy ci
       - name: Exercise DMG and Game Boy Color gameplay and saves
-        run: make -C gameboy test-emulator
+        run: make -C gameboy clean && make -C gameboy test-emulator DEBUG_CHEATS=1 TITLE_MUSIC=1
       - uses: actions/upload-artifact@v7
         with:
           name: sixies-gameboy

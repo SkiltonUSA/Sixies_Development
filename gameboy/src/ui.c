@@ -98,10 +98,10 @@ static const int8_t chain_star_velocity_y[] = {-3, -4, -3, 1, -2, 3, -1, 3, -4};
 static volatile uint8_t chain_stars_active;
 static volatile uint8_t chain_star_age;
 static uint8_t chain_star_origin;
-static uint8_t chain_reaction_y;
 static uint8_t score_valid;
 static uint16_t score_cache;
-static uint8_t chain_reaction_timer;
+static volatile uint8_t chain_reaction_timer;
+static volatile uint8_t chain_effects_expired;
 static uint8_t cell_cache[25];
 static uint8_t next_invalid;
 static volatile uint8_t hover_enabled;
@@ -143,20 +143,14 @@ static void credits_split(void) {
 }
 
 static void credits_vblank(void) {
-    uint8_t sprite;
-
     if (credits_split_enabled) SCY_REG = 0u;
     if (invalid_feedback_frames && !--invalid_feedback_frames) NR42_REG = 0u;
     if (hover_enabled) hover_frames = (hover_frames + 1u) & (HOVER_PHASE_FRAMES * 2u - 1u);
-    if (chain_stars_active && ++chain_star_age >= CHAIN_REACTION_FRAMES) stop_chain_stars();
-    if (chain_reaction_timer && !--chain_reaction_timer) {
-        stop_chain_stars();
-        LCDC_REG &= (uint8_t)~LCDCF_OBJ16;
-        for (sprite = 0u; sprite < ART_CHAIN_REACTION_MAX_SPRITES; ++sprite) {
-            move_sprite((uint8_t)(CHAIN_REACTION_SPRITE_BASE + sprite), 0u, 0u);
-            set_sprite_prop((uint8_t)(CHAIN_REACTION_SPRITE_BASE + sprite), 0u);
-        }
+    if (chain_stars_active && ++chain_star_age >= CHAIN_REACTION_FRAMES) {
+        chain_stars_active = 0u;
+        chain_effects_expired = 1u;
     }
+    if (chain_reaction_timer && !--chain_reaction_timer) chain_effects_expired = 1u;
 }
 
 static uint8_t glyph_tile(char glyph) {
@@ -358,7 +352,10 @@ static void stop_chain_stars(void) {
 static void clear_chain_reaction(void) {
     uint8_t sprite;
 
-    chain_reaction_timer = 0u;
+    __critical {
+        chain_reaction_timer = 0u;
+        chain_effects_expired = 0u;
+    }
     stop_chain_stars();
     for (sprite = 0u; sprite < ART_CHAIN_REACTION_MAX_SPRITES; ++sprite) {
         move_sprite((uint8_t)(CHAIN_REACTION_SPRITE_BASE + sprite), 0u, 0u);
@@ -427,7 +424,6 @@ static void present_chain_reaction(uint8_t origin) {
     tile_step = 2u;
     sprite_height = 16u;
     LCDC_REG |= LCDCF_OBJ16;
-    chain_reaction_y = y;
     wait_vbl_done();
     art_load_chain_reaction();
     sprite = CHAIN_REACTION_SPRITE_BASE;
@@ -439,10 +435,13 @@ static void present_chain_reaction(uint8_t origin) {
             ++sprite;
         }
     }
-    chain_reaction_timer = CHAIN_REACTION_FRAMES;
-    chain_star_origin = origin;
-    chain_star_age = 0u;
-    chain_stars_active = !reduced_flash;
+    __critical {
+        chain_reaction_timer = CHAIN_REACTION_FRAMES;
+        chain_effects_expired = 0u;
+        chain_star_origin = origin;
+        chain_star_age = 0u;
+        chain_stars_active = !reduced_flash;
+    }
     tick_chain_stars();
     SHOW_SPRITES;
 }
@@ -752,7 +751,8 @@ void ui_start_spiral(void) {
 void ui_tick(void) {
     uint8_t variant = active_hover_variant();
 
-    tick_chain_stars();
+    if (chain_effects_expired) clear_chain_reaction();
+    else tick_chain_stars();
     draw_next_preview(0u);
     if (hover_enabled && variant != hover_variant) {
         hover_variant = variant;
@@ -760,12 +760,18 @@ void ui_tick(void) {
     }
 }
 
-void ui_toggle_reduced_flash(void) {
-    reduced_flash ^= 1u;
+void ui_set_reduced_flash(uint8_t enabled) {
+    enabled = enabled ? 1u : 0u;
+    if (reduced_flash == enabled) return;
+    reduced_flash = enabled;
     if (reduced_flash) stop_chain_stars();
     hover_frames = 0u;
     hover_variant = 1u;
     score_table.reduced_flash = reduced_flash;
+}
+
+void ui_toggle_reduced_flash(void) {
+    ui_set_reduced_flash((uint8_t)!reduced_flash);
 }
 
 uint8_t ui_reduced_flash(void) {

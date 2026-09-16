@@ -10,11 +10,13 @@ RGBASM := $(TOOLS_DIR)/rgbds-driver/rgbasm
 PYTHON ?= python3
 HOST_CC ?= cc
 ASSET_PYTHON := $(TOOLS_DIR)/venv/bin/python
+DEBUG_CHEATS ?= 0
+TITLE_MUSIC ?= 0
 
 TARGET := $(BUILD_DIR)/sixies.gb
 VERSION_COUNTER := $(GAMEBOY_DIR)/VERSION
 VERSION_HEADER := $(GAMEBOY_DIR)/include/build_version.h
-SOURCES := $(sort $(wildcard src/*.c))
+SOURCES := $(filter-out src/generated_title_music.c,$(sort $(wildcard src/*.c)))
 HEADERS := $(sort $(wildcard include/*.h))
 HUGE_DRIVER_DIR := $(GAMEBOY_DIR)/vendor/hUGEDriver
 HUGE_DRIVER_OBJ := $(BUILD_DIR)/hUGEDriver.obj
@@ -22,6 +24,15 @@ HUGE_DRIVER_SDC_OBJ := $(BUILD_DIR)/hUGEDriver.o
 HUGE_DRIVER_LIB := $(BUILD_DIR)/hUGEDriver.lib
 LCCFLAGS := -debug -Wm-yS -Wm-yc -Wm-yj -Wm-ynSIXIES \
 	-Wm-yt0x1B -Wm-ya1 -Wm-yoA
+
+ifeq ($(DEBUG_CHEATS),1)
+LCCFLAGS += -DSIXIES_ENABLE_CHEAT
+endif
+
+ifeq ($(TITLE_MUSIC),1)
+SOURCES += src/generated_title_music.c
+LCCFLAGS += -DSIXIES_ENABLE_TITLE_MUSIC
+endif
 
 .PHONY: all assets setup setup-assets build-version test test-emulator ci doctor doctor-desktop run run-mgba music clean
 
@@ -72,6 +83,8 @@ test: $(TARGET)
 
 ci: clean all test
 
+test-emulator: DEBUG_CHEATS := 1
+test-emulator: TITLE_MUSIC := 1
 test-emulator: $(TARGET)
 	"$(ASSET_PYTHON)" tests/emulator_smoke.py
 
@@ -81,9 +94,13 @@ doctor:
 doctor-desktop: $(TARGET)
 	./scripts/doctor.sh
 
+run: DEBUG_CHEATS := 1
+run: TITLE_MUSIC := 1
 run: $(TARGET)
 	./scripts/run-emulator.sh sameboy "$<"
 
+run-mgba: DEBUG_CHEATS := 1
+run-mgba: TITLE_MUSIC := 1
 run-mgba: $(TARGET)
 	./scripts/run-emulator.sh mgba "$<"
 
