@@ -8,6 +8,10 @@ from pathlib import Path
 MAX_VERSION = 4_294_967_295
 
 
+def format_version(version):
+    return f"V{version // 100}.{version % 100:02d}"
+
+
 def main():
     parser = ArgumentParser()
     parser.add_argument("--counter", type=Path, required=True)
@@ -30,7 +34,7 @@ def main():
         f"#define SIXIES_BUILD_VERSION {version}UL\n\n"
         "#endif\n"
     )
-    print(f"Sixies build version V.{version:03d}")
+    print(f"Sixies build version {format_version(version)}")
 
 
 if __name__ == "__main__":

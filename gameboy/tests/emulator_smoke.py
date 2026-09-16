@@ -165,7 +165,7 @@ def check_title_prompt(emulator, background):
 
 
 def check_intro_version(emulator):
-    version = f"V.{BUILD_VERSION:03d}"
+    version = f"V{BUILD_VERSION // 100}.{BUILD_VERSION % 100:02d}"
     vertical_offset = 136 if len(version) > 10 else 144
     for index, character in enumerate(version):
         offset = 0 if character == "V" else 1 if character == "." else 2 + int(character)
@@ -1385,19 +1385,24 @@ def check_chain_stars(emulator, cgb, output):
                 expected_star_tiles = star_tiles if cgb else dmg_star_tiles
                 assert bytes(emulator.memory[0x8000 + base * 16:0x8000 + base * 16 + len(expected_star_tiles)]) == expected_star_tiles, "chain star art overwritten"
                 sprites = [tuple(emulator.memory[0xFE00 + index * 4:0xFE00 + index * 4 + 4]) for index in range(38)]
-                for star in range(2):
+                for star in range(1):
                     sprite_y, sprite_x, tile, prop = sprites[star * 2]
+                    right_y, right_x, right_tile, right_prop = sprites[star * 2 + 1]
                     assert tile == base, "stars collided with score or multiplier tiles"
+                    assert right_tile == base + 2, "star right half is missing"
                     assert prop in ((3, 4) if cgb else (0x10,)), "star palette is incorrect"
+                    assert right_prop == prop, "star halves use different palettes"
                     variants.add(tile)
                     if not sprite_x and not sprite_y:
                         clipped = True
+                        assert not right_x and not right_y, "clipped star right half remains visible"
                     else:
                         assert 9 <= sprite_x <= 159 and 17 <= sprite_y <= 151, "star wrapped around a screen edge"
+                        assert (right_y, right_x) == (sprite_y, sprite_x + 8), "star right half is displaced"
                 if cgb:
                     for scanline in range(144):
                         assert sum(sprite_x and sprite_y and sprite_y - 16 <= scanline < sprite_y for sprite_y, sprite_x, _, _ in sprites) <= 10, "firecrackers exceed the hardware scanline limit"
-                positions.add(tuple(sprite[:2] for sprite in sprites[:4]))
+                positions.add(tuple(sprite[:2] for sprite in sprites[:2]))
                 assert not visible_callout(emulator), "chain burst showed an exclamation word"
                 if current_age >= 10 and not saved:
                     emulator.screen.image.save(output / f"{'cgb' if cgb else 'dmg'}-chain-stars-{origin}.png")
@@ -1407,10 +1412,10 @@ def check_chain_stars(emulator, cgb, output):
                     break
                 emulator.tick()
             assert not emulator.memory[active], f"stars did not expire (age={emulator.memory[age]}, reduced={low_flash})"
-            assert all(emulator.memory[shadow + index * 4] == 0 for index in range(4)), "expired stars remain in OAM"
+            assert all(emulator.memory[shadow + index * 4] == 0 for index in range(2)), "expired stars remain in OAM"
             if not low_flash:
                 assert 57 <= active_frames <= 63, f"stars lasted {active_frames} frames, not one second"
-                assert bursts == {0, 1, 2} and len(positions) >= 19, "firecracker trajectories did not animate"
+                assert bursts == {0, 1, 2} and len(positions) >= 6, f"firecracker trajectories did not animate: bursts={bursts}, positions={len(positions)}"
                 assert variants == {base}, "chain star tile changed during the burst"
                 if origin != 12:
                     assert clipped, "edge burst did not exercise clipping"
@@ -1449,7 +1454,7 @@ def check_chain_stars(emulator, cgb, output):
         ), "new merge left fragments of the prior chain badge in OAM"
         emulator.tick(200)
         assert emulator.memory[board + 12] == 2, "new merge failed during a firecracker burst"
-        assert all(emulator.memory[shadow + index * 4] == 0 for index in range(4)), "star/score sprites remain after the new merge"
+        assert all(emulator.memory[shadow + index * 4] == 0 for index in range(2)), "star/score sprites remain after the new merge"
     finally:
         snapshot.seek(0)
         emulator.load_state(snapshot)
@@ -1645,7 +1650,7 @@ def run(cgb):
                 and CHAIN_REACTION_BASE <= emulator.memory[0xFE00 + sprite * 4 + 2] < CHAIN_REACTION_BASE + CHAIN_REACTION_TILES
                 for sprite in range(4, 4 + CHAIN_REACTION_SPRITES)
             )
-            if chain_reaction_visible:
+            if chain_reaction_visible and emulator.memory[board + 34] >= 2:
                 chain_reaction_frames += 1
                 if not chain_reaction_seen:
                     chain_reaction_seen = True
@@ -1668,7 +1673,7 @@ def run(cgb):
                 assert visible_callout(emulator), "grid callout disappeared before it could be displayed"
                 check_score_panel(emulator)
                 emulator.screen.image.save(output / f"{name}-callout.png")
-        assert callout_seen, "merge callout was not displayed"
+        assert not callout_seen, "exclamation callout appeared during a chain reaction"
         assert chain_reaction_seen, "chain reaction sprite was not displayed"
         assert chain_gameplay_continued, "chain reaction sprite blocked gameplay"
         assert chain_reaction_frames >= 55, "chain reaction sprite was not held for one second"

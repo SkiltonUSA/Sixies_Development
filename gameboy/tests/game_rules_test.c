@@ -6,12 +6,14 @@
 #include "game.h"
 
 static uint8_t effect_count;
+static uint8_t effect_chain_reaction[4];
 
 void effects_present_merge(
     uint8_t consumed_face,
     uint8_t group_count,
     uint8_t origin,
     uint8_t chain_depth,
+    uint8_t chain_reaction,
     uint16_t award,
     uint8_t callout
 ) {
@@ -21,6 +23,7 @@ void effects_present_merge(
     (void)chain_depth;
     (void)award;
     (void)callout;
+    effect_chain_reaction[effect_count] = chain_reaction;
     ++effect_count;
 }
 
@@ -121,11 +124,14 @@ static void test_chain_scoring(void) {
     game_state.board[17] = 2u;
     prepare_single(1u, 12u);
     effect_count = 0u;
+    memset(effect_chain_reaction, 0, sizeof(effect_chain_reaction));
     assert(game_place_piece());
     assert(game_state.board[12] == 3u);
     assert(game_state.score == 15u);
     assert(game_state.merge_depth == 2u);
     assert(effect_count == 2u);
+    assert(effect_chain_reaction[0]);
+    assert(effect_chain_reaction[1]);
 }
 
 static void test_unlocks(void) {
@@ -174,6 +180,29 @@ static void test_independent_five_unlock(void) {
     assert(!game_state.five_unlocked && !game_state.four_unlocked);
 }
 
+static void test_five_two_substitution(void) {
+    uint32_t sample;
+    uint32_t twos = 0u;
+    uint32_t fours = 0u;
+
+    game_new(0x5A5Au);
+    memset(game_state.board, 0, sizeof(game_state.board));
+    game_state.board[12] = 5u;
+    game_state.four_unlocked = 0u;
+    game_state.five_unlocked = 0u;
+    for (sample = 0u; sample < 100000u; ++sample) {
+        game_spawn_piece();
+        twos += game_state.piece_first == 2u;
+        fours += game_state.piece_first == 4u;
+        if (game_state.piece_count == 2u) {
+            twos += game_state.piece_second == 2u;
+            fours += game_state.piece_second == 4u;
+        }
+    }
+    assert(fours * 100u > (fours + twos) * 4u);
+    assert(fours * 100u < (fours + twos) * 6u);
+}
+
 static void test_density_and_neighbor_weights(void) {
     uint16_t sample;
     uint16_t singles;
@@ -189,8 +218,7 @@ static void test_density_and_neighbor_weights(void) {
             game_spawn_piece();
             singles += game_state.piece_count == 1u;
         }
-        if (occupied == 18u) assert(singles > 6000u && singles < 6500u);
-        else assert(singles > 7900u && singles < 8400u);
+        assert(singles > 2100u && singles < 2500u);
     }
     memset(game_state.board, 6, 25u);
     game_state.board[12] = 0u;
@@ -199,10 +227,10 @@ static void test_density_and_neighbor_weights(void) {
     for (sample = 0u; sample < 10000u; ++sample) {
         game_spawn_piece();
         assert(game_state.piece_count == 1u);
-        assert(game_state.piece_first == 1u || game_state.piece_first == 2u);
+        assert(game_state.piece_first >= 1u && game_state.piece_first <= 3u);
         ones += game_state.piece_first == 1u;
     }
-    assert(ones > 6400u && ones < 7000u);
+    assert(ones > 3500u && ones < 3850u);
 }
 
 static void test_placement_and_pair_order(void) {
@@ -257,6 +285,7 @@ int main(void) {
     test_chain_scoring();
     test_unlocks();
     test_independent_five_unlock();
+    test_five_two_substitution();
     test_density_and_neighbor_weights();
     test_placement_and_pair_order();
     puts("Game Boy rules tests passed");

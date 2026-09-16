@@ -13,7 +13,7 @@ def main():
     args = parser.parse_args()
 
     version = int(args.counter.read_text().strip())
-    archive = args.rom.with_name(f"sixies-V.{version:03d}.gb")
+    archive = args.rom.with_name(f"sixies-V{version // 100}.{version % 100:02d}.gb")
     shutil.copy2(args.rom, archive)
     print(f"Versioned ROM: {archive.name}")
 

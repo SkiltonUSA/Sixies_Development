@@ -46,20 +46,21 @@ static void set_title_prompt_sprites(uint8_t visible) {
 }
 
 static void set_intro_version_sprites(void) {
-    uint32_t version = SIXIES_BUILD_VERSION;
-    uint8_t digits[10];
+    uint32_t major = SIXIES_BUILD_VERSION / 100u;
+    uint8_t digits[8];
     uint8_t digit_count = 0u;
     uint8_t character_count;
     uint8_t character;
+    uint8_t minor_tens = (uint8_t)((SIXIES_BUILD_VERSION % 100u) / 10u);
+    uint8_t minor_ones = (uint8_t)(SIXIES_BUILD_VERSION % 10u);
     uint8_t vertical_offset;
 
     do {
-        digits[digit_count++] = (uint8_t)(version % 10u);
-        version /= 10u;
-    } while (version);
-    while (digit_count < 3u) digits[digit_count++] = 0u;
+        digits[digit_count++] = (uint8_t)(major % 10u);
+        major /= 10u;
+    } while (major);
 
-    character_count = (uint8_t)(digit_count + 2u);
+    character_count = (uint8_t)(digit_count + 4u);
     vertical_offset = character_count > 10u ? 136u : 144u;
     for (character = 0u; character < INTRO_VERSION_SPRITES; ++character) {
         uint8_t tile;
@@ -69,8 +70,10 @@ static void set_intro_version_sprites(void) {
             continue;
         }
         if (character == 0u) tile = ART_INTRO_VERSION_V_TILE;
-        else if (character == 1u) tile = ART_INTRO_VERSION_DOT_TILE;
-        else tile = (uint8_t)(ART_INTRO_VERSION_DIGIT_BASE + digits[digit_count - (character - 1u)]);
+        else if (character <= digit_count) tile = (uint8_t)(ART_INTRO_VERSION_DIGIT_BASE + digits[digit_count - character]);
+        else if (character == digit_count + 1u) tile = ART_INTRO_VERSION_DOT_TILE;
+        else if (character == digit_count + 2u) tile = (uint8_t)(ART_INTRO_VERSION_DIGIT_BASE + minor_tens);
+        else tile = (uint8_t)(ART_INTRO_VERSION_DIGIT_BASE + minor_ones);
         set_sprite_tile((uint8_t)(ART_INTRO_VERSION_BASE + character), tile);
         set_sprite_prop((uint8_t)(ART_INTRO_VERSION_BASE + character), 0u);
         move_sprite((uint8_t)(ART_INTRO_VERSION_BASE + character), (uint8_t)(12u + (character % 10u) * 8u), (uint8_t)(vertical_offset + (character / 10u) * 8u));

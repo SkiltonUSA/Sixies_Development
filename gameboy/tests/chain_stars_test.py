@@ -29,6 +29,9 @@ class ChainStarTests(unittest.TestCase):
         expected = bytes(ASSETS.pack_tiles((tiles[0], tiles[2], tiles[1], tiles[3])))
         self.assertEqual(len(actual), 64)
         self.assertEqual(actual, expected)
+        dmg_data = source.split("const uint8_t chain_star_dmg_tiles[] = {", 1)[1].split("};", 1)[0]
+        dmg_actual = bytes(int(value, 16) for value in re.findall(r"0x([0-9A-Fa-f]{2})", dmg_data))
+        self.assertEqual(dmg_actual, expected)
         self.assertNotEqual(ASSETS.CHAIN_STAR_PALETTES[0][2], ASSETS.CHAIN_STAR_PALETTES[1][2])
 
     def test_chain_badge_tiles_are_paired_for_8x16_sprites(self):

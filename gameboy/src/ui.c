@@ -18,7 +18,7 @@
 #define SIDEBAR_LEFT 14u
 #define CHAIN_REACTION_FRAMES 60u
 #define INVALID_FEEDBACK_FRAMES 19u
-#define CHAIN_STAR_COUNT 2u
+#define CHAIN_STAR_COUNT 1u
 #define CHAIN_STAR_SPRITES_PER_STAR 2u
 #define CHAIN_REACTION_SPRITE_BASE 4u
 #define SCORE_FLIGHT_STEP 6u
@@ -98,6 +98,8 @@ static const int8_t chain_star_velocity_y[] = {-3, -4, -3, 1, -2, 3, -1, 3, -4};
 static volatile uint8_t chain_stars_active;
 static volatile uint8_t chain_star_age;
 static uint8_t chain_star_origin;
+static uint8_t chain_badge_x;
+static uint8_t chain_badge_y;
 static uint8_t score_valid;
 static uint16_t score_cache;
 static volatile uint8_t chain_reaction_timer;
@@ -365,6 +367,22 @@ static void clear_chain_reaction(void) {
     art_restore_game_sprite_font();
 }
 
+static void draw_chain_badge(void) {
+    uint8_t row;
+    uint8_t column;
+    uint8_t sprite = CHAIN_REACTION_SPRITE_BASE;
+
+    for (row = 0u; row < ART_CHAIN_REACTION_SPRITE_HEIGHT; ++row) {
+        for (column = 0u; column < ART_CHAIN_REACTION_SPRITE_WIDTH; ++column) {
+            set_sprite_tile(sprite, (uint8_t)(ART_CHAIN_REACTION_BASE + (row * ART_CHAIN_REACTION_SPRITE_WIDTH + column) * 2u));
+            set_sprite_prop(sprite, _cpu == CGB_TYPE ? 5u : 0u);
+            move_sprite(sprite, (uint8_t)(chain_badge_x + column * 8u + 8u),
+                (uint8_t)(chain_badge_y + row * 16u + 16u));
+            ++sprite;
+        }
+    }
+}
+
 static void tick_chain_stars(void) {
     uint8_t age;
     uint8_t burst;
@@ -388,6 +406,7 @@ static void tick_chain_stars(void) {
     step = (age % 20u) / 2u;
     origin_x = BOARD_INSET_X + (chain_star_origin % GAME_BOARD_WIDTH) * ART_CELL_PIXELS + 2u;
     origin_y = BOARD_INSET_Y + (chain_star_origin / GAME_BOARD_WIDTH) * ART_CELL_PIXELS + 2u;
+    draw_chain_badge();
     for (sprite = 0u; sprite < CHAIN_STAR_COUNT; ++sprite) {
         sprite_slot = (uint8_t)(sprite * CHAIN_STAR_SPRITES_PER_STAR);
         velocity = burst * 3u + sprite;
@@ -396,11 +415,14 @@ static void tick_chain_stars(void) {
         variant = (burst + sprite + (age >> 2u)) & 1u;
         set_sprite_tile(sprite_slot, ART_CHAIN_STAR_BASE);
         set_sprite_prop(sprite_slot, _cpu == CGB_TYPE ? 3u + variant : S_PALETTE);
+        set_sprite_tile((uint8_t)(sprite_slot + 1u), ART_CHAIN_STAR_BASE + 2u);
+        set_sprite_prop((uint8_t)(sprite_slot + 1u), _cpu == CGB_TYPE ? 3u + variant : S_PALETTE);
         if (position_x < 1 || position_x > 143 || position_y < 1 || position_y > 127) {
             move_sprite(sprite_slot, 0u, 0u);
             move_sprite((uint8_t)(sprite_slot + 1u), 0u, 0u);
         } else {
             move_sprite(sprite_slot, (uint8_t)(position_x + 8), (uint8_t)(position_y + 16));
+            move_sprite((uint8_t)(sprite_slot + 1u), (uint8_t)(position_x + 16), (uint8_t)(position_y + 16));
         }
     }
     SHOW_SPRITES;
@@ -409,32 +431,14 @@ static void tick_chain_stars(void) {
 static void present_chain_reaction(uint8_t origin) {
     uint8_t x;
     uint8_t y;
-    uint8_t row;
-    uint8_t column;
-    uint8_t sprite;
-    uint8_t width;
-    uint8_t height;
-    uint8_t tile_step;
-    uint8_t sprite_height;
-
     draw_next_preview(1u);
     callout_position(origin, &x, &y);
-    width = ART_CHAIN_REACTION_SPRITE_WIDTH;
-    height = ART_CHAIN_REACTION_SPRITE_HEIGHT;
-    tile_step = 2u;
-    sprite_height = 16u;
     LCDC_REG |= LCDCF_OBJ16;
     wait_vbl_done();
     art_load_chain_reaction();
-    sprite = CHAIN_REACTION_SPRITE_BASE;
-    for (row = 0u; row < height; ++row) {
-        for (column = 0u; column < width; ++column) {
-            set_sprite_tile(sprite, (uint8_t)(ART_CHAIN_REACTION_BASE + (row * width + column) * tile_step));
-            set_sprite_prop(sprite, _cpu == CGB_TYPE ? 5u : 0u);
-            move_sprite(sprite, (uint8_t)(x + column * 8u + 8u), (uint8_t)(y + row * sprite_height + 16u));
-            ++sprite;
-        }
-    }
+    chain_badge_x = x;
+    chain_badge_y = y;
+    draw_chain_badge();
     __critical {
         chain_reaction_timer = CHAIN_REACTION_FRAMES;
         chain_effects_expired = 0u;
@@ -805,6 +809,7 @@ void effects_present_merge(
     uint8_t group_count,
     uint8_t origin,
     uint8_t chain_depth,
+    uint8_t chain_reaction,
     uint16_t award,
     uint8_t callout
 ) {
@@ -856,7 +861,7 @@ void effects_present_merge(
         for (step = 0u; step < 3u; ++step) move_sprite(step, 0u, 0u);
     }
 
-    if (chain_depth >= 2u) {
+    if (chain_reaction) {
         present_chain_reaction(origin);
     } else {
         callout_position(origin, &callout_x, &callout_y);

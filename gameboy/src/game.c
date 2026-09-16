@@ -97,32 +97,34 @@ static uint8_t face_is_matching_eligible(uint8_t face, uint8_t four_active) {
     return face == 5u && game_state.five_unlocked;
 }
 
-static uint8_t count_empty_neighbors(uint8_t index) {
-    uint8_t x;
-    uint8_t y;
-    uint8_t count;
-
-    x = (uint8_t)(index % GAME_BOARD_WIDTH);
-    y = (uint8_t)(index / GAME_BOARD_WIDTH);
-    count = 0u;
-    if (x && !game_state.board[index - 1u]) ++count;
-    if (x + 1u < GAME_BOARD_WIDTH && !game_state.board[index + 1u]) ++count;
-    if (y && !game_state.board[index - GAME_BOARD_WIDTH]) ++count;
-    if (y + 1u < GAME_BOARD_WIDTH && !game_state.board[index + GAME_BOARD_WIDTH]) ++count;
-    return count;
-}
-
 static uint8_t matching_single(uint8_t four_active) {
     uint8_t index;
+    uint8_t x;
+    uint8_t y;
     uint8_t weights[5] = {0u, 0u, 0u, 0u, 0u};
     uint8_t total;
     uint8_t target;
 
     total = 0u;
     for (index = 0u; index < GAME_BOARD_SIZE; ++index) {
-        if (face_is_matching_eligible(game_state.board[index], four_active)) {
-            weights[game_state.board[index] - 1u] += count_empty_neighbors(index);
-            total = (uint8_t)(total + count_empty_neighbors(index));
+        if (game_state.board[index]) continue;
+        x = (uint8_t)(index % GAME_BOARD_WIDTH);
+        y = (uint8_t)(index / GAME_BOARD_WIDTH);
+        if (x && face_is_matching_eligible(game_state.board[index - 1u], four_active)) {
+            ++weights[game_state.board[index - 1u] - 1u];
+            ++total;
+        }
+        if (x + 1u < GAME_BOARD_WIDTH && face_is_matching_eligible(game_state.board[index + 1u], four_active)) {
+            ++weights[game_state.board[index + 1u] - 1u];
+            ++total;
+        }
+        if (y && face_is_matching_eligible(game_state.board[index - GAME_BOARD_WIDTH], four_active)) {
+            ++weights[game_state.board[index - GAME_BOARD_WIDTH] - 1u];
+            ++total;
+        }
+        if (y + 1u < GAME_BOARD_WIDTH && face_is_matching_eligible(game_state.board[index + GAME_BOARD_WIDTH], four_active)) {
+            ++weights[game_state.board[index + GAME_BOARD_WIDTH] - 1u];
+            ++total;
         }
     }
     if (!total) {
@@ -207,6 +209,12 @@ static void normal_piece(uint8_t four_active, uint8_t pressure) {
     game_state.piece_count = 2u;
 }
 
+static void apply_five_face_substitution(uint8_t has_five) {
+    if (!game_state.four_unlocked && !has_five) return;
+    if (game_state.piece_first == 2u && game_random_mod(20u) == 0u) game_state.piece_first = 4u;
+    if (game_state.piece_count == 2u && game_state.piece_second == 2u && game_random_mod(20u) == 0u) game_state.piece_second = 4u;
+}
+
 static uint8_t board_has_adjacent_empty(void) {
     uint8_t index;
     uint8_t x;
@@ -248,38 +256,29 @@ static uint8_t seek_valid_placement(void) {
 }
 
 void game_spawn_piece(void) {
-    uint8_t occupied;
     uint8_t fours;
+    uint8_t has_five;
     uint8_t index;
     uint8_t pressure;
     uint8_t four_active;
-    uint8_t matching_attempt;
+    uint8_t single_only;
 
-    occupied = 0u;
     fours = 0u;
+    has_five = 0u;
     for (index = 0u; index < GAME_BOARD_SIZE; ++index) {
-        if (game_state.board[index]) ++occupied;
         if (game_state.board[index] == 4u) ++fours;
+        if (game_state.board[index] == 5u) has_five = 1u;
     }
     pressure = fours >= 4u;
     four_active = (uint8_t)(pressure || game_state.four_unlocked);
-    matching_attempt = 0u;
-    if (!board_has_adjacent_empty()) {
-        matching_attempt = 1u;
-    } else if (occupied >= 22u) {
-        matching_attempt = game_random_mod(4u) != 0u;
-    } else if (occupied >= 18u) {
-        matching_attempt = game_random_mod(2u) == 0u;
-    }
+    single_only = (uint8_t)!board_has_adjacent_empty();
 
-    if (matching_attempt) {
-        if (!matching_single(four_active)) uniform_single(four_active, pressure);
+    if (single_only) {
+        if (game_random_mod(10u) != 0u || !matching_single(four_active)) uniform_single(four_active, pressure);
     } else {
         normal_piece(four_active, pressure);
-        if (game_state.piece_count == 2u && !board_has_adjacent_empty()) {
-            if (!matching_single(four_active)) uniform_single(four_active, pressure);
-        }
     }
+    apply_five_face_substitution(has_five);
     game_state.game_over = (uint8_t)!seek_valid_placement();
 }
 
@@ -339,6 +338,7 @@ static void resolve_cell(uint8_t origin) {
     uint8_t count;
     uint8_t index;
     uint8_t callout;
+    uint8_t chain_reaction;
     uint16_t award;
 
     while (game_state.board[origin]) {
@@ -349,9 +349,14 @@ static void resolve_cell(uint8_t origin) {
         if (face == 4u && count >= 4u) game_state.four_unlocked = 1u;
         if (face == 6u && count >= 4u) game_state.five_unlocked = 1u;
         for (index = 0u; index < count; ++index) game_state.board[group_cells[index]] = 0u;
-        if (face < 6u) game_state.board[origin] = (uint8_t)(face + 1u);
+        chain_reaction = 0u;
+        if (face < 6u) {
+            game_state.board[origin] = (uint8_t)(face + 1u);
+            chain_reaction = collect_group(origin) >= 3u;
+        }
 
         ++game_state.merge_depth;
+        if (game_state.merge_depth >= 2u) chain_reaction = 1u;
         award = (uint16_t)((uint16_t)face * count + score_bonus[face]);
         award = (uint16_t)(award * game_state.merge_depth);
         game_state.score = (uint16_t)(game_state.score + award);
@@ -365,7 +370,7 @@ static void resolve_cell(uint8_t origin) {
         } else {
             callout = first_callouts[game_random_mod(7u)];
         }
-        effects_present_merge(face, count, origin, game_state.merge_depth, award, callout);
+        effects_present_merge(face, count, origin, game_state.merge_depth, chain_reaction, award, callout);
     }
 }
 

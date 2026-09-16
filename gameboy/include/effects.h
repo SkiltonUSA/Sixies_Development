@@ -8,6 +8,7 @@ void effects_present_merge(
     uint8_t group_count,
     uint8_t origin,
     uint8_t chain_depth,
+    uint8_t chain_reaction,
     uint16_t award,
     uint8_t callout
 );

@@ -604,16 +604,6 @@ def make_chain_stars(path):
     return stars
 
 
-def make_dmg_chain_star(star):
-    compact = Image.new("L", (8, 8), 0)
-    for row in range(8):
-        for column in range(8):
-            if any(star.getpixel((column * 2 + offset_x, row * 2 + offset_y))
-                   for offset_y in range(2) for offset_x in range(2)):
-                compact.putpixel((column, row), 3)
-    return compact
-
-
 def make_game_mascot(path):
     with Image.open(path) as master:
         source = master.convert("RGBA")
@@ -1781,7 +1771,7 @@ void art_update_pause(uint8_t selection, uint8_t sound, uint8_t full_flash) BANK
     callout_source += c_array("chain_reaction_tiles", pack_tiles(chain_reaction_tiles))
     chain_star_tiles = split_tiles(chain_stars[0])
     callout_source += c_array("chain_star_tiles", pack_tiles((chain_star_tiles[0], chain_star_tiles[2], chain_star_tiles[1], chain_star_tiles[3])))
-    callout_source += c_array("chain_star_dmg_tiles", pack_tiles((make_dmg_chain_star(chain_stars[0]), Image.new("L", (8, 8), 0))))
+    callout_source += c_array("chain_star_dmg_tiles", pack_tiles((chain_star_tiles[0], chain_star_tiles[2], chain_star_tiles[1], chain_star_tiles[3])))
     callout_source += c_array("invalid_next_tiles", pack_tiles(invalid_tiles))
     callout_source += c_array("invalid_next_map", invalid_map)
     callout_source += """
@@ -1817,11 +1807,7 @@ void art_clear_callout(void) BANKED {
 
 void art_load_chain_reaction(void) BANKED {
     set_sprite_data(ART_CHAIN_REACTION_BASE, ART_CHAIN_REACTION_TILES, chain_reaction_tiles);
-    if (_cpu == CGB_TYPE) {
-        set_sprite_data(ART_CHAIN_STAR_LOAD_BASE, ART_CHAIN_STAR_TILES, chain_star_tiles);
-    } else {
-        set_sprite_data(ART_CHAIN_STAR_LOAD_BASE, 2u, chain_star_dmg_tiles);
-    }
+    set_sprite_data(ART_CHAIN_STAR_LOAD_BASE, ART_CHAIN_STAR_TILES, _cpu == CGB_TYPE ? chain_star_tiles : chain_star_dmg_tiles);
 }
 
 void art_draw_invalid_next(uint8_t x, uint8_t y) BANKED {
