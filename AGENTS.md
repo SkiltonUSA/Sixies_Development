@@ -35,13 +35,15 @@ paths; never commit workspace-specific absolute paths.
 ## Repository architecture
 
 - `src/grid_base.asm` owns startup, input, the 5x5 board model, piece
-  generation, placement, flood-fill merging, raster scheduling, and the main
-  loop.
+  generation orchestration, placement, flood-fill merging, raster scheduling,
+  and the main loop. `src/spawn_probability.asm` owns the fixed weighted deal
+  table and single-required neighbor-match bonus in the `$3dd0-$3ecf` code gap.
 - `src/assets/*.asm` owns UI pages, effects, scoring, high scores, sound,
   music integration, and generated data tables.
-- `src/assets/new_game.asm`, `settings.asm`, and `bottom_labels.asm` contain
-  the original side-control icons and compact labels. `bottom_icon_control.asm`
-  raster-multiplexes the two icon sprites beside the lowered board.
+- `src/assets/new_game_icon_master.png` is the generated New Game control's
+  source art; `settings.asm` retains the original hand-authored gear sprite.
+  `bottom_labels.asm` contains the compact labels, and
+  `bottom_icon_control.asm` raster-multiplexes both icons beside the board.
 - `src/assets/*_master.*`, `src/assets/font/`, and
   `src/assets/exclamations/` contain source artwork. Binary, Koala, table, and
   preview outputs are generated from them by `scripts/` and `Makefile` rules.
@@ -90,16 +92,26 @@ Settings are side-panel controls and must not be moved back under the board.
 - Chain reactions repeatedly resolve at the same active cell. For a double,
   the origin is fully resolved before the second cell is considered. If the
   second cell was cleared by the first resolution, it is skipped.
-- A merge awards `group size * consumed die value * chain number`. The chain
-  number starts at 1 per placement and continues across origin-first and
-  second-cell resolution for doubles. Score arithmetic saturates at 9999.
-- Spawn generation and its RNG-call order are part of game behavior. Do not
-  reorder calls, the value-5 eligibility check, or the double-4 reroll.
+- A merge awards `3 * consumed die value * chain multiplier`, regardless of
+  group size. Chain multipliers are 1, 2, 5, 10, 20, and 40, capped at 40,
+  and continue across origin-first and second-cell resolution for doubles.
+  Eliminating value-6 dice adds a separate 150-point bonus. Score arithmetic
+  saturates at 9999.
+- Spawn generation and its RNG-call order are part of game behavior. The fixed
+  39-entry weighted deal table rejects RNG bytes 235-255 and maps accepted
+  bytes 1-234 with `(byte - 1) modulo 39`; do not reorder that process.
 - `docs/piece-probabilities.md` is generated from the portable spawn oracle;
   run `make probability-table` after an intentional generator change.
-- Once no orthogonally adjacent pair of empty cells remains, `singlesOnlyMode`
-  becomes permanent for that game. Game over occurs when the resulting piece
-  has no legal placement; in singles-only mode this means the board is full.
+- Before every draw, `singlesOnlyMode` is recomputed from the current board.
+  With no orthogonally adjacent pair of empty cells, only the single entries
+  with weights 5, 3, and 1 are eligible. A later merge can restore doubles.
+  Game over occurs when the resulting piece has no legal placement.
+- While a single is required, an exact 10% bonus roll replaces the generated single
+  with the value of one uniformly selected occupied cell orthogonally adjacent
+  to any blank. Candidate cells are unique, not counted once per blank edge.
+- While a value-5 die and a blank are both present, each visible generated 2
+  gets one exact 5% roll to become a 4. This runs after doubles are forced to a
+  single and before the single-required neighbor bonus.
 - Rules code must not depend on raster timing, sprites, SID state, animation,
   fonts, or C64 memory addresses. New ports should emit events and let their
   presentation layer consume them.
@@ -113,7 +125,9 @@ When implementation and prose disagree, first compare both with
 
 Gameplay keyboard controls are `W/A/S/D` to move, `Q` to rotate a double
 counterclockwise, `E` to rotate it clockwise, Space or Return to place, `N`
-for a new game, and `O` for Settings. Joystick port 2
+to request a new game, and `O` for Settings. A gameplay New Game request,
+including the focused side control, shows `Y OR N TO CONFIRM`; `Y` clears the
+current game and `N` cancels. Joystick port 2
 uses directions and fire; hold fire and press left or right to rotate a double
 counterclockwise or clockwise. Fire alone places when released. The `.` key
 randomly fills the board and is a development-only endgame shortcut.

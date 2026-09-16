@@ -32,6 +32,7 @@ ASM_SOURCES := \
 	src/assets/merge_mascot_callout.asm \
 	src/assets/merge_callout_data.asm \
 	src/assets/bottom_controls.asm \
+	src/assets/new_game_confirmation.asm \
 	src/assets/settings_screen.asm \
 	src/assets/settings_art.asm \
 	src/assets/main_mascot.asm \
@@ -57,6 +58,7 @@ ASM_SOURCES := \
 	src/assets/settings.asm \
 	src/assets/bottom_labels.asm \
 	src/assets/bottom_icon_control.asm \
+	src/spawn_probability.asm \
 	src/assets/large_digits.asm \
 	src/assets/game_over.asm
 KOALA_SOURCE := src/assets/game_over_koala.kla
@@ -90,6 +92,8 @@ CREDITS_LOGO_SCREEN := src/assets/credits_logo_screen.bin
 GAMEPLAY_LOGO_MASTER := src/assets/gameplay_logo_master.png
 GAMEPLAY_LOGO_BITMAP := src/assets/gameplay_logo_bitmap.bin
 GAMEPLAY_LOGO_PREVIEW := src/assets/gameplay_logo_preview.png
+NEW_GAME_ICON_MASTER := src/assets/new_game_icon_master.png
+NEW_GAME_ICON_ASM := src/assets/new_game.asm
 CHAIN_REACTION_MASTER := src/assets/chain_reaction_master.png
 CHAIN_REACTION_SPRITE := src/assets/chain_reaction_sprite.bin
 CHAIN_REACTION_PREVIEW := src/assets/chain_reaction_preview.png
@@ -244,6 +248,10 @@ $(GAMEPLAY_LOGO_BITMAP): $(GAMEPLAY_LOGO_MASTER) scripts/build-gameplay-logo.py
 
 $(GAMEPLAY_LOGO_PREVIEW): $(GAMEPLAY_LOGO_BITMAP)
 	@test -f "$@"
+
+$(NEW_GAME_ICON_ASM): $(NEW_GAME_ICON_MASTER) scripts/build-side-control-icons.py
+	python3 scripts/build-side-control-icons.py "$(NEW_GAME_ICON_MASTER)" src/assets
+	ffmpeg -v error -y -i src/assets/new_game_preview.ppm src/assets/new_game_preview.png
 
 $(CHAIN_REACTION_SPRITE): $(CHAIN_REACTION_MASTER) scripts/build-chain-reaction-sprite.py
 	python3 scripts/build-chain-reaction-sprite.py "$(CHAIN_REACTION_MASTER)" src/assets

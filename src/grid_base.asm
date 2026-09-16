@@ -134,6 +134,8 @@ Start:
     jsr InitTitleRasterIRQ
     cli
     jsr WaitForTitleStart
+    ; Title music is unconditional; apply the gameplay preference on exit.
+    jsr InitTitleMusic
     jsr StopTitleRasterIRQ
     jsr ClearBitmap
     jsr InitScreenColors
@@ -186,9 +188,13 @@ MainLoop_GridAction:
     cmp #ACTION_DOWN
     beq MainLoop_Down
     cmp #ACTION_ROTATE
-    beq MainLoop_Rotate
+    bne MainLoop_CheckRotateLeft
+    jmp MainLoop_Rotate
+MainLoop_CheckRotateLeft:
     cmp #ACTION_ROTATE_LEFT
-    beq MainLoop_RotateLeft
+    bne MainLoop_CheckPlace
+    jmp MainLoop_RotateLeft
+MainLoop_CheckPlace:
     cmp #ACTION_PLACE
     bne MainLoop_NoGridAction
     jmp MainLoop_Place
@@ -196,8 +202,18 @@ MainLoop_NoGridAction:
     jmp MainLoop
 
 MainLoop_NewGame:
+    ; Post-game attract pages have no live game to protect. During gameplay,
+    ; require an explicit Y before clearing the board; N cancels the request.
+    lda endAttractNewGame
+    bne MainLoop_NewGameConfirmed
+    jsr ConfirmNewGame
+    bcs MainLoop_NewGameConfirmed
+    jmp MainLoop
+MainLoop_NewGameConfirmed:
     lda #0
     sta endAttractNewGame
+    ; A new game may be starting from the title page in the end attract loop.
+    jsr InitTitleMusic
     lda gameOverBlindActive
     beq MainLoop_NewGameReady
     jsr RestoreGameScreen
@@ -378,6 +394,7 @@ ShowTitleScreen_Band:
     lda VIC_MODE
     ora #%00010000
     sta VIC_MODE
+    jsr InitAttractMusic
     rts
 
 SetupTitlePromptSprites:
@@ -594,53 +611,55 @@ RandomByte_NoXor:
     rts
 
 SpawnPiece:
-    jsr RandomByte
-    and #1
-    clc
-    adc #1
-    sta pieceCount
-    jsr RandomByte
-    and #3
-    clc
-    adc #1
-    sta pieceValue0
-    jsr RandomByte
-    and #3
-    clc
-    adc #1
-    sta pieceValue1
-    jsr MaybeIntroduceFiveDie
-
-    lda pieceCount
-    cmp #2
-    bne SpawnPiece_ValuesReady
-    lda pieceValue0
-    cmp #4
-    bne SpawnPiece_ValuesReady
-    lda pieceValue1
-    cmp #4
-    bne SpawnPiece_ValuesReady
-SpawnPiece_RerollSecondFour:
-    jsr RandomByte
-    and #3
-    cmp #3
-    beq SpawnPiece_RerollSecondFour
-    clc
-    adc #1
-    sta pieceValue1
-SpawnPiece_ValuesReady:
-
-    lda singlesOnlyMode
-    bne SpawnPiece_ForceSingle
+    ; Single pieces are a board-state fallback, never a permanent latch. A
+    ; merge can reopen adjacent blank cells, so recompute this before every
+    ; draw and resume the complete deal table as soon as a double fits again.
     jsr CheckDoubleSpaceAvailable
     lda doubleSpaceAvailable
-    bne SpawnPiece_CountReady
-    lda #1
+    eor #1
     sta singlesOnlyMode
-SpawnPiece_ForceSingle:
+SpawnPiece_SelectDeal:
+    jsr RandomByte
+    cmp #235
+    bcs SpawnPiece_SelectDeal
+    sec
+    sbc #1
+SpawnPiece_ReduceDealIndex:
+    cmp #39
+    bcc SpawnPiece_DealIndexReady
+    sbc #39
+    jmp SpawnPiece_ReduceDealIndex
+SpawnPiece_DealIndexReady:
+    tax
+    lda singlesOnlyMode
+    beq SpawnPiece_DealReady
+    cpx #9
+    bcs SpawnPiece_SelectDeal
+SpawnPiece_DealReady:
+    lda SpawnDealTable,x
+    and #$0f
+    beq SpawnPiece_SelectedSingle
+    sta pieceValue1
+    lda #2
+    sta pieceCount
+    bne SpawnPiece_DecodeFirstValue
+SpawnPiece_SelectedSingle:
+    sta pieceValue1
     lda #1
     sta pieceCount
-SpawnPiece_CountReady:
+SpawnPiece_DecodeFirstValue:
+    lda SpawnDealTable,x
+    lsr
+    lsr
+    lsr
+    lsr
+    sta pieceValue0
+
+    jsr MaybePromoteTwoToFour
+    lda singlesOnlyMode
+    beq SpawnPiece_NeighborBoostDone
+    jsr MaybeApplyNeighborMatchBonus
+SpawnPiece_NeighborBoostDone:
 
     lda #2
     sta cursorX
@@ -665,43 +684,6 @@ SpawnPiece_GameOver:
     sta highlightedSecondIndex
 SpawnPiece_GameOverDone:
     jsr AnimateGameOver
-    rts
-
-MaybeIntroduceFiveDie:
-    lda #0
-    sta boardFiveCount
-    ldx #0
-MaybeIntroduceFiveDie_Count:
-    lda board,x
-    cmp #5
-    bne MaybeIntroduceFiveDie_Next
-    inc boardFiveCount
-    lda boardFiveCount
-    cmp #5
-    bcs MaybeIntroduceFiveDie_Eligible
-MaybeIntroduceFiveDie_Next:
-    inx
-    cpx #BOARD_CELLS
-    bne MaybeIntroduceFiveDie_Count
-    rts
-
-MaybeIntroduceFiveDie_Eligible:
-    jsr RandomByte
-    and #$0f
-    bne MaybeIntroduceFiveDie_Done
-    lda pieceCount
-    cmp #2
-    bne MaybeIntroduceFiveDie_First
-    jsr RandomByte
-    and #1
-    beq MaybeIntroduceFiveDie_First
-    lda #5
-    sta pieceValue1
-    rts
-MaybeIntroduceFiveDie_First:
-    lda #5
-    sta pieceValue0
-MaybeIntroduceFiveDie_Done:
     rts
 
 CheckDoubleSpaceAvailable:
@@ -1067,6 +1049,12 @@ ResolveAtActiveIndex:
     cmp #3
     bcc ResolveAtActiveIndex_Done
 ResolveAtActiveIndex_GroupReady:
+    ; Every merge after the first is a chain reaction, including the first
+    ; merge reached through the second cell of a placed double.
+    lda mergeChainDepth
+    beq ResolveAtActiveIndex_Animate
+    jsr PauseBetweenChainMerges
+ResolveAtActiveIndex_Animate:
     inc mergeChainDepth
     jsr AnimateMergeGroup
     jsr AddAnimatedGroupScore
@@ -1091,17 +1079,16 @@ ResolveAtActiveIndex_Clear:
     lda groupCount
     cmp #3
     bcc ResolveAtActiveIndex_Done
-    jsr PauseBetweenChainMerges
     jmp ResolveAtActiveIndex_GroupReady
 ResolveAtActiveIndex_Done:
     rts
 
 PauseBetweenChainMerges:
     jsr PublishBoardForAnimation
-    jsr ShowChainReactionSprite
+    jsr ShowChainReactionCallout
     lda #CHAIN_MERGE_PAUSE_FRAMES
     jsr WaitAnimationFrames
-    jmp HideChainReactionSprite
+    jmp HideChainReactionCallout
 
 AnimateMergeGroup:
     jsr RunMergeLevelEffects
@@ -1278,7 +1265,7 @@ AnimateNewGame_Wait:
     rts
 
 AnimateGameOver:
-    jsr InitTitleMusic
+    jsr InitAttractMusic
     lda #1
     sta ghostSuppressed
     jsr MarkDisplayDirty
@@ -1622,24 +1609,6 @@ TryGroupNeighbor:
 TryGroupNeighbor_Done:
     rts
 
-AddGroupScore:
-    ldx mergeChainDepth
-AddGroupScore_Multiplier:
-    lda groupCount
-    sta scoreAddCount
-AddGroupScore_Die:
-    lda groupValue
-    sta scoreAddValue
-AddGroupScore_Value:
-    jsr IncrementScore
-    dec scoreAddValue
-    bne AddGroupScore_Value
-    dec scoreAddCount
-    bne AddGroupScore_Die
-    dex
-    bne AddGroupScore_Multiplier
-    rts
-
 IncrementScore:
     jmp IncrementScore4
 
@@ -1834,7 +1803,7 @@ SetupPiecePreview:
 SetupPiecePreview_GameScreen:
     lda chainReactionActive
     beq SetupPiecePreview_CheckEffect
-    ; The chain banner owns UI sprites 5-7 during the inter-merge pause.
+    ; Reserved compatibility state; bitmap callouts leave this at zero.
     rts
 SetupPiecePreview_CheckEffect:
     lda fireworkActive
@@ -2574,11 +2543,12 @@ secondIndex:       !byte $ff
 gameOver:          !byte 0
 singlesOnlyMode:   !byte 0
 doubleSpaceAvailable: !byte 0
+neighborCandidateCount: !byte 0
+neighborCandidateOrdinal: !byte 0
 boardDirty:        !byte 0
 displayDirty:      !byte 1
 boardUpdateInProgress: !byte 0
 rngSeed:           !byte 1
-boardFiveCount:    !byte 0
 scoreThousands:    !byte 0
 scoreHundreds:     !byte 0
 scoreTens:         !byte 0
@@ -2641,6 +2611,7 @@ gameOverBlindActive: !byte 0
 blindFillColor:    !byte 0
 ; 0=inactive, 1=single-sprite score flight, 2=three-sprite particle burst.
 fireworkActive:    !byte 0
+; Retained for the old sprite-effect state layout; bitmap callouts leave it 0.
 chainReactionActive: !byte 0
 blindCharacterRow: !byte 0
 fireworkBaseX:     !byte 0
@@ -2668,6 +2639,7 @@ packedValue:       !byte 0
 !source "src/assets/merge_diagonal_sweep.asm"
 !source "src/assets/merge_mascot_callout.asm"
 !source "src/assets/bottom_controls.asm"
+!source "src/assets/new_game_confirmation.asm"
 !source "src/assets/settings_screen.asm"
 !source "src/assets/settings_art.asm"
 !source "src/assets/main_mascot.asm"
@@ -2692,5 +2664,6 @@ packedValue:       !byte 0
 !source "src/assets/settings.asm"
 !source "src/assets/bottom_labels.asm"
 !source "src/assets/bottom_icon_control.asm"
+!source "src/spawn_probability.asm"
 !source "src/assets/large_digits.asm"
 !source "src/assets/game_over.asm"

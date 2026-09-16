@@ -64,7 +64,9 @@ UpdateTitleMusic_Done:
 StopTitleMusic:
     lda #0
     sta titleMusicActive
-    ldx #24
+    ; Silence the tune without clearing $d418. Gameplay effects borrow voice 1
+    ; and need the SID master volume to remain audible when music is disabled.
+    ldx #23
 StopTitleMusic_ClearSid:
     sta $d400,x
     dex

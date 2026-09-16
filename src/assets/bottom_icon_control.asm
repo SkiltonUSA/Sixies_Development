@@ -1,6 +1,6 @@
-; The compact Chain Reaction sprite leaves this persistent-data gap available
-; for the two dynamic Sound FX option labels.
-* = $5ac0
+; The packed Chain Reaction bitmap now uses $5a00-$5adf. Keep these dynamic
+; Sound FX labels in the former chain-table gap below the firework sprite.
+* = $5b80
 
 SettingsTextSoundFxOn:  !text "2. SOUND FX: ON "
 SettingsTextSoundFxOff: !text "2. SOUND FX: OFF"
@@ -134,6 +134,9 @@ SettingsToggleSoundFx_Disabled:
 ; keep their complete voice-1 state here. The gameplay IRQ calls this after
 ; the music player, allowing an active effect to borrow voice 1 while the tune
 ; continues uninterrupted on voices 2-3.
+RetriggerAndApplySoundEffectVoice:
+    lda sfxGateOffControl
+    sta SID_HW_V1_FREQ_LO + 4
 ApplySoundEffectVoice:
     ldx #6
 ApplySoundEffectVoice_Register:
@@ -141,6 +144,17 @@ ApplySoundEffectVoice_Register:
     sta SID_HW_V1_FREQ_LO,x
     dex
     bpl ApplySoundEffectVoice_Register
+    rts
+
+; With gameplay music off, release the hardware voice when an effect ends so
+; the next effect gets a real OFF-to-ON envelope transition. Active music has
+; already restored voice 1 this frame and must remain untouched.
+ReleaseSoundEffectVoice:
+    lda titleMusicActive
+    bne ReleaseSoundEffectVoice_Done
+    lda sfxGateOffControl
+    sta SID_HW_V1_FREQ_LO + 4
+ReleaseSoundEffectVoice_Done:
     rts
 
 sfxVoice1Shadow: !fill 7,0

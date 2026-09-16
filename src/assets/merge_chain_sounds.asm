@@ -6,7 +6,7 @@ RunMergeLevelEffects:
     and #1
     bne RunMergeLevelEffects_Done
     jsr PlayMergeValueSound
-    jmp ApplySoundEffectVoice
+    jmp RetriggerAndApplySoundEffectVoice
 RunMergeLevelEffects_Done:
     rts
 
@@ -237,30 +237,7 @@ AnimateMergeScoreSprite_YReady:
 
 * = $9380
 PrepareMergeScoreGain:
-    ; Accumulate groupCount * groupValue * mergeChainDepth as three BCD
-    ; digits. Interrupts stay masked while decimal mode is active.
-    php
-    sei
-    sed
-    lda #0
-    sta scoreAddCount
-    sta scoreAddValue
-    ldx mergeChainDepth
-PrepareMergeScoreGain_Multiplier:
-    ldy groupCount
-PrepareMergeScoreGain_Add:
-    lda scoreAddCount
-    clc
-    adc groupValue
-    sta scoreAddCount
-    bcc PrepareMergeScoreGain_NoHundredsCarry
-    inc scoreAddValue
-PrepareMergeScoreGain_NoHundredsCarry:
-    dey
-    bne PrepareMergeScoreGain_Add
-    dex
-    bne PrepareMergeScoreGain_Multiplier
-    plp
+    jsr CalculateMergeScoreGain
 
     lda scoreAddValue
     sta mergeScoreDigits

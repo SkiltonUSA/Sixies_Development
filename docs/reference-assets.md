@@ -24,8 +24,8 @@ composition, spacing, and game feel.
   `src/assets/credits_mascot_preview.png`: generated credits art.
 - `src/assets/gameplay_logo_preview.png`: compact gameplay wordmark generated
   for the space above the board.
-- `src/assets/chain_reaction_preview.png`: generated expanded hi-res, 3x1
-  three-sprite banner placed over the gameplay mascot between merge links.
+- `src/assets/chain_reaction_preview.png`: generated 72-by-64 bitmap callout
+  placed in the right-sidebar exclamation panel between merge links.
 - `src/assets/font/SixiesFont_preview.png`, `SixiesFont16_preview.png`, and
   `SixiesDigits16_preview.png`: previews rendered from final font bytes.
 
@@ -43,6 +43,8 @@ previews remain authoritative for current converted art.
 - `src/assets/settings_dice_master.png`: settings illustration master.
 - `src/assets/credits_logo_master.jpg`: credits logo master.
 - `src/assets/gameplay_logo_master.png`: green gameplay wordmark master.
+- `src/assets/new_game_icon_master.png`: supplied overlapping-dice New Game
+  badge used to generate the gameplay control sprite.
 - `src/assets/credits_mascot_master.png`: credits mascot master.
 - `src/assets/chain_reaction_master.png`: chain-reaction banner master.
 - `src/assets/font/SixiesFont_sheet.png`: alphabet and digit source sheet.
@@ -50,9 +52,10 @@ previews remain authoritative for current converted art.
 - `src/assets/die_one.asm` through `die_six.asm`: hand-authored C64 die assets.
 - `src/assets/preview_dice_effects.asm`: runtime builder for inverse blinking
   previews and dithered invalid-placement previews.
-- `src/assets/new_game.asm`, `settings.asm`, and `bottom_labels.asm`: original
-  icon and compact-label artwork, now placed at the bottom of the gameplay
-  side panels.
+- `src/assets/new_game.asm`: generated 24x21 New Game control sprite.
+- `src/assets/settings.asm`: original hand-authored eight-tooth gear sprite.
+- `src/assets/bottom_labels.asm`: compact labels placed beneath those sprites
+  at the bottom of the gameplay side panels.
 - `src/assets/bottom_icon_control.asm`: side-control icon raster multiplexing
   and focus-color control.
 
@@ -74,6 +77,7 @@ those outputs as if they were source art. Relevant converters include:
 - `scripts/extract-font-sheet.py`
 - `scripts/build-font-assets.py`
 - `scripts/build-merge-callouts.py`
+- `scripts/build-side-control-icons.py`
 - `scripts/pack-koala.py`
 
 Run `make` after changing a master or converter and inspect the corresponding

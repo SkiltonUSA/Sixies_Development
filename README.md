@@ -128,8 +128,10 @@ make sidkit
 The command-line exporter is available at `.tools/c64SIDkit/.venv/bin/sid-sfx`.
 
 Settings > Options includes independent `MUSIC: ON/OFF` and
-`SOUND FX: ON/OFF` toggles. Music starts off by default and begins from the
-start of the tune when the player enables it; sound effects start enabled.
+`SOUND FX: ON/OFF` toggles. The title, attract, and game-over sequences always
+restart the title tune. The music option applies during gameplay only:
+gameplay music starts off by default and begins from the start of the tune
+when enabled. Sound effects start enabled.
 
 ## Controls
 
@@ -139,33 +141,33 @@ start of the tune when the player enables it; sound effects start enabled.
 - Hold joystick fire and press Left/Right: rotate a double counterclockwise/clockwise
 - `Space` or `Return`: place the piece
 - Joystick fire: place the piece when the button is released without rotating
-- `N`: clear the board and start a new game
+- `N`: request a new game; press `Y` to confirm or `N` to cancel
 - `Space` or `N` on a high-score page: start a new game
 - `O`: open the Settings menu
 - `N` while Settings is open: show the next instructions page
-- From the grid's bottom row, press Down to focus New Game from columns 0-2 or Instructions from columns 3-4. Press Fire/Space to select, Up to return to the grid, or Left/Right to switch options. Instructions opens the Settings pages.
+- From the grid's bottom row, press Down to focus New Game from columns 0-2 or Instructions from columns 3-4. Press Fire/Space to select, Up to return to the grid, or Left/Right to switch options. Selecting New Game requires `Y` confirmation; `N` cancels. Instructions opens the Settings pages.
 - `.`: development shortcut that randomly fills the board and triggers Game Over
 
 Moving a die between grid cells plays the three-frame c64SIDkit `bounce` effect. Successful placement and double-die rotation play the higher-priority five-frame `portal_ping` effect through SID voice 1. The new-game grid ripple uses a randomized sawtooth effect reconstructed from the Sound FX Kit `TEST11` controls and stops when the setup animation finishes. Trying to place a die outside the board or over an occupied cell plays a custom low triangle "bonk" with a rapid downward pitch sweep.
 
 ## Rules
 
-Each turn normally produces one or two dice with values from 1 to 4. Once at least five value-5 dice are present on the board, eligible spawned singles have a low chance of becoming a generated value-5 die. A double piece can never contain two value-4 dice. Double pieces rotate in four directions and must fit entirely inside empty grid cells. See `docs/game-rules.md` for the exact RNG call order and probability behavior.
+Each turn draws from a fixed 39-weight table containing singles 1-3 and the ordered doubles 1+2, 1+3, 2+1, 2+3, 3+1, and 3+2. Singles have 9/39 total weight and doubles have 30/39. While a value-5 die is on a non-full board, a visible generated 2 has an exact 5% chance to become a 4. If the current board has room only for singles, the draw is limited to the original single weights 5, 3, and 1, with an exact 10% bonus that can copy the value of a uniformly selected occupied cell next to any blank. This fallback is recalculated every turn, so doubles return after a merge creates adjacent blanks. Double pieces rotate in four directions and must fit entirely inside empty grid cells. See `docs/game-rules.md` and `docs/piece-probabilities.md` for the exact weights and RNG mapping.
 
 Valid targets use blinking inverse-color preview dice, with one preview per die. Targets that overlap an occupied cell show the intended dice as gray dithered shadows and cannot be placed.
 
-Three or more edge-connected equal dice merge at the placed die. Values progress from 1 through 6; a connected group of 6s disappears. New values can immediately trigger another merge. Each placement's first merge scores the total face value consumed, its second merge scores that value at 2x, its third at 3x, and so on.
+Three or more edge-connected equal dice merge at the placed die. Values progress from 1 through 6; a connected group of 6s disappears. New values can immediately trigger another merge. Every merge uses a fixed three-die scoring base, even for larger connected groups. Successive merges from one placement use multipliers 1x, 2x, 5x, 10x, 20x, and 40x (capped at 40x). Eliminating a group of 6s adds a separate 150-point bonus.
 When another merge is waiting in the chain, the supplied comic-burst artwork
-appears as a white, 72-by-40-pixel, three-sprite `CHAIN REACTION!` banner.
-It uses the existing inter-merge pause and overlays the gameplay mascot in the
-left side panel without changing gameplay timing.
+appears as a white, 72-by-64-pixel bitmap `CHAIN REACTION!` callout. It uses
+the same right-sidebar panel beneath the upcoming dice as the normal merge
+exclamations, without borrowing hardware sprites or changing gameplay timing.
 
 The first merge in every chain plays a happy rising C-E-G-C pulse arpeggio synchronized with the start of the merge animation. Cascading merges do not replay the first-merge cue.
 
 When a score enters the top five, its complete high-score row flashes yellow and white until the player enters all three initials.
 
-When no two edge-adjacent empty cells remain, the game switches permanently to single-die pieces. Filling the final empty cell ends the game.
+When no two edge-adjacent empty cells remain, the current draw is restricted to single-die entries. The restriction is removed if a merge creates adjacent empty cells. Filling the final empty cell ends the game.
 
 The uncommitted dice under the cursor blink between filled and inverse-color silhouettes. Doubles change together, while placed dice stay solid.
 
-Placed dice pulse to acknowledge the move. Each merge fades in one of the supplied hi-res comic bursts beneath the upcoming dice in the right sidebar. Lower-value merges rotate through `AWESOME`, `BOOM`, `DANG`, `LETS GO`, `WHOA`, `WOW`, `YEAH`, and `YES`; merging value-5 dice always shows `FIVES`, and merging value-6 dice always shows `SIXIES`. The bursts are resized and centered in a 72-by-64-pixel panel that does not touch the board border or the bottom Settings control. A value-1 merge keeps its word solid white. Value 2 begins entirely blue and changes to gray from left to right, while value 3 sends a green band from left to right across white. Value-4, value-5, and value-6 merges animate concentric red, orange, yellow, green, cyan, blue, and purple bands through the word. On a merge, full squares along the destination row and column flash inward from all four grid edges while the dice pulse: white for the first merge and cyan for a chain merge. Three sprite stars burst from the destination, jump outward, and fall in separate arcs into the next grid row. A second chain merge doubles the size of the firework stars. Creating a six follows the burst with three stars descending from the top to the bottom of the board. The upgraded die pauses for roughly half a second before a second chain merge collapses. New Game spirals from the bottom-left cell toward the center. Game over reverses that effect, then wipes the full display from top to bottom with a solid gray band. Each band holds for 0.1 seconds before revealing the supplied multicolor `GAME OVER` Koala artwork. The completed logo, four-digit score, and `PRESS N FOR NEW GAME` prompt remain visible for five seconds before the five-entry high-score page replaces the center panel. A new first-place score prompts for three initials and persists until the PRG is reloaded. The end-game display then rotates through the title, high-score, and credits pages every ten seconds. A compact `PRESS N FOR NEW GAME` instruction remains at the bottom; `N` starts from any end-game page, while either `Space` or `N` starts from a high-score page. New Game restores hi-res mode and resets the board, score, and single-die endgame mode without clearing the high-score table.
+Placed dice pulse to acknowledge the move. Each merge fades in one of the supplied hi-res comic bursts beneath the upcoming dice in the right sidebar. Lower-value merges rotate through `AWESOME`, `BOOM`, `DANG`, `LETS GO`, `WHOA`, `WOW`, `YEAH`, and `YES`; merging value-5 dice always shows `FIVES`, and merging value-6 dice always shows `SIXIES`. The bursts are resized and centered in a 72-by-64-pixel panel that does not touch the board border or the bottom Settings control. A value-1 merge keeps its word solid white. Value 2 begins entirely blue and changes to gray from left to right, while value 3 sends a green band from left to right across white. Value-4, value-5, and value-6 merges animate concentric red, orange, yellow, green, cyan, blue, and purple bands through the word. On a merge, full squares along the destination row and column flash inward from all four grid edges while the dice pulse: white for the first merge and cyan for a chain merge. Three sprite stars burst from the destination, jump outward, and fall in separate arcs into the next grid row. A second chain merge doubles the size of the firework stars. Creating a six follows the burst with three stars descending from the top to the bottom of the board. The upgraded die pauses for roughly half a second before a second chain merge collapses. New Game spirals from the bottom-left cell toward the center. Game over reverses that effect, then wipes the full display from top to bottom with a solid gray band. Each band holds for 0.1 seconds before revealing the supplied multicolor `GAME OVER` Koala artwork. The completed logo, four-digit score, and `PRESS N FOR NEW GAME` prompt remain visible for five seconds before the five-entry high-score page replaces the center panel. A new first-place score prompts for three initials and persists until the PRG is reloaded. The end-game display then rotates through the title, high-score, and credits pages every ten seconds. A compact `PRESS N FOR NEW GAME` instruction remains at the bottom; `N` starts from any end-game page, while either `Space` or `N` starts from a high-score page. New Game restores hi-res mode and resets the board, score, and transient single-required state without clearing the high-score table.

@@ -279,7 +279,7 @@ SettingsTextMove:          !text "WASD OR JOYSTICK MOVE"
 SettingsTextRotate:        !text "Q LEFT  E RIGHT"
 SettingsTextPlaceKey:      !text "SPACE OR FIRE PLACES"
 SettingsTextBottom:        !text "DOWN OPENS MENU"
-SettingsTextNewGame:       !text "N STARTS NEW GAME"
+SettingsTextNewGame:       !text "N NEW GAME PROMPT"
 SettingsTextOpenSettings:  !text "O OPENS SETTINGS"
 SettingsTextMenuReturn:    !text "M RETURNS TO MENU"
 SettingsTextHow:           !text "HOW TO PLAY"
@@ -309,7 +309,7 @@ RunTitleAttractMode_ReleaseFire:
     lda JOYSTICK2
     and #$10
     beq RunTitleAttractMode_ReleaseFire
-    jsr InitTitleMusic
+    jsr InitAttractMusic
 RunTitleAttractMode_Title:
     lda #5
     jsr WaitStartupAttractSeconds

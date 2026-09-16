@@ -120,28 +120,28 @@ PlayBounce:
     and #1
     bne AudioDisabledReturn
     jsr PlayBounceImpl
-    jmp ApplySoundEffectVoice
+    jmp RetriggerAndApplySoundEffectVoice
 
 PlayPortalPing:
     lda audioMode
     and #1
     bne AudioDisabledReturn
     jsr PlayPortalPingImpl
-    jmp ApplySoundEffectVoice
+    jmp RetriggerAndApplySoundEffectVoice
 
 PlayGridSetup:
     lda audioMode
     and #1
     bne AudioDisabledReturn
     jsr PlayGridSetupImpl
-    jmp ApplySoundEffectVoice
+    jmp RetriggerAndApplySoundEffectVoice
 
 PlayInvalidPlacement:
     lda audioMode
     and #1
     bne AudioDisabledReturn
     jsr PlayInvalidPlacementImpl
-    jmp ApplySoundEffectVoice
+    jmp RetriggerAndApplySoundEffectVoice
 
 PlayFirstMerge:
     lda audioMode
@@ -160,14 +160,20 @@ InitTitleMusic:
     and #2
     beq InitTitleMusic_Enabled
     jsr ResetSoundEffects
-    lda #0
-    sta titleMusicActive
-AudioDisabledReturn:
-    rts
+    jmp StopTitleMusic
 InitTitleMusic_Enabled:
     lda titleMusicActive
     bne AudioDisabledReturn
     jmp InitTitleMusicImpl
+
+; Title, attract, and game-over presentation always restart the tune. The
+; gameplay preference is reapplied when the player begins or resumes a game.
+InitAttractMusic:
+    jsr StopTitleMusic
+    jmp InitTitleMusicImpl
+
+AudioDisabledReturn:
+    rts
 
 DrawSettingsArtwork:
     lda #<SettingsDiceBitmapData
@@ -233,7 +239,7 @@ DrawSettingsArtwork_ScreenSourceReady:
     bne DrawSettingsArtwork_ScreenRow
     rts
 
-; Start with effects enabled and music muted. Music is opt-in from Options.
+; Start with effects enabled and gameplay music muted. Attract music is always on.
 audioMode: !byte AUDIO_SFX_ONLY
 
 WaitForSettingsClose:

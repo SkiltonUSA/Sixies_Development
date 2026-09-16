@@ -27,6 +27,22 @@ KEYBOARD_ACTIONS = {
     "Q": "rotate_left",
     "E": "rotate_right",
 }
+DEAL_WEIGHTS = (
+    ((1,), 5),
+    ((2,), 3),
+    ((3,), 1),
+    ((1, 2), 5),
+    ((1, 3), 8),
+    ((2, 1), 10),
+    ((2, 3), 1),
+    ((3, 1), 4),
+    ((3, 2), 2),
+)
+DEAL_TABLE = tuple(deal for deal, weight in DEAL_WEIGHTS for _ in range(weight))
+DEAL_WEIGHT_TOTAL = 39
+ACCEPTED_RNG_MAX = 234
+NEIGHBOR_BONUS_RNG_MAX = 250
+FOUR_PROMOTION_RNG_MAX = 240
 
 
 def flatten(rows):
@@ -89,6 +105,13 @@ def find_group(board, active):
     return group
 
 
+CHAIN_MULTIPLIERS = (1, 2, 5, 10, 20, 40)
+
+
+def chain_multiplier(chain_depth):
+    return CHAIN_MULTIPLIERS[min(chain_depth, len(CHAIN_MULTIPLIERS)) - 1]
+
+
 def resolve(board, active, score, chain_depth=0):
     events = []
     while board[active] != 0:
@@ -97,7 +120,9 @@ def resolve(board, active, score, chain_depth=0):
             break
         value = board[active]
         chain_depth += 1
-        delta = len(group) * value * chain_depth
+        delta = 3 * value * chain_multiplier(chain_depth)
+        if value == 6:
+            delta += 150
         score = min(9999, score + delta)
         events.append({"value": value, "count": len(group), "score_delta": delta, "active": active})
         for cell in group:
@@ -151,37 +176,62 @@ def any_placement(board, count):
     return False
 
 
-def spawn(board, seed, singles_only):
-    seed = random_byte(seed)
-    count = (seed & 1) + 1
-    seed = random_byte(seed)
-    value0 = (seed & 3) + 1
-    seed = random_byte(seed)
-    value1 = (seed & 3) + 1
+def neighbor_match_candidates(board):
+    candidates = []
+    for cell, value in enumerate(board):
+        if value == 0:
+            continue
+        if any(
+            other is not None and board[other] == 0
+            for other in (neighbor(cell, direction) for direction in range(4))
+        ):
+            candidates.append(value)
+    return candidates
 
-    if sum(value == 5 for value in board) >= 5:
+
+def random_modulo(seed, modulus, accepted_max):
+    while True:
         seed = random_byte(seed)
-        if (seed & 0x0F) == 0:
-            if count == 2:
-                seed = random_byte(seed)
-                if seed & 1:
-                    value1 = 5
-                else:
-                    value0 = 5
-            else:
-                value0 = 5
+        if seed <= accepted_max:
+            return (seed - 1) % modulus, seed
 
-    if count == 2 and value0 == 4 and value1 == 4:
-        while True:
-            seed = random_byte(seed)
-            raw = seed & 3
-            if raw != 3:
-                value1 = raw + 1
+
+def spawn(board, seed, previous_singles_only=False):
+    # This condition is derived fresh for every piece. The previous value is
+    # accepted only for vector compatibility and must never latch the state.
+    singles_only = not double_space_available(board)
+    while True:
+        seed = random_byte(seed)
+        if seed <= ACCEPTED_RNG_MAX:
+            deal = DEAL_TABLE[(seed - 1) % DEAL_WEIGHT_TOTAL]
+            if not singles_only or len(deal) == 1:
                 break
+    count = len(deal)
+    value0 = deal[0]
+    value1 = deal[1] if count == 2 else 0
 
-    if singles_only or not double_space_available(board):
-        singles_only = True
-        count = 1
+    if 0 in board and 5 in board:
+        visible_values = [value0] if count == 1 else [value0, value1]
+        if 2 in visible_values:
+            promotion_roll, seed = random_modulo(
+                seed, 20, FOUR_PROMOTION_RNG_MAX
+            )
+            if promotion_roll == 6:
+                if value0 == 2:
+                    value0 = 4
+                else:
+                    value1 = 4
+
+    if singles_only:
+        candidates = neighbor_match_candidates(board)
+        if candidates:
+            bonus_roll, seed = random_modulo(seed, 10, NEIGHBOR_BONUS_RNG_MAX)
+            if bonus_roll == 0:
+                candidate_max = (255 // len(candidates)) * len(candidates)
+                candidate_index, seed = random_modulo(
+                    seed, len(candidates), candidate_max
+                )
+                value0 = candidates[candidate_index]
 
     return {
         "count": count,
@@ -241,6 +291,29 @@ def keyboard_sequence(keys):
     return {"actions": [KEYBOARD_ACTIONS.get(key, "none") for key in keys]}
 
 
+def new_game_confirmation(keys):
+    waiting = False
+    new_game = False
+    actions = []
+    for key in keys:
+        if not waiting:
+            if key == "N":
+                waiting = True
+                actions.append("prompt")
+            else:
+                actions.append("none")
+        elif key == "Y":
+            waiting = False
+            new_game = True
+            actions.append("confirm")
+        elif key == "N":
+            waiting = False
+            actions.append("cancel")
+        else:
+            actions.append("waiting")
+    return {"actions": actions, "waiting": waiting, "new_game": new_game}
+
+
 def check_equal(vector_id, field, actual, expected, failures):
     if actual != expected:
         failures.append(f"{vector_id}: {field}: expected {expected!r}, got {actual!r}")
@@ -254,7 +327,11 @@ def validate(data):
         vector_id = vector["id"]
         operation = vector["operation"]
         expected = vector["expected"]
-        board = None if operation in ("joystick_sequence", "keyboard_sequence") else flatten(vector["board"])
+        board = None if operation in (
+            "joystick_sequence",
+            "keyboard_sequence",
+            "new_game_confirmation",
+        ) else flatten(vector["board"])
 
         if operation == "placement":
             piece = vector["piece"]
@@ -286,12 +363,18 @@ def validate(data):
                 "double_placement_available": any_placement(board, 2),
             }
             check_equal(vector_id, "space_detection", result, expected, failures)
+        elif operation == "neighbor_candidates":
+            result = neighbor_match_candidates(board)
+            check_equal(vector_id, "neighbor_candidates", result, expected, failures)
         elif operation == "joystick_sequence":
             result = joystick_sequence(vector["states"], vector["piece_count"])
             check_equal(vector_id, "joystick_sequence", result, expected, failures)
         elif operation == "keyboard_sequence":
             result = keyboard_sequence(vector["keys"])
             check_equal(vector_id, "keyboard_sequence", result, expected, failures)
+        elif operation == "new_game_confirmation":
+            result = new_game_confirmation(vector["keys"])
+            check_equal(vector_id, "new_game_confirmation", result, expected, failures)
         else:
             failures.append(f"{vector_id}: unknown operation {operation!r}")
     return count, failures

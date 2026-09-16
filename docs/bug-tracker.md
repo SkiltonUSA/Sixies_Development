@@ -17,33 +17,183 @@ the triggering board state.
 
 ## Active bugs
 
-### BUG-009: Chain Reaction sprite appears absent during a real chain
+### BUG-014: Completed initials corrupt the high-score start prompt
+
+- Status: **Verification**
+- Date: September 16, 2026
+- Area: post-game high-score sequence
+- Symptoms: after entering the third high-score initial, fragments of `ENTER
+  INITIALS` and the entered letters remain beneath `SPACE OR N START`, making
+  the prompt appear corrupted.
+- Reproduction: finish with a qualifying score, enter all three initials, and
+  observe the prompt drawn immediately afterward.
+- Expected: the initials-entry message is removed completely before the start
+  prompt appears.
+- Root cause: the completion path called `DrawHighScorePage` directly. That
+  routine redraws the table and new prompt but does not clear the bitmap rows
+  previously occupied by the two-row initials message and typed letters.
+- Fix: reset and clear the high-score hires page after the third initial, then
+  redraw the completed table and start prompt on a clean bitmap.
+- Regression checks:
+  - enter three initials for a qualifying score
+  - no `ENTER INITIALS` or typed-letter pixels remain behind the start prompt
+  - the completed name remains in the high-score table
+  - strict normal and crunched builds
+- Related file: `src/assets/high_scores.asm`
+
+### BUG-013: Chain Reaction callout missing on some second or third merges
+
+- Status: **Verification**
+- Date: September 16, 2026
+- Area: double-piece chain presentation
+- Symptoms: the Chain Reaction image appears for cascades at one cell but can
+  be absent when the second or third merge is resolved from the other die of a
+  placed double.
+- Reproduction: place a double whose origin produces a merge, then whose
+  second cell produces the next merge in the same placement chain.
+- Expected: every merge numbered 2 or higher displays the Chain Reaction
+  callout before its merge animation.
+- Root cause: the callout was invoked only after an upgraded die formed
+  another group at the same active cell. The chain multiplier correctly
+  continued into the double's second cell, but that transition entered the
+  merge routine below the callout trigger.
+- Fix: move the callout trigger to the shared confirmed-group entry. It now
+  checks the existing chain depth before every merge, covering same-cell
+  cascades and origin-to-second-cell transitions without showing before the
+  first merge.
+- Verification: a production-path VICE regression placed a `1+3` double. The
+  origin formed merge #1, then the second cell formed merge #2 at a different
+  active index; execution stopped immediately after the real callout renderer
+  and the supplied Chain Reaction image was visible in the sidebar. Strict
+  normal and crunched V1.050 builds and all 45 portable vectors pass. V1.051
+  is running in VICE for player confirmation.
+- Regression checks:
+  - first merge has no Chain Reaction callout
+  - same-cell second and third merges each show the callout
+  - a second-cell merge after an origin merge shows the callout
+  - strict normal and crunched builds
+- Related files: `src/grid_base.asm`,
+  `src/assets/chain_reaction_sprite.asm`
+
+### BUG-012: Music does not restart at game over
+
+- Status: **Verification**
+- Date: September 16, 2026
+- Area: game-over audio lifecycle
+- Symptoms: with the default gameplay music setting of OFF, the game-over
+  animation and screen remain silent.
+- Reproduction: leave gameplay music OFF and play until no legal placement
+  remains.
+- Expected: the title tune restarts from its beginning as soon as the
+  game-over sequence begins, independently of the gameplay music preference.
+- Root cause: `AnimateGameOver` used the preference-aware gameplay music
+  initializer, so the default OFF setting suppressed game-over music.
+- Fix: game over now uses the unconditional presentation-music initializer.
+  That initializer explicitly stops any current playback and initializes the
+  tune again, ensuring game over always starts at the beginning.
+- Verification: strict normal and crunched V1.041 builds and all 45 portable
+  gameplay vectors pass. V1.042 is running in VICE for audible confirmation.
+- Regression checks:
+  - game over restarts music when gameplay music is OFF
+  - game over restarts music from the beginning when gameplay music is ON
+  - a new game reapplies the gameplay music preference
+  - strict normal and crunched builds
+- Related files: `src/grid_base.asm`, `src/assets/bottom_controls.asm`
+
+### BUG-011: Gameplay sound effects are silent by default
+
+- Status: **Verification**
+- Date: September 16, 2026
+- Area: title-to-game SID handoff
+- Symptoms: the new-game ripple begins audibly, then subsequent movement,
+  placement, and merge effects are silent with the default audio settings.
+- Reproduction: launch a fresh build, start from the title page, and move the
+  offered piece without changing Options.
+- Expected: title music plays on the title page; gameplay music is OFF and
+  Sound FX are ON by default.
+- Root cause: two SID lifecycle faults occurred when gameplay music was OFF.
+  The title-music stop routine cleared `$d418`, leaving master volume at zero.
+  Once that was corrected, the startup ripple exposed a second fault: its
+  physical voice-1 gate remained ON, while later effects changed the gate only
+  in their software shadow before publishing the final ON state. With no real
+  OFF-to-ON transition, the SID envelope could not retrigger.
+- Fix: stopping title music preserves the initialized master volume. Each new
+  effect now writes its gate-off state to the physical SID before publishing
+  its final gate-on registers, and effect completion releases voice 1 whenever
+  gameplay music is inactive.
+- Verification: strict normal and crunched V1.038 builds and all 45 portable
+  gameplay vectors pass. V1.039 is running in VICE for audible confirmation.
+- Regression checks:
+  - default `audioMode` is `AUDIO_SFX_ONLY`
+  - title tune begins on the title page
+  - title tune stops when default gameplay begins
+  - startup ripple releases voice 1 when its animation completes
+  - repeated movement effects retrigger, not only the first effect
+  - movement, invalid-placement, setup, and merge effects remain audible
+  - strict normal and crunched builds
+- Related files: `src/assets/title_music.asm`,
+  `src/assets/bottom_controls.asm`
+
+### BUG-010: Gameplay music preference silences the title tune
+
+- Status: **Verification**
+- Date: September 16, 2026
+- Area: title/attract music lifecycle
+- Symptoms: the title and attract pages are silent when gameplay music uses
+  its intended default setting of OFF.
+- Reproduction: launch a fresh build and wait for the title page without first
+  changing the Options music setting.
+- Expected: the SID title tune starts when the title page appears. The OFF
+  preference silences music only after gameplay begins; sound effects remain
+  enabled.
+- Root cause: `InitTitleMusic` applied the global gameplay music-disable bit to
+  attract mode, so the same default that muted gameplay also prevented title
+  initialization.
+- Fix: title and attract pages now use an unconditional music initializer.
+  Leaving attract mode or starting a new game reapplies the gameplay setting,
+  stopping and clearing the SID when gameplay music remains OFF.
+- Verification: strict normal and crunched V1.038 builds and all 45 portable
+  gameplay vectors pass. V1.039 is running in VICE for audible confirmation.
+- Regression checks:
+  - title tune begins when the title page appears
+  - default gameplay begins without background music
+  - gameplay Sound FX remain enabled
+  - enabling gameplay music in Options starts the tune
+  - returning to an attract title always restores title music
+- Related files: `src/grid_base.asm`, `src/assets/bottom_controls.asm`,
+  `src/assets/settings_screen.asm`
+
+### BUG-009: Chain Reaction callout appears absent or corrupt
 
 - Status: **Closed**
-- Date: September 15, 2026
-- Area: Chain Reaction artwork conversion / sprite visibility
-- Symptoms: the direct sprite test works, but the callout appears to be missing
-  when a populated board triggers a real second merge.
+- Date: September 16, 2026
+- Area: Chain Reaction artwork conversion / presentation
+- Symptoms: the sprite could appear missing, malformed, or visually corrupt
+  when a populated board triggered a real second merge.
 - Reproduction: create three connected 2s that merge beside two existing 3s,
   causing the upgraded 3 to merge again.
-- Expected: the white Chain Reaction callout is clearly visible over the
-  gameplay mascot without covering the board dice or score.
-- Root cause: the converter retained only the attachment's thin dark outline
-  and lettering as white sprite pixels. Board sprites intentionally have
-  foreground priority, so dice in the selected corner could hide nearly every
-  pixel of that line art.
-- Fix: use the attachment for the callout silhouette, fill over its original
-  antialiased lettering during conversion, and render `CHAIN` / `REACTION!`
-  with a purpose-built 5-by-7 C64 pixel alphabet. The letters are cut out of a
-  solid white callout so the badge separates them from the colorful artwork
-  beneath it at the sprite's native 72-by-40 display size.
-- Verification: a production-path VICE regression in build V1.009 resolved a
-  2-to-3 merge that immediately formed a second group. The score reached 6,
-  the callout appeared over the gameplay mascot, and both lines of the
-  replacement pixel lettering remained readable at native display size.
+- Expected: the white Chain Reaction words are clearly visible in the same
+  right-sidebar panel used by merge exclamations, without covering dice or the
+  score.
+- Root cause: the effect was forced through a three-sprite, Y-expanded
+  rendition even though the existing exclamation system already provided a
+  stable 72-by-64 bitmap panel. Expansion, sprite priority, and colorful art
+  beneath the sprite all made the supplied lettering fragile.
+- Fix: replace the hardware-sprite renderer with a packed bitmap callout. The
+  converter now samples the original pale-green callout directly from the
+  supplied master, turns it white while retaining the original black outline
+  and lettering as transparent detail, scales it proportionally to 64 by 32
+  pixels, and centers it in the existing 72-by-64 merge-callout panel. The
+  established decoder,
+  screen colors, and right-sidebar coordinates present and clear it while the
+  upcoming dice and bottom controls retain normal sprite ownership.
+- Verification: a production-path VICE regression in build V1.016 resolved a
+  2-to-3 merge that immediately formed a second group. The callout appeared
+  cleanly beneath the upcoming dice while the score, complete board, preview,
+  mascot, and bottom controls remained intact.
 - Regression checks:
   - real `ResolveAtActiveIndex` chain reaches the banner
-  - callout remains readable over the gameplay mascot
+  - callout remains readable in the right-sidebar exclamation panel
   - active dice and permanent score remain unobscured
   - strict-segment ACME build
 - Related files: `scripts/build-chain-reaction-sprite.py`,
@@ -63,22 +213,19 @@ the triggering board state.
 - Root cause: the 3x2 banner borrowed hardware sprites 2-7. Because board dice
   require sprites 0-4, its custom raster renderer intentionally skipped rows
   that overlapped the banner and cleared expansion state on shared board slots.
-- Fix: compress the banner into a 3x1 hi-res composite assigned only to UI
-  sprites 5-7. The September 15 artwork revision preserves the supplied
-  77-by-39-pixel footprint as a 72-by-40-pixel Y-expanded sprite. It overlays
-  the gameplay mascot, keeping the complete grid and completed score flight
-  clear. The normal five-row board renderer continues
-  throughout the chain pause without sharing sprite registers.
-- Verification: current deterministic VICE captures filled all 25 cells and
-  exercised active indices 0 and 24. The banner remained over the mascot in
-  both cases. Every die remained visible at native size;
-  lower-numbered board sprites correctly rendered ahead of the effect. The
-  existing hide path still restores the upcoming piece and bottom controls.
+- Fix: the initial correction reduced the effect to UI sprites 5-7. Build
+  V1.011 removes Chain Reaction sprite ownership completely and presents it
+  through the existing right-sidebar bitmap callout panel. The normal board,
+  preview, and control renderers now continue without a chain-specific sprite
+  handoff.
+- Verification: a production-path VICE capture exercised a real second merge.
+  Every die remained visible at native size, the upcoming piece and bottom
+  controls stayed present, and the bitmap callout remained outside the grid.
 - Regression checks:
   - all five populated board rows remain visible while the banner is active
   - board sprites 0-4 retain their X/Y positions and expansion state
-  - white banner appears over the mascot without touching the grid
-  - bottom controls return after the banner
+  - white bitmap callout appears beneath the upcoming dice
+  - upcoming piece and bottom controls remain present during the pause
   - strict-segment ACME build
 - Related files: `scripts/build-chain-reaction-sprite.py`,
   `src/assets/chain_reaction_sprite.asm`

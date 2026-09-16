@@ -19,7 +19,7 @@ ResetSoundEffects:
     sta SID_V1_SR
     lda #$a5
     sta sfxRandomSeed
-    rts
+    jmp ReleaseSoundEffectVoice
 
 PlayBounceImpl:
     lda sfxPriority
@@ -198,8 +198,6 @@ InitInvalidBonk:
     rts
 
 StopGridSetup:
-    lda sfxMode
-    beq StopGridSetup_Done
     lda sfxGateOffControl
     sta SID_V1_CONTROL
     lda #0
@@ -207,7 +205,7 @@ StopGridSetup:
     sta sfxPriority
     sta sfxMode
 StopGridSetup_Done:
-    rts
+    jmp ReleaseSoundEffectVoice
 
 UpdateSoundEffects:
     lda sfxFrames
@@ -248,7 +246,7 @@ UpdateSoundEffects_Tick:
     sta sfxMode
     ; UpdateTitleMusic has already restored the tune's complete SID state for
     ; this frame. Do not cover it with the ending effect's gate-off state.
-    rts
+    jmp ReleaseSoundEffectVoice
 UpdateSoundEffects_Apply:
     jmp ApplySoundEffectVoice
 UpdateSoundEffects_Done:

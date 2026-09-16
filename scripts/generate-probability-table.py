@@ -2,8 +2,8 @@
 
 """Generate the exact Sixies piece-probability reference.
 
-The calculation deliberately calls the portable conformance oracle instead of
-maintaining a second implementation of the spawn rules.
+The calculation deliberately imports the portable conformance oracle instead
+of maintaining a second implementation of the spawn rules.
 """
 
 from __future__ import annotations
@@ -18,60 +18,66 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 ORACLE = runpy.run_path(str(ROOT / "tests/porting/validate_vectors.py"))
 SPAWN = ORACLE["spawn"]
+RANDOM_BYTE = ORACLE["random_byte"]
+DEAL_WEIGHTS = ORACLE["DEAL_WEIGHTS"]
+DEAL_TABLE = ORACLE["DEAL_TABLE"]
+ACCEPTED_RNG_MAX = ORACLE["ACCEPTED_RNG_MAX"]
 
 EMPTY_BOARD = [0] * 25
-FIVE_ELIGIBLE_BOARD = [5] * 5 + [0] * 20
+FIVE_PRESENT_BOARD = [5] + [0] * 24
 ALL_STATES = tuple(range(1, 256))
 NEW_GAME_STATES = tuple(range(1, 256, 2))
 
 
 def presented_piece(result: dict) -> tuple[int, ...]:
-    count = result["count"]
-    return tuple(result["raw_values"][:count])
+    return tuple(result["raw_values"][: result["count"]])
 
 
-def distribution(board: list[int], seeds: tuple[int, ...], singles_only: bool = False):
-    counts = Counter()
-    nominal_counts = Counter()
-    five_rolls = 0
-    for seed in seeds:
-        nominal = SPAWN(board, seed, False)
-        nominal_counts[nominal["count"]] += 1
-        result = SPAWN(board, seed, singles_only)
-        counts[presented_piece(result)] += 1
-        if 5 in presented_piece(result):
-            five_rolls += 1
-    return counts, nominal_counts, five_rolls
+def spawn_distribution(seeds: tuple[int, ...], board=EMPTY_BOARD):
+    return Counter(
+        presented_piece(SPAWN(board, seed)) for seed in seeds
+    )
 
 
 def piece_name(piece: tuple[int, ...]) -> str:
-    if len(piece) == 1:
-        return f"Single {piece[0]}"
-    return f"Double {piece[0]}-{piece[1]}"
+    return "+".join(str(value) for value in piece)
 
 
-def table(counts: Counter, total: int) -> list[str]:
+def table(counts: Counter, total: int, count_heading: str) -> list[str]:
     rows = [
-        "| Presented piece | State count | Probability |",
+        f"| Deal | {count_heading} | Probability |",
         "| --- | ---: | ---: |",
     ]
     for piece in sorted(counts, key=lambda value: (len(value), value)):
         count = counts[piece]
-        rows.append(
-            f"| {piece_name(piece)} | {count}/{total} | {count / total:.4%} |"
-        )
-    rows.append(f"| **Total** | **{total}/{total}** | **100.0000%** |")
+        rows.append(f"| {piece_name(piece)} | {count} | {count / total:.4%} |")
+    rows.append(f"| **Total** | **{total}** | **100.0000%** |")
     return rows
 
 
+def selection_call_counts() -> Counter:
+    counts = Counter()
+    for initial_seed in ALL_STATES:
+        seed = initial_seed
+        calls = 0
+        while True:
+            seed = RANDOM_BYTE(seed)
+            calls += 1
+            if seed <= ACCEPTED_RNG_MAX:
+                counts[calls] += 1
+                break
+    return counts
+
+
 def build_document() -> str:
-    opening, opening_counts, _ = distribution(EMPTY_BOARD, NEW_GAME_STATES)
-    normal, normal_counts, _ = distribution(EMPTY_BOARD, ALL_STATES)
-    eligible, _, eligible_fives = distribution(FIVE_ELIGIBLE_BOARD, ALL_STATES)
-    forced, _, _ = distribution(EMPTY_BOARD, ALL_STATES, singles_only=True)
-    forced_eligible, _, forced_eligible_fives = distribution(
-        FIVE_ELIGIBLE_BOARD, ALL_STATES, singles_only=True
+    weighted = Counter(dict(DEAL_WEIGHTS))
+    opening = spawn_distribution(NEW_GAME_STATES)
+    state_space = spawn_distribution(ALL_STATES)
+    five_present = spawn_distribution(ALL_STATES, board=FIVE_PRESENT_BOARD)
+    single_required = Counter(
+        {deal: weight for deal, weight in DEAL_WEIGHTS if len(deal) == 1}
     )
+    calls = selection_call_counts()
 
     lines = [
         "# Sixies Piece Probability Table",
@@ -80,67 +86,98 @@ def build_document() -> str:
         "the portable spawn oracle in `tests/porting/validate_vectors.py`. Run",
         "`make probability-table` after an intentional generator change.",
         "",
-        "The RNG is deterministic and successive pieces are correlated. The tables",
-        "therefore enumerate possible non-zero RNG states; they must not be read as",
-        "independent rolls that can be multiplied across turns.",
+        "## Weighted deal table",
+        "",
+        "This is the exact design table used by the game:",
+        "",
+        *table(weighted, len(DEAL_TABLE), "Weight"),
+        "",
+        "Singles have total weight 9/39 (23.0769%); ordered pairs have total",
+        "weight 30/39 (76.9231%). Deals `4`, `1+1`, `2+2`, and `3+3` have zero",
+        "weight, as do all other deals not shown.",
+        "",
+        "## Exact RNG mapping",
+        "",
+        "The 8-bit LFSR advances until it produces a byte from 1 through 234.",
+        "Bytes 235 through 255 are rejected. The accepted byte selects table",
+        "index `(byte - 1) modulo 39`. The accepted range contains six complete",
+        "copies of the 39 slots, so the table weights are represented exactly.",
+        "",
+        "Starting from any one of the 255 non-zero RNG states, the selector",
+        "produces this immediate next-piece state-space distribution:",
+        "",
+        *table(state_space, len(ALL_STATES), "Initial states"),
+        "",
+        "Rejection consumes between one and seven RNG calls. Initial-state counts",
+        "by calls are: "
+        + ", ".join(
+            f"{call} call{'s' if call != 1 else ''}: {count}"
+            for call, count in sorted(calls.items())
+        )
+        + ".",
+        "",
+        "The 255-state table above is not the long-run deal probability table:",
+        "several rejected states flow into the same accepted state. The weighted",
+        "table is exact over the 234 accepted bytes.",
         "",
         "## New-game opening piece",
         "",
         "New Game forces the timing-derived seed to a non-zero odd byte. Assuming",
         "each of the 128 odd seed states is equally likely, the first piece is:",
         "",
-        *table(opening, len(NEW_GAME_STATES)),
+        *table(opening, len(NEW_GAME_STATES), "Odd seeds"),
         "",
-        "The opening count split is exactly 64 singles and 64 doubles.",
+        "This opening distribution differs from the long-run weighted table because",
+        "the allowed first seeds are only the odd half of the LFSR states.",
         "",
-        "## Normal play state-space distribution",
+        "## Value-5 promotion rule",
         "",
-        "Before the board contains five value-5 dice, all 255 non-zero LFSR start",
-        "states produce the following presented pieces:",
+        "While at least one value-5 die and one blank are on the board, a visible",
+        "generated 2 receives an exact 5% roll to become a 4. The rule applies to",
+        "singles and to either position of a double. The base table contains at",
+        "most one 2 per deal, so only one promotion roll can occur per piece.",
+        "The immediate state-space distribution with one value-5 die present is:",
         "",
-        *table(normal, len(ALL_STATES)),
+        *table(five_present, len(ALL_STATES), "Initial states"),
         "",
-        f"The nominal count split is {normal_counts[1]}/255 singles",
-        f"({normal_counts[1] / 255:.4%}) and {normal_counts[2]}/255 doubles",
-        f"({normal_counts[2] / 255:.4%}). No other ordered double or single value",
-        "is reachable with the current LFSR and call cadence.",
+        "The roll accepts RNG bytes 1-240 and selects one of twenty residues;",
+        "bytes 241-255 are rejected. Pieces without a visible 2 and full boards",
+        "consume no promotion RNG byte. Removing the last 5 disables the rule.",
         "",
-        "## Five-eligible state-space distribution",
+        "## Dynamic single-required fallback",
         "",
-        "Once at least five value-5 dice are on the board, the extra low-nibble",
-        "test changes the distribution to:",
+        "Before every draw, the board is checked for an orthogonally adjacent",
+        "pair of blank cells. If no pair exists, double deals are rejected and",
+        "selection continues until one of the three single entries is drawn.",
+        "This condition is not permanent: the next draw checks the board again,",
+        "so a merge that reopens double space restores the complete 39-weight",
+        "table. The single entries retain their original weights:",
         "",
-        *table(eligible, len(ALL_STATES)),
+        *table(single_required, sum(single_required.values()), "Weight"),
         "",
-        f"A generated 5 occurs for {eligible_fives}/255 states",
-        f"({eligible_fives / 255:.4%}) overall, or {eligible_fives}/127",
-        f"({eligible_fives / 127:.4%}) among nominal singles. It never occurs in a",
-        "nominal double because the eligible fourth RNG byte cannot have a zero low",
-        "nibble on a double-selected sequence.",
+        "Their normal-table probabilities remain 5/39, 3/39, and 1/39. When",
+        "the board currently requires a single, conditioning on those nine",
+        "eligible slots gives 5/9, 3/9, and 1/9 respectively.",
         "",
-        "## Permanent singles-only mode",
-        "",
-        "The generator still performs its normal calls before forcing the presented",
-        "piece count to one. With fewer than five value-5 dice:",
-        "",
-        *table(forced, len(ALL_STATES)),
-        "",
-        "With at least five value-5 dice:",
-        "",
-        *table(forced_eligible, len(ALL_STATES)),
-        "",
-        f"The eligible singles-only table contains {forced_eligible_fives}/255",
-        f"generated 5s ({forced_eligible_fives / 255:.4%}).",
+        "Every occupied cell orthogonally adjacent to at least one blank becomes",
+        "a candidate while a single is required. If candidates exist, an",
+        "exact 10% roll replaces the baseline single with one uniformly selected",
+        "candidate cell's value. A candidate touching multiple blanks is counted",
+        "once. Therefore, for value `v` and `N` candidate cells, the final chance",
+        "is `90% * baseline(v) + 10% * candidates(v) / N`. Values 4-6 can appear",
+        "through this endgame bonus when a matching candidate has that value.",
+        "A full board has no candidates and consumes no bonus RNG byte.",
+        "The value-5 promotion roll runs first; a successful neighbor bonus can",
+        "therefore replace a promoted 4.",
         "",
         "## Rule consequences",
         "",
-        "- Ordered doubles matter because die 0 is the rotation origin.",
-        "- Double 4-4 has zero probability; its second die is rerolled.",
-        "- Generated 6s have zero probability; sixes only come from merging 5s.",
-        "- Values and RNG calls are retained when endgame space detection forces a",
-        "  nominal double to become a single.",
-        "- Changing the RNG or reordering its calls changes this table and is a",
-        "  gameplay behavior change requiring updated vectors and rules.",
+        "- Ordered pairs matter because die 0 is the rotation origin.",
+        "- Values 4, 5, and 6 have zero base-table weight. A 4 can be promoted",
+        "  from a 2, and the single-required bonus can copy any neighboring value.",
+        "- Rejected RNG bytes are part of the gameplay call order.",
+        "- Changing the RNG, table order, weights, or rejection rule is a gameplay",
+        "  behavior change requiring updated vectors and rules.",
         "",
     ]
     return "\n".join(lines)
@@ -157,10 +194,7 @@ def main() -> int:
     if args.check:
         expected = args.check.read_text(encoding="utf-8")
         if expected != document:
-            print(
-                f"{args.check} is stale; run make probability-table",
-                file=sys.stderr,
-            )
+            print(f"{args.check} is stale; run make probability-table", file=sys.stderr)
             return 1
         print(f"PASS: {args.check} matches the spawn oracle")
         return 0

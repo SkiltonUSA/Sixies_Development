@@ -431,6 +431,10 @@ EnterHighScoreInitials_Wait:
     bne EnterHighScoreInitials_Wait
     lda #0
     sta highScoreEntering
+    ; ENTER INITIALS occupies bitmap rows 19-20 and the typed initials occupy
+    ; rows 21-22. Reset the hires page before drawing the start prompt at rows
+    ; 20-21 so none of those old glyphs remain underneath it.
+    jsr PrepareHighScoreHiresPage
     jsr DrawHighScorePage
     rts
 

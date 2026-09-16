@@ -33,12 +33,13 @@ ports/gameboy/
 
 `rules.c` owns only fixed-size state and deterministic operations:
 
-- 25 board bytes, score, piece, cursor, orientation, RNG, single-only, and
+- 25 board bytes, score, piece, cursor, orientation, RNG, dynamic
+  single-required, and
   game-over state
 - piece generation and legal-placement queries
 - commit, flood-fill, ordered chain resolution, and scoring
 - ordered events such as piece placed, group merged, die upgraded, sixes
-  cleared, single-only entered, and game over
+  cleared, single required or released, and game over
 
 Rendering, input mapping, frame delays, particles, palette changes, sound,
 music, screens, and save storage consume this state or its events. They must
@@ -68,7 +69,7 @@ composition rather than shrinking a full 320 by 200 bitmap:
 Place a 101 by 101 pixel grid near `(3,22)`, using five 20-pixel cells plus
 grid edges. Use 16 by 16 die art centered inside each cell so lines remain
 visible. Reserve the right-hand 52 pixels for a four-digit score, next-piece
-preview, single-only indicator, and compact status. The mascot is not required
+preview, single-required indicator, and compact status. The mascot is not required
 for the first playable milestone.
 
 DMG uses four shades: black background, dark grid/shadow, light cursor, and
@@ -103,7 +104,7 @@ host and target builds.
   to Settings/pause.
 - Show invalid overlap and out-of-bounds targets in a distinct monochrome
   pattern.
-- Show single-only mode and a basic Game Over panel.
+- Show the current single-required state and a basic Game Over panel.
 
 Acceptance: a complete game can be played in Emulicious and SameBoy, all 25
 cells remain visible, double orientation is unambiguous, and gameplay results
@@ -128,9 +129,18 @@ references for feel, not implementation requirements.
 ## Technical decisions
 
 - Retain the C64 8-bit RNG for deterministic vectors and comparable sessions.
-- Preserve all RNG calls, including the unused second value for singles.
+- Preserve the 39-entry weighted deal order, rejection of selector bytes
+  235-255, and every subsequent RNG call.
+- When a value-5 die and a blank are present, reproduce the exact 5% roll that
+  promotes a visible generated 2 to a 4 before the neighbor-match rule.
+- Recompute the single-required condition before every draw. When active,
+  select only from single weights 5, 3, and 1, then reproduce the exact 10%
+  neighbor-match roll and uniform selection among unique occupied cells
+  orthogonally adjacent to at least one blank.
 - Preserve origin-first resolution for doubles and active-cell chain anchors.
-- Preserve score saturation at 9999 and strict-greater high-score insertion.
+- Use the fixed three-die scoring base, chain multipliers 1, 2, 5, 10, 20,
+  and 40 capped at 40, and the separate 150-point value-6 elimination bonus.
+  Preserve score saturation at 9999 and strict-greater high-score insertion.
 - Represent orientation with the same values 0 through 3.
 - Emit one merge event per consumed connected component, including value and
   group size, so graphics and audio can scale effects without inspecting or
