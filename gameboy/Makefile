@@ -83,9 +83,8 @@ test: $(TARGET)
 
 ci: clean all test
 
-test-emulator: DEBUG_CHEATS := 1
-test-emulator: TITLE_MUSIC := 1
-test-emulator: $(TARGET)
+test-emulator:
+	$(MAKE) DEBUG_CHEATS=1 TITLE_MUSIC=1 $(TARGET)
 	"$(ASSET_PYTHON)" tests/emulator_smoke.py
 
 doctor:
@@ -94,15 +93,13 @@ doctor:
 doctor-desktop: $(TARGET)
 	./scripts/doctor.sh
 
-run: DEBUG_CHEATS := 1
-run: TITLE_MUSIC := 1
-run: $(TARGET)
-	./scripts/run-emulator.sh sameboy "$<"
+run:
+	$(MAKE) DEBUG_CHEATS=1 TITLE_MUSIC=1 $(TARGET)
+	./scripts/run-emulator.sh sameboy "$(TARGET)"
 
-run-mgba: DEBUG_CHEATS := 1
-run-mgba: TITLE_MUSIC := 1
-run-mgba: $(TARGET)
-	./scripts/run-emulator.sh mgba "$<"
+run-mgba:
+	$(MAKE) DEBUG_CHEATS=1 TITLE_MUSIC=1 $(TARGET)
+	./scripts/run-emulator.sh mgba "$(TARGET)"
 
 music:
 	./scripts/open-music-tracker.sh
