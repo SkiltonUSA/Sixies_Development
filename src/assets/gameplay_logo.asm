@@ -1,4 +1,4 @@
-; Compact version of the credits logo centered above the gameplay board.
+; Compact version of the supplied green wordmark centered above the board.
 ; The bitmap data occupies the free area below screen RAM.
 * = $4319
 

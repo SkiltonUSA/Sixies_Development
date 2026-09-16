@@ -25,6 +25,8 @@ required_files=(
   "tests/porting/gameplay-vectors.json"
   "tests/porting/validate_vectors.py"
   "scripts/generate-probability-table.py"
+  "scripts/build-title-version.py"
+  "scripts/open-gimp.sh"
   "src/grid_base.asm"
   "src/assets/Studio313.kla"
   "src/assets/title_logo_flat_master.png"
@@ -33,6 +35,7 @@ required_files=(
   "src/assets/settings_dice_master.png"
   "src/assets/credits_logo_master.jpg"
   "scripts/build-gameplay-logo.py"
+  "src/assets/gameplay_logo_master.png"
   "src/assets/gameplay_logo.asm"
   "scripts/build-chain-reaction-sprite.py"
   "src/assets/chain_reaction_master.png"
@@ -81,6 +84,13 @@ command -v make >/dev/null 2>&1 || {
   exit 1
 }
 
+gimp_path=""
+if command -v gimp >/dev/null 2>&1; then
+  gimp_path="$(command -v gimp)"
+elif [[ -x /Applications/GIMP.app/Contents/MacOS/gimp ]]; then
+  gimp_path="/Applications/GIMP.app/Contents/MacOS/gimp"
+fi
+
 mkdir -p "$CONTEXT_DIR"
 
 write_export() {
@@ -101,6 +111,9 @@ write_export() {
   write_export SIXIES_ASSET_ROOT "$ROOT_DIR/src/assets"
   write_export SIXIES_C64_SOURCE "$ROOT_DIR/src/grid_base.asm"
   write_export SIXIES_C64_PRG "$ROOT_DIR/build/dice_merge.prg"
+  if [[ -n "$gimp_path" ]]; then
+    write_export SIXIES_GIMP "$gimp_path"
+  fi
 } > "$PATHS_FILE"
 
 branch="$(git branch --show-current 2>/dev/null || true)"
@@ -115,6 +128,11 @@ branch="$(git branch --show-current 2>/dev/null || true)"
   printf 'Test vectors: %s\n' "$ROOT_DIR/tests/porting/gameplay-vectors.json"
   printf 'Artwork index: %s\n' "$ROOT_DIR/docs/reference-assets.md"
   printf 'Source assets: %s\n' "$ROOT_DIR/src/assets"
+  if [[ -n "$gimp_path" ]]; then
+    printf 'GIMP source-art editor: %s\n' "$gimp_path"
+  else
+    printf 'GIMP source-art editor: not found (make gimp will explain setup)\n'
+  fi
   printf 'Generated path exports: %s\n' "$PATHS_FILE"
 } > "$MANIFEST_FILE"
 

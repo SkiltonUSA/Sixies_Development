@@ -41,7 +41,48 @@ ShowPresentsScreen:
     sta PTR_LO
     lda #>COLOR_RAM
     sta PTR_HI
-    jmp UnpackKoalaStream
+    jsr UnpackKoalaStream
+
+    ; The build-specific V1.xxx sprite is the first tile in the title-prompt
+    ; composite. Copy it into runtime sprite slot $30 for the presentation card.
+    lda #<TitlePromptSpriteData
+    sta SOURCE_LO
+    lda #>TitlePromptSpriteData
+    sta SOURCE_HI
+    lda #<SHADOW_SPRITES
+    sta PTR_LO
+    lda #>SHADOW_SPRITES
+    sta PTR_HI
+    ldx #0
+    lda #64
+    jsr CopyTitleBlock
+
+    lda #$30
+    sta SPRITE0_PTR
+    lda #COLOR_WHITE
+    sta SPRITE0_COLOR
+    lda #32
+    sta SPRITE0_X
+    lda #234
+    sta SPRITE0_Y
+    lda SPRITE_X_MSB
+    and #%11111110
+    sta SPRITE_X_MSB
+    lda SPRITE_MULTICOLOR
+    and #%11111110
+    sta SPRITE_MULTICOLOR
+    lda SPRITE_X_EXPAND
+    and #%11111110
+    sta SPRITE_X_EXPAND
+    lda SPRITE_Y_EXPAND
+    and #%11111110
+    sta SPRITE_Y_EXPAND
+    lda SPRITE_PRIORITY
+    and #%11111110
+    sta SPRITE_PRIORITY
+    lda #1
+    sta SPRITE_ENABLE
+    rts
 
 PresentsBitmapPacked:
 !bin "src/assets/presents_bitmap_packed.bin"

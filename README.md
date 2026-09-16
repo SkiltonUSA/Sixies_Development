@@ -26,7 +26,7 @@ and agent invariants are in `AGENTS.md`. Reproducible defects and their fix
 history are maintained in `docs/bug-tracker.md`.
 
 The main grid screen follows the Atari 800 composition: a compact light-green
-version of the credits Sixies logo is centered above the lowered 5x5 board. The four-digit
+version of the supplied green Sixies wordmark is centered above the lowered 5x5 board. The four-digit
 score and purple-and-white mascot occupy the left sidebar, the upcoming single
 or double dice preview remains in the right sidebar, and merge exclamations
 appear beneath it without covering the board. The New Game and Settings
@@ -40,6 +40,14 @@ The Sixies font is reproduced from the supplied 1536x1024 reference sheet during
 
 The game opens with a native C64 multicolor title screen using flat-color Sixies branding and solid outlines. While waiting, it rotates through the title, high-score, and credits pages every five seconds. The credits keep a light-green Sixies logo and dice mascot fixed while design/charset/bitmap, music, and Studio 313 Games copyright cards fade in and out in sequence. Press `Space`, `Return`, or joystick fire from any attract screen to enter the hi-res game board.
 
+The lower-left corner of the opening Studio 313 presentation screen shows
+`V1.xxx`. The `1` identifies
+the first public release series. Each normal, crunched,
+or run build advances this three-digit revision automatically. The persistent
+workspace counter is stored in gitignored `.context/build-revision.txt`, while
+the exact revision embedded in the newest PRG is written to
+`build/build-version.txt`.
+
 ## Build and run
 
 ```sh
@@ -48,6 +56,7 @@ make run
 make crunch
 make probability-table
 make setup-porting
+make gimp
 ```
 
 The normal build creates `build/dice_merge.prg`. `make crunch` also creates the self-extracting release file `build/dice_merge-crunched.prg` using the installed Exomizer 3.1.2 binary. ACME is installed locally under `.tools/` when needed.
@@ -67,6 +76,28 @@ Use `make run JOYDEV2=5` for the second detected controller. VICE reports
 reconnect it before launching VICE in that case.
 
 `make crunch` uses `exomizer` from `PATH` when available. Set `EXOMIZER=/path/to/exomizer` to use a specific binary; the bundled Albert path remains a fallback for this development machine.
+
+## Development toolchain
+
+- ACME assembles the 6510 source with strict segment checks.
+- GNU Make coordinates builds and generated assets.
+- Python 3 contains the deterministic artwork, table, and packaging tools.
+- FFmpeg decodes source images and writes generated previews.
+- Exomizer 3.1.2 creates the self-extracting release PRG.
+- VICE (`x64sc`) runs and verifies the C64 build.
+- c64SIDkit authors and exports SID sound effects.
+- GIMP 3 is the supported editor for PNG/JPG source masters.
+
+Open GIMP from the repository with `make gimp`, or open a particular source
+master with, for example:
+
+```sh
+make gimp GIMP_ASSET=src/assets/chain_reaction_master.png
+```
+
+GIMP is an authoring tool rather than a build dependency. Save intentional
+artwork changes to the relevant `*_master.*` file, then run its Make target so
+the repository converters regenerate the C64 binary data and preview.
 
 ## Memory map
 
@@ -110,7 +141,7 @@ start of the tune when the player enables it; sound effects start enabled.
 - Joystick fire: place the piece when the button is released without rotating
 - `N`: clear the board and start a new game
 - `Space` or `N` on a high-score page: start a new game
-- `C=`: open or close the Settings instructions
+- `O`: open the Settings menu
 - `N` while Settings is open: show the next instructions page
 - From the grid's bottom row, press Down to focus New Game from columns 0-2 or Instructions from columns 3-4. Press Fire/Space to select, Up to return to the grid, or Left/Right to switch options. Instructions opens the Settings pages.
 - `.`: development shortcut that randomly fills the board and triggers Game Over
@@ -125,9 +156,9 @@ Valid targets use blinking inverse-color preview dice, with one preview per die.
 
 Three or more edge-connected equal dice merge at the placed die. Values progress from 1 through 6; a connected group of 6s disappears. New values can immediately trigger another merge. Each placement's first merge scores the total face value consumed, its second merge scores that value at 2x, its third at 3x, and so on.
 When another merge is waiting in the chain, the supplied comic-burst artwork
-appears as a white, native-resolution, six-sprite `CHAIN REACTION!` banner.
-It uses the existing inter-merge pause and appears on the opposite side of the
-board from the active cell without changing gameplay timing.
+appears as a white, 72-by-40-pixel, three-sprite `CHAIN REACTION!` banner.
+It uses the existing inter-merge pause and overlays the gameplay mascot in the
+left side panel without changing gameplay timing.
 
 The first merge in every chain plays a happy rising C-E-G-C pulse arpeggio synchronized with the start of the merge animation. Cascading merges do not replay the first-merge cue.
 

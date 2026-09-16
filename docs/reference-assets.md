@@ -12,6 +12,8 @@ composition, spacing, and game feel.
   rendered with the two-cell shadow treatment.
 - `src/assets/presents_preview.png`: generated Studio 313 presentation page.
 - `src/assets/title_preview.png`: generated title page.
+- `src/assets/title_prompt_sprites.bin`: generated five-sprite, versionless
+  title prompt; the build combines it with the automatic intro `V1.xxx` sprite.
 - `src/assets/game_over_koala_preview.png`: generated endgame logo.
 - `src/assets/merge_callouts_preview.png`: generated merge-word atlas with
   72-by-64-pixel right-sidebar panels.
@@ -20,10 +22,10 @@ composition, spacing, and game feel.
 - `src/assets/settings_dice_preview.png`: generated settings illustration.
 - `src/assets/credits_logo_preview.png` and
   `src/assets/credits_mascot_preview.png`: generated credits art.
-- `src/assets/gameplay_logo_preview.png`: compact gameplay version of the
-  credits logo, generated for the space above the board.
-- `src/assets/chain_reaction_preview.png`: generated native hi-res, 3x2
-  six-sprite banner shown between successive links of a merge chain.
+- `src/assets/gameplay_logo_preview.png`: compact gameplay wordmark generated
+  for the space above the board.
+- `src/assets/chain_reaction_preview.png`: generated expanded hi-res, 3x1
+  three-sprite banner placed over the gameplay mascot between merge links.
 - `src/assets/font/SixiesFont_preview.png`, `SixiesFont16_preview.png`, and
   `SixiesDigits16_preview.png`: previews rendered from final font bytes.
 
@@ -39,8 +41,8 @@ previews remain authoritative for current converted art.
 - `src/assets/main_mascot_master.png`: gameplay mascot master.
 - `src/assets/sidebar_logo_master.png`: archived gameplay sidebar-logo master.
 - `src/assets/settings_dice_master.png`: settings illustration master.
-- `src/assets/credits_logo_master.jpg`: credits logo master, also used to
-  derive the compact gameplay logo.
+- `src/assets/credits_logo_master.jpg`: credits logo master.
+- `src/assets/gameplay_logo_master.png`: green gameplay wordmark master.
 - `src/assets/credits_mascot_master.png`: credits mascot master.
 - `src/assets/chain_reaction_master.png`: chain-reaction banner master.
 - `src/assets/font/SixiesFont_sheet.png`: alphabet and digit source sheet.
@@ -61,6 +63,7 @@ packed streams, charsets, callout atlases, tables, and PNG previews. Do not edit
 those outputs as if they were source art. Relevant converters include:
 
 - `scripts/convert-title.py`
+- `scripts/build-title-version.py`
 - `scripts/convert-solid-koala.py`
 - `scripts/convert-main-mascot.py`
 - `scripts/build-gameplay-logo.py`

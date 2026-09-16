@@ -1,6 +1,7 @@
-; Three native-resolution hi-res sprites form a 3x1 composite from the supplied
-; chain-reaction art. It occupies the right-side UI sprite slots so all five
-; board sprites remain untouched during the pause before a later chain merge.
+; Three Y-expanded hi-res sprites form a 3x1 composite from the supplied 77x39
+; chain-reaction art. The 72x40 rendition overlays the gameplay mascot and
+; occupies only UI sprite slots, so all five board sprites stay visible during
+; the chain pause.
 * = $5a00
 
 ChainReactionSpriteData:
@@ -33,16 +34,17 @@ ConfigureChainReactionSprites_Setup:
     txa
     asl
     tay
-    lda ChainReactionSpriteX,x
+    lda ChainReactionSpriteXOffset,x
+    clc
+    adc #28
     sta SPRITE0_X + 10,y
-    lda #158
+    lda #112
     sta SPRITE0_Y + 10,y
     dex
     bpl ConfigureChainReactionSprites_Setup
 
     lda SPRITE_X_MSB
     and #%00011111
-    ora #%11100000
     sta SPRITE_X_MSB
     lda SPRITE_MULTICOLOR
     and #%00011111
@@ -54,7 +56,7 @@ ConfigureChainReactionSprites_Setup:
     and #%00011111
     sta SPRITE_X_EXPAND
     lda SPRITE_Y_EXPAND
-    and #%00011111
+    ora #%11100000
     sta SPRITE_Y_EXPAND
     lda #%11100000
     ora SPRITE_ENABLE
@@ -83,7 +85,6 @@ HideChainReactionSprite:
 ; immediately before the merge-firework sprite.
 * = $5b80
 
-; Low bytes of X=268,292,316 keep the 72-pixel banner inside the right panel.
-ChainReactionSpriteX:        !byte 12,36,60
+ChainReactionSpriteXOffset:  !byte 0,24,48
 ChainReactionSpriteColors:
     !byte COLOR_WHITE,COLOR_WHITE,COLOR_WHITE

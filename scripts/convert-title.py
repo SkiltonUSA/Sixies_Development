@@ -122,15 +122,18 @@ def title_prompt_sprites(font):
     text = "PRESS FIRE START"
     rows = []
     for y in range(8):
-        bits = [False] * 8
+        bits = [False] * 4
         for character in text:
             value = font[character][y]
-            bits.extend(bool(value & (1 << (7 - x))) for x in range(8))
-        bits.extend([False] * 8)
+            # The source glyphs leave their eighth column blank. Keeping the
+            # seven visible columns fits the prompt into five sprites and
+            # reserves the sixth title slot for the generated build counter.
+            bits.extend(bool(value & (1 << (7 - x))) for x in range(7))
+        bits.extend([False] * 4)
         rows.append(bits)
 
     sprites = bytearray()
-    for sprite in range(6):
+    for sprite in range(5):
         for y in range(21):
             value = 0
             source = rows[y][sprite * 24:(sprite + 1) * 24] if y < 8 else [False] * 24
@@ -143,13 +146,13 @@ def title_prompt_sprites(font):
 
 def draw_prompt_preview(preview, font):
     text = "PRESS FIRE START"
-    start_x = 96
+    start_x = 104
     start_y = 184
     for index, character in enumerate(text):
         for y, value in enumerate(font[character]):
-            for x in range(8):
+            for x in range(7):
                 if value & (1 << (7 - x)):
-                    offset = ((start_y + y) * WIDTH + start_x + index * 8 + x) * 3
+                    offset = ((start_y + y) * WIDTH + start_x + index * 7 + x) * 3
                     preview[offset:offset + 3] = bytes(PALETTE[1])
 
 

@@ -6,10 +6,6 @@ ReadAction:
     sta action
 
     jsr SCNKEY
-    lda KEY_CURRENT
-    cmp #$3d
-    bne ReadAction_ReadKey
-    jmp ReadAction_Settings
 ReadAction_ReadKey:
     jsr GETIN
     beq ReadAction_Joystick
@@ -31,6 +27,8 @@ ReadAction_ReadKey:
     beq ReadAction_Place
     cmp #'N'
     beq ReadAction_New
+    cmp #'O'
+    beq ReadAction_Settings
     cmp #'.'
     beq ReadAction_DebugFill
     rts
@@ -234,7 +232,7 @@ SettingsLineLo:
     !byte <SettingsTextMenuOptions, <SettingsTextMenuHelp, <SettingsTextTabClose
     !byte <SettingsTextControls, <SettingsTextMove, <SettingsTextRotate
     !byte <SettingsTextPlaceKey, <SettingsTextBottom, <SettingsTextNewGame
-    !byte <SettingsTextTabOpenClose, <SettingsTextMenuReturn
+    !byte <SettingsTextOpenSettings, <SettingsTextMenuReturn
     !byte <SettingsTextHow, <SettingsTextPlace, <SettingsTextMatch
     !byte <SettingsTextNextValue, <SettingsTextFives, <SettingsTextSixes
     !byte <SettingsTextChain, <SettingsTextMenuReturn
@@ -245,7 +243,7 @@ SettingsLineHi:
     !byte >SettingsTextMenuOptions, >SettingsTextMenuHelp, >SettingsTextTabClose
     !byte >SettingsTextControls, >SettingsTextMove, >SettingsTextRotate
     !byte >SettingsTextPlaceKey, >SettingsTextBottom, >SettingsTextNewGame
-    !byte >SettingsTextTabOpenClose, >SettingsTextMenuReturn
+    !byte >SettingsTextOpenSettings, >SettingsTextMenuReturn
     !byte >SettingsTextHow, >SettingsTextPlace, >SettingsTextMatch
     !byte >SettingsTextNextValue, >SettingsTextFives, >SettingsTextSixes
     !byte >SettingsTextChain, >SettingsTextMenuReturn
@@ -253,7 +251,7 @@ SettingsLineHi:
     !byte >SettingsTextOptionClose
 SettingsLineLength:
     !byte 8,11,14,10,20,8
-    !byte 8,21,15,20,15,17,18,17
+    !byte 8,21,15,20,15,17,16,17
     !byte 11,21,21,20,16,17,23,17
     !byte 7,13,16,16
 SettingsLineRow:
@@ -263,7 +261,7 @@ SettingsLineRow:
     !byte 1,9,12,22
 SettingsLineColumn:
     !byte 11,12,12,12,10,16
-    !byte 11,9,12,10,12,11,10,11
+    !byte 11,9,12,10,12,11,12,11
     !byte 9,9,9,10,12,11,8,11
     !byte 11,13,12,11
 
@@ -282,7 +280,7 @@ SettingsTextRotate:        !text "Q LEFT  E RIGHT"
 SettingsTextPlaceKey:      !text "SPACE OR FIRE PLACES"
 SettingsTextBottom:        !text "DOWN OPENS MENU"
 SettingsTextNewGame:       !text "N STARTS NEW GAME"
-SettingsTextTabOpenClose:  !text "TAB OPENS SETTINGS"
+SettingsTextOpenSettings:  !text "O OPENS SETTINGS"
 SettingsTextMenuReturn:    !text "M RETURNS TO MENU"
 SettingsTextHow:           !text "HOW TO PLAY"
 SettingsTextPlace:         !text "PLACE ONE OR TWO DICE"

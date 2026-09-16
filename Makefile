@@ -67,7 +67,10 @@ TITLE_MASTER := src/assets/title_logo_flat_master.png
 TITLE_BITMAP := src/assets/title_bitmap.bin
 TITLE_SCREEN := src/assets/title_screen.bin
 TITLE_COLOR := src/assets/title_color.bin
-TITLE_PROMPT_SPRITES := src/assets/title_prompt_sprites.bin
+TITLE_PROMPT_BASE := src/assets/title_prompt_sprites.bin
+TITLE_PROMPT_SPRITES := build/title_prompt_sprites.bin
+BUILD_REVISION_STATE := .context/build-revision.txt
+BUILD_VERSION_TEXT := build/build-version.txt
 TITLE_KLA := src/assets/title.kla
 TITLE_PACKED := src/assets/title_koala_packed.bin
 TITLE_TABLES := src/assets/title_koala_tables.asm
@@ -84,6 +87,7 @@ CREDITS_MASCOT_SCREEN := src/assets/credits_mascot_screen.bin
 CREDITS_LOGO_MASTER := src/assets/credits_logo_master.jpg
 CREDITS_LOGO_BITMAP := src/assets/credits_logo_bitmap.bin
 CREDITS_LOGO_SCREEN := src/assets/credits_logo_screen.bin
+GAMEPLAY_LOGO_MASTER := src/assets/gameplay_logo_master.png
 GAMEPLAY_LOGO_BITMAP := src/assets/gameplay_logo_bitmap.bin
 GAMEPLAY_LOGO_PREVIEW := src/assets/gameplay_logo_preview.png
 CHAIN_REACTION_MASTER := src/assets/chain_reaction_master.png
@@ -142,7 +146,7 @@ BINARY_ASSETS := \
 	$(FONT_CHARSET16) \
 	$(MERGE_CALLOUT_PACKED)
 
-.PHONY: all crunch release music probability-table test-porting setup-porting setup-acme setup-sidkit sidkit run clean FORCE
+.PHONY: all crunch release music probability-table test-porting setup-porting setup-acme setup-sidkit sidkit gimp run clean FORCE
 
 all: $(TARGET)
 
@@ -169,6 +173,11 @@ setup-sidkit:
 sidkit: setup-sidkit
 	cd "$(SIDKIT_DIR)" && "$(SIDKIT_PYTHON)" tools/sfx_tweaker.py
 
+# Open GIMP for source-art editing. Pass GIMP_ASSET=path/to/master.png to
+# launch directly into a particular source master.
+gimp:
+	./scripts/open-gimp.sh $(if $(strip $(GIMP_ASSET)),"$(GIMP_ASSET)")
+
 build:
 	mkdir -p build
 
@@ -188,8 +197,15 @@ $(TITLE_BITMAP): $(TITLE_MASTER) $(FONT_CHARSET) scripts/convert-title.py
 	./scripts/convert-title.py "$(TITLE_MASTER)" src/assets
 	ffmpeg -v error -y -i src/assets/title_preview.ppm src/assets/title_preview.png
 
-$(TITLE_SCREEN) $(TITLE_COLOR) $(TITLE_PROMPT_SPRITES) $(TITLE_KLA): $(TITLE_BITMAP)
+$(TITLE_SCREEN) $(TITLE_COLOR) $(TITLE_PROMPT_BASE) $(TITLE_KLA): $(TITLE_BITMAP)
 	@test -f "$@"
+
+$(TITLE_PROMPT_SPRITES): FORCE $(TITLE_PROMPT_BASE) scripts/build-title-version.py | build
+	python3 scripts/build-title-version.py \
+		--state "$(BUILD_REVISION_STATE)" \
+		--base-prompt "$(TITLE_PROMPT_BASE)" \
+		--output "$@" \
+		--version-text "$(BUILD_VERSION_TEXT)"
 
 $(TITLE_PACKED) $(TITLE_TABLES): $(TITLE_KLA) scripts/pack-koala.py
 	./scripts/pack-koala.py "$(TITLE_KLA)" src/assets title_koala
@@ -222,8 +238,8 @@ $(CREDITS_LOGO_BITMAP): $(CREDITS_LOGO_MASTER) scripts/convert-main-mascot.py
 $(CREDITS_LOGO_SCREEN): $(CREDITS_LOGO_BITMAP)
 	@test -f "$@"
 
-$(GAMEPLAY_LOGO_BITMAP): $(CREDITS_LOGO_BITMAP) scripts/build-gameplay-logo.py
-	./scripts/build-gameplay-logo.py "$(CREDITS_LOGO_BITMAP)" src/assets
+$(GAMEPLAY_LOGO_BITMAP): $(GAMEPLAY_LOGO_MASTER) scripts/build-gameplay-logo.py
+	./scripts/build-gameplay-logo.py "$(GAMEPLAY_LOGO_MASTER)" src/assets
 	ffmpeg -v error -y -i src/assets/gameplay_logo_preview.ppm "$(GAMEPLAY_LOGO_PREVIEW)"
 
 $(GAMEPLAY_LOGO_PREVIEW): $(GAMEPLAY_LOGO_BITMAP)

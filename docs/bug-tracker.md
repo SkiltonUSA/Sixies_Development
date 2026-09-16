@@ -17,6 +17,38 @@ the triggering board state.
 
 ## Active bugs
 
+### BUG-009: Chain Reaction sprite appears absent during a real chain
+
+- Status: **Closed**
+- Date: September 15, 2026
+- Area: Chain Reaction artwork conversion / sprite visibility
+- Symptoms: the direct sprite test works, but the callout appears to be missing
+  when a populated board triggers a real second merge.
+- Reproduction: create three connected 2s that merge beside two existing 3s,
+  causing the upgraded 3 to merge again.
+- Expected: the white Chain Reaction callout is clearly visible over the
+  gameplay mascot without covering the board dice or score.
+- Root cause: the converter retained only the attachment's thin dark outline
+  and lettering as white sprite pixels. Board sprites intentionally have
+  foreground priority, so dice in the selected corner could hide nearly every
+  pixel of that line art.
+- Fix: use the attachment for the callout silhouette, fill over its original
+  antialiased lettering during conversion, and render `CHAIN` / `REACTION!`
+  with a purpose-built 5-by-7 C64 pixel alphabet. The letters are cut out of a
+  solid white callout so the badge separates them from the colorful artwork
+  beneath it at the sprite's native 72-by-40 display size.
+- Verification: a production-path VICE regression in build V1.009 resolved a
+  2-to-3 merge that immediately formed a second group. The score reached 6,
+  the callout appeared over the gameplay mascot, and both lines of the
+  replacement pixel lettering remained readable at native display size.
+- Regression checks:
+  - real `ResolveAtActiveIndex` chain reaches the banner
+  - callout remains readable over the gameplay mascot
+  - active dice and permanent score remain unobscured
+  - strict-segment ACME build
+- Related files: `scripts/build-chain-reaction-sprite.py`,
+  `src/assets/chain_reaction_sprite.asm`
+
 ### BUG-008: Board dice shrink or disappear during the Chain Reaction banner
 
 - Status: **Closed**
@@ -31,17 +63,21 @@ the triggering board state.
 - Root cause: the 3x2 banner borrowed hardware sprites 2-7. Because board dice
   require sprites 0-4, its custom raster renderer intentionally skipped rows
   that overlapped the banner and cleared expansion state on shared board slots.
-- Fix: compress the banner into a 3x1 native hi-res composite and assign it only
-  to UI sprites 5-7 in the empty right panel. The normal five-row board renderer
-  now continues throughout the chain pause without sharing sprite registers.
-- Verification: a deterministic VICE capture filled all 25 cells while the
-  banner was active; every die remained visible at native size and the banner
-  stayed outside the grid. A second capture after the handoff retained all dice
-  and restored the upcoming piece and both bottom controls.
+- Fix: compress the banner into a 3x1 hi-res composite assigned only to UI
+  sprites 5-7. The September 15 artwork revision preserves the supplied
+  77-by-39-pixel footprint as a 72-by-40-pixel Y-expanded sprite. It overlays
+  the gameplay mascot, keeping the complete grid and completed score flight
+  clear. The normal five-row board renderer continues
+  throughout the chain pause without sharing sprite registers.
+- Verification: current deterministic VICE captures filled all 25 cells and
+  exercised active indices 0 and 24. The banner remained over the mascot in
+  both cases. Every die remained visible at native size;
+  lower-numbered board sprites correctly rendered ahead of the effect. The
+  existing hide path still restores the upcoming piece and bottom controls.
 - Regression checks:
   - all five populated board rows remain visible while the banner is active
   - board sprites 0-4 retain their X/Y positions and expansion state
-  - banner remains white and clear of the board and upcoming dice
+  - white banner appears over the mascot without touching the grid
   - bottom controls return after the banner
   - strict-segment ACME build
 - Related files: `scripts/build-chain-reaction-sprite.py`,

@@ -20,6 +20,7 @@ make setup-porting   # verify and index a fresh branch/workspace
 make setup-acme      # install the local ACME assembler
 make setup-sidkit    # install the local c64SIDkit tools
 make sidkit          # open the c64SIDkit sound-effect editor
+make gimp            # open GIMP for source-master artwork editing
 ```
 
 ACME is always invoked with `--strict-segments`. A successful build with no
@@ -73,7 +74,7 @@ and `displayValues` is the board plus cursor preview. `boardUpdateInProgress`,
 Only a valid, uncommitted cursor preview alternates between filled and inverse
 sprite silhouettes; committed board dice never blink.
 The gameplay board begins at bitmap character row 3, leaving two character
-rows plus a spacer for the centered light-green credits-style bitmap logo. New Game and
+rows plus a spacer for the centered light-green wordmark bitmap. New Game and
 Settings are side-panel controls and must not be moved back under the board.
 
 ## Gameplay invariants
@@ -112,8 +113,7 @@ When implementation and prose disagree, first compare both with
 
 Gameplay keyboard controls are `W/A/S/D` to move, `Q` to rotate a double
 counterclockwise, `E` to rotate it clockwise, Space or Return to place, `N`
-for a new game, and the C64 key matrix
-code `$3d` (shown as Tab by the host mapping) for Settings. Joystick port 2
+for a new game, and `O` for Settings. Joystick port 2
 uses directions and fire; hold fire and press left or right to rotate a double
 counterclockwise or clockwise. Fire alone places when released. The `.` key
 randomly fills the board and is a development-only endgame shortcut.
@@ -135,6 +135,11 @@ Edit source masters or converters, not generated `.bin`, `.kla`, `.asm`, PPM,
 or preview output, unless the file is explicitly a hand-authored assembly
 module. Run the narrow generator through `make`, inspect the generated preview,
 then run the complete build.
+
+GIMP 3 is the supported interactive editor for raster source masters. Use
+`make gimp GIMP_ASSET=path/to/master.png` to open one from the repository, but
+keep all resizing, palette conversion, packing, and preview generation in the
+deterministic scripts.
 
 Do not silently change game rules while tuning visuals. If behavior changes:
 

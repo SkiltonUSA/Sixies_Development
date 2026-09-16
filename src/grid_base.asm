@@ -387,7 +387,8 @@ SetupTitlePromptSprites:
     sta SPRITE_X_EXPAND
     sta SPRITE_Y_EXPAND
     sta SPRITE_PRIORITY
-    ldx #0
+    ; Sprite 0 contains the intro-only build counter. Title uses sprites 1-5.
+    ldx #1
 SetupTitlePromptSprites_Sprite:
     txa
     clc
@@ -405,12 +406,13 @@ SetupTitlePromptSprites_Sprite:
     inx
     cpx #6
     bne SetupTitlePromptSprites_Sprite
-    lda #%00111111
+    lda #%00111110
     sta SPRITE_ENABLE
     rts
 
 TitlePromptSpriteX:
-!byte 112,136,160,184,208,232
+; Intro-only V1.xxx position, followed by the centered title start prompt.
+!byte 32,124,148,172,196,220
 
 CopyTitleBlock:
     sta titleCopyRemainder
@@ -1832,7 +1834,7 @@ SetupPiecePreview:
 SetupPiecePreview_GameScreen:
     lda chainReactionActive
     beq SetupPiecePreview_CheckEffect
-    ; The chain banner owns sprites 2-7 during the existing inter-merge pause.
+    ; The chain banner owns UI sprites 5-7 during the inter-merge pause.
     rts
 SetupPiecePreview_CheckEffect:
     lda fireworkActive
